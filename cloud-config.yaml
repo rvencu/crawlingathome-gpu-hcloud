@@ -60,8 +60,8 @@ runcmd:
  - sed -i '$a AllowUsers crawl' /etc/ssh/sshd_config
  # install the script
  - cd /home/crawl
- - git clone https://github.com/rvencu/crawlingathome-worker --branch client-server
- - cd crawlingathome-worker
+ - git clone https://github.com/rvencu/crawlingathome-gpu-hcloud
+ - cd crawlingathome-gpu-hcloud
  - bash pip-setup.sh
  # make the script run as a service at startup
  - echo "[Unit]" >> /etc/systemd/system/crawl.service
@@ -80,9 +80,8 @@ runcmd:
  - systemctl daemon-reload
  - systemctl enable crawl.service
  - echo "#!/bin/bash" >> /home/crawl/crawl.sh
- - echo "python3 -u /home/crawl/crawlingathome-worker/worker.py >> /home/crawl/crawl.log 2>&1" >> /home/crawl/crawl.sh
+ - echo "python3 -u /home/crawl/crawlingathome-gpu-hcloud/worker.py >> /home/crawl/crawl.log 2>&1" >> /home/crawl/crawl.sh
  - chmod 744 /home/crawl/crawl.sh
  - chown crawl:adm -R /home/crawl/
-# - sed -i -e 's/node_type = "GPU"/node_type = "worker"/' /home/crawl/crawlingathome-worker/crawlingathome.py
  - reboot
 final_message: "The system is finally up, after $UPTIME seconds"

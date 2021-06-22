@@ -21,7 +21,7 @@ At this time the script is tested on a single GPU driving 20 workers. At full lo
 ## Distributed infrastructure setup and run
 1. Make an account at Hetzner Cloud (https://www.hetzner.com/) and issue an API token
 2. run `git clone https://github.com/rvencu/crawlingathome-gpu-hcloud`, to download crawlingathome-worker client-server script
-3. run `cd crawlingathome-worker`, to enter the newly created directory
+3. run `cd crawlingathome-gpu-hcloud`, to enter the newly created directory
 4. create the `.env` file and paste your HCLOUD API key in it. optionally, if you have more than one account, paste all API keys each on a separate line
 5. run `source conda-setup.sh` to setup the environment if you use anaconda. otherwise use `source pip-setup.sh`. the script will ask for a nickame to be used on leaderboard as well as for the sudo password
 6. run `python3 gpu.py N`, to start Distributed Crawling with Central GPU Processing with 10 remote droplets! You can interrupt the script with Ctrl-C and infrastructure will be automatically shut down after all logs from the droplets would have been collected on GPU node. Change N with any number you like provided it is withing your cloud account limits.
