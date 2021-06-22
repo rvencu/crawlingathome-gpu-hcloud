@@ -48,6 +48,7 @@ If you are asked for any droplet root password at any time, it means you need to
 - [x] Spread droplets to all locations to avoid cpu/network competition on same hardware
 - [ ] Add continuous deployment pipline so workers get updates without shutting down
 - [x] Add option to use multiple HCLOUD API keys (to aggregate multiple accounts into the same swarm)
+- [x] Add Colab compatible notebook with hcould swarm. Swarm ratio is about 5 nodes for 1 colab notebook
 
 This work is based on code written by:
 - https://github.com/TheoCoombes/crawlingathome
