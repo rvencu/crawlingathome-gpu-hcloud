@@ -20,7 +20,7 @@ At this time the script is tested on a single GPU driving 20 workers. At full lo
 6. install `python3-pip` and `git` packages
 ## Distributed infrastructure setup and run
 1. Make an account at Hetzner Cloud (https://www.hetzner.com/) and issue an API token
-2. run `git clone https://github.com/rvencu/crawlingathome-worker --branch client-server`, to download crawlingathome-worker client-server script
+2. run `git clone https://github.com/rvencu/crawlingathome-gpu-hcloud`, to download crawlingathome-worker client-server script
 3. run `cd crawlingathome-worker`, to enter the newly created directory
 4. create the `.env` file and paste your HCLOUD API key in it. optionally, if you have more than one account, paste all API keys each on a separate line
 5. run `source conda-setup.sh` to setup the environment if you use anaconda. otherwise use `source pip-setup.sh`. the script will ask for a nickame to be used on leaderboard as well as for the sudo password
@@ -44,6 +44,17 @@ If you are asked for any droplet root password at any time, it means you need to
 - [x] Automate nickname as environment variable
 - [x] Detect stalled nodes and restart jobs
 - [x] Manage GPU process crashes
+- [x] Make crash resilient workers
 - [x] Spread droplets to all locations to avoid cpu/network competition on same hardware
 - [ ] Add continuous deployment pipline so workers get updates without shutting down
 - [x] Add option to use multiple HCLOUD API keys (to aggregate multiple accounts into the same swarm)
+
+This work is based on code written by:
+- https://github.com/TheoCoombes/crawlingathome
+- https://github.com/Wikidepia/crawlingathome-worker
+
+## Alternative single computer solutions to contribute to the Crawling@Home dataset
+- this notebook that can run in Google Colab and Kaggle: https://raw.githubusercontent.com/rvencu/crawlingathome-worker/colab-mod-asks/fastcah.ipynb
+- this notebook in Google Colab: https://colab.research.google.com/drive/1o8MndyY-l9vaox8pb0xfe7VQXUt8Qq0s
+- this repo for autonomous script (on home computer or cloud virtual computer): https://github.com/rvencu/crawlingathome-worker/tree/master
+- this alternate repo for the same: https://github.com/christophschuhmann/crawlingathome-worker
