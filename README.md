@@ -11,6 +11,8 @@ Hence this concept for crawling@home where a cental GPU machine can drive a swar
 
 At this time the script is tested on a single GPU driving 20 workers. At full load we estimate getting about 6M pairs per 24 hours for the cost of using the local GPU and 6 Euro in Hetzner could computing.
 
+Remember to watch your progress at http://crawlingathome.duckdns.org/
+
 ## Prerequisites
 1. Ubuntu box with 8GB+ Nvidia GPU
 2. Nvidia driver installed
@@ -20,7 +22,7 @@ At this time the script is tested on a single GPU driving 20 workers. At full lo
 6. install `python3-pip` and `git` packages
 ## Distributed infrastructure setup and run
 1. Make an account at Hetzner Cloud (https://www.hetzner.com/) and issue an API token
-2. run `git clone https://github.com/rvencu/crawlingathome-gpu-hcloud`, to download crawlingathome-worker client-server script
+2. run `git clone https://github.com/rvencu/crawlingathome-gpu-hcloud`, to download crawlingathome GPU node script
 3. run `cd crawlingathome-gpu-hcloud`, to enter the newly created directory
 4. create the `.env` file and paste your HCLOUD API key in it. optionally, if you have more than one account, paste all API keys each on a separate line
 5. run `source conda-setup.sh` to setup the environment if you use anaconda. otherwise use `source pip-setup.sh`. the script will ask for a nickame to be used on leaderboard as well as for the sudo password
@@ -31,6 +33,12 @@ The GPU console will cycle status messages from all droplets. If you wish to SSH
 
 If you are asked for any droplet root password at any time, it means you need to rerun `git pull` and `source conda-setup.sh` to refresh the files and regenerate the ssh keys pair.
 
+
+## Notebook version
+1. open the notebook from Google Colab or Kaggle by looking it up on Github or using direct url https://raw.githubusercontent.com/rvencu/crawlingathome-gpu-hcloud/main/gpucah.ipynb
+2. run first 2 cells and setup the environment
+3. restart the runtime (otherwise hcloud lib is not visible)
+4. run the rest of the cells and insert proper values into the form (nickname, Hetzner API token, number of nodes in the swarm)
 ## TODO
 - [x] Save image embedding 
 - [x] Convert images to tfrecords
