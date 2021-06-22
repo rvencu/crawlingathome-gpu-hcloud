@@ -54,6 +54,8 @@ This work is based on code written by:
 - https://github.com/TheoCoombes/crawlingathome
 - https://github.com/Wikidepia/crawlingathome-worker
 
+This is a subproject ran by the community around https://github.com/lucidrains/DALLE-pytorch
+
 ## Alternative single computer solutions to contribute to the Crawling@Home dataset
 - this notebook that can run in Google Colab and Kaggle: https://raw.githubusercontent.com/rvencu/crawlingathome-worker/colab-mod-asks/fastcah.ipynb
 - this notebook in Google Colab: https://colab.research.google.com/drive/1o8MndyY-l9vaox8pb0xfe7VQXUt8Qq0s
