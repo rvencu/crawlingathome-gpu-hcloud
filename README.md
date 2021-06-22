@@ -1,4 +1,4 @@
-# Crawling@Home
+# Crawling@Home GPU controlled Hetzner Cloud swarm of scrapers
 
 > Help us build a billion-scale image-caption dataset by filtering Common Crawl with OpenAI CLIP
 
