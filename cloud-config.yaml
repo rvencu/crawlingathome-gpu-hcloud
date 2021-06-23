@@ -83,5 +83,6 @@ runcmd:
  - echo "python3 -u /home/crawl/crawlingathome-gpu-hcloud/worker.py >> /home/crawl/crawl.log 2>&1" >> /home/crawl/crawl.sh
  - chmod 744 /home/crawl/crawl.sh
  - chown crawl:adm -R /home/crawl/
+ - apt clean
  - reboot
 final_message: "The system is finally up, after $UPTIME seconds"

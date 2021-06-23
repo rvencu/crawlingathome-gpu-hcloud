@@ -372,4 +372,10 @@ if __name__ == "__main__":
         except Exception as e:
             print (e)
             print ("Worker crashed")
+            #attempt to solve temporary faliure in name resolution error
+            subprocess.call(
+                ["sudo", "apt", "clean"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
             time.sleep(30)
