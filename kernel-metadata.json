@@ -4,7 +4,7 @@
   "code_file": "kaggle.py",
   "language": "python",
   "kernel_type": "script",
-  "is_private": "true",
+  "is_private": "false",
   "enable_gpu": "true",
   "enable_internet": "true",
   "dataset_sources": [],
