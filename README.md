@@ -34,7 +34,6 @@ The GPU console will cycle status messages from all droplets. If you wish to SSH
 If you are asked for any droplet root password at any time, it means you need to rerun `git pull` and `source conda-setup.sh` to refresh the files and regenerate the ssh keys pair.
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/rvencu/crawlingathome-gpu-hcloud/blob/main/gpucah.ipynb)
-
 ## Notebook version
 1. open the notebook from Google Colab or Kaggle by looking it up on Github or using direct url https://raw.githubusercontent.com/rvencu/crawlingathome-gpu-hcloud/main/gpucah.ipynb or clicking the button above
 2. run all the cells and insert proper values into the form (nickname, Hetzner API token, number of nodes in the swarm)
@@ -70,7 +69,7 @@ This work is based on code written by:
 This is a subproject ran by the community around https://github.com/lucidrains/DALLE-pytorch
 
 ## Alternative single computer solutions to contribute to the Crawling@Home dataset
-- this notebook that can run in Google Colab and Kaggle: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/rvencu/crawlingathome-gpu-hcloud/blob/main/gpucah.ipynb)
+- this notebook that can run in Google Colab and Kaggle: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/rvencu/crawlingathome-gpu-hcloud/blob/main/gpucah.ipynb) (https://raw.githubusercontent.com/rvencu/crawlingathome-worker/colab-mod-asks/fastcah.ipynb)
 - this notebook in Google Colab: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ARKseal/crawlingathome-worker/blob/colab-gpu/colab-gpu.ipynb)
 - this notebook in Google Colab: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1o8MndyY-l9vaox8pb0xfe7VQXUt8Qq0s)
 - this repo for autonomous script (on home computer or cloud virtual computer): https://github.com/rvencu/crawlingathome-worker/tree/master
