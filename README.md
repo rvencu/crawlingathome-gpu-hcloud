@@ -39,6 +39,12 @@ If you are asked for any droplet root password at any time, it means you need to
 2. run first 2 cells and setup the environment
 3. restart the runtime (otherwise hcloud lib is not visible)
 4. run the rest of the cells and insert proper values into the form (nickname, Hetzner API token, number of nodes in the swarm)
+
+## scripted notebook run on Kaggle (alpha version)
+1. make a Kaggle account and issue an API Token
+2. from project folder run `. kaggle.sh`
+3. input nickname, Hetzner API token and number of desired nodes in the swarm when asked for
+4. the script will stop automatically in 9 hours. relaunch it once per day for 3 days per week
 ## TODO
 - [x] Save image embedding 
 - [x] Convert images to tfrecords

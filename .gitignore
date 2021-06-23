@@ -149,3 +149,4 @@ cloud-init
 gpusemaphore
 *.zip
 superseeded*
+kaggle.json
