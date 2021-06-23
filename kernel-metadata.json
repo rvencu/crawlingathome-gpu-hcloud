@@ -1,10 +1,10 @@
 {
-  "id": "richardvencu/gpu-hcloud",
+  "id": "<<kaggle_username>>/gpu-hcloud",
   "title": "GPU hcloud",
   "code_file": "kaggle.py",
   "language": "python",
   "kernel_type": "script",
-  "is_private": "false",
+  "is_private": "true",
   "enable_gpu": "true",
   "enable_internet": "true",
   "dataset_sources": [],

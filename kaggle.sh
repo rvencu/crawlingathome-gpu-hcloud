@@ -5,7 +5,11 @@ pip install kaggle --upgrade
 rm kaggle.py
 cp kaggle-script.py kaggle.py
 
-echo "insert your nickname for the leaderboard or press Enter for anonymous..."
+echo "insert your Kaggle username..."
+read username
+sed -i -e "s/<<kaggle_username>>/$username/" kaggle-metadata.json
+
+echo "insert your nickname for the leaderboard..."
 read nickname
 sed -i -e "s/<<your_nickname>>/$nickname/" kaggle.py
 
