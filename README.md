@@ -1,6 +1,6 @@
 # Crawling@Home GPU controlled Hetzner Cloud swarm of scrapers
 
-> Help us build a billion-scale image-caption dataset by filtering Common Crawl with OpenAI CLIP
+> Help us build a billion-scale image-caption dataset by filtering Common Crawl with OpenAI CLIP. At the time of this writing we are up to 35 million high quality pairs ready for training various models but we still expect your help to advance to the potential 30 billion pairs estimated to exist in the commoncrawl data. This dataset is intended for public use and towards a truly open access to AI for everyone !
 
 ## Concept
 This scraping task comes with specific characteristics: link lists might be old and images might not be online anymore, even entire domains might be missing. Also there are seldom multiple links pointing to the same domain, so the DNS queries are many and often. Finally after the actual scraping there is a computational intensive task to calculate similarities between images themselves and their captions.
