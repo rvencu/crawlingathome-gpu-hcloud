@@ -8,7 +8,9 @@ yes | rm cloud-init
 cp cloud-config.yaml cloud-init
 
 sudo apt-get update
-sudo apt-get install -y git build-essential python3-dev python3-pip libjpeg-dev zip
+sudo apt-get install -y git build-essential python3.7-dev python3-pip python3.7-venv libjpeg-dev zip
+
+python3 -m venv venv && . venv/bin/activate
 
 git clone "https://github.com/TheoCoombes/crawlingathome" crawlingathome_client
 pip install torch==1.7.1+cu110 torchvision==0.8.2+cu110 -f https://download.pytorch.org/whl/torch_stable.html
