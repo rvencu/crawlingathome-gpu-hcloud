@@ -6,6 +6,7 @@ import trio
 import ujson
 import pipes
 import shutil
+import random
 import zipfile
 import subprocess
 import pandas as pd
@@ -305,6 +306,8 @@ if __name__ == "__main__":
             client.log("Processing shard" + lastext)
             with open("shard.wat", "r") as infile:
                 parsed_data = parse_wat(infile, start_index, lines)
+
+            random.shuffle(parsed_data) # attempt to spread out clusters of urls pointing to the same domain name
             
             lastlinks = len(parsed_data)
 
