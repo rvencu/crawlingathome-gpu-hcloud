@@ -26,8 +26,8 @@ Remember to watch your progress at http://crawlingathome.duckdns.org/
 3. run `cd crawlingathome-gpu-hcloud`, to enter the newly created directory
 4. create the `.env` file and paste your HCLOUD API key in it. optionally, if you have more than one account, paste all API keys each on a separate line
 5. run `source conda-setup.sh` to setup the environment if you use anaconda. otherwise use `source pip-setup.sh`. the script will ask for a nickame to be used on leaderboard as well as for the sudo password
-6. run `python3 gpu.py N`, to start Distributed Crawling with Central GPU Processing with 10 remote droplets! You can interrupt the script with Ctrl-C and infrastructure will be automatically shut down after all logs from the droplets would have been collected on GPU node. Change N with any number you like provided it is withing your cloud account limits.
-7. tear down infrastructure at any time with `python3 infrastructure.py down` in order to shutdown things (and save cash). this will shut down all cloud servers that belong to all API keys saved in the `.env` file
+6. run `python3 gpu.py N`, to start Distributed Crawling with Central GPU Processing with a swarm of `N` scrapers! The script will run in a loop that can be interrupted at any time with Ctrl-C. The cloud infrastructure will be automatically shut down after logs from all nodes would have been collected on GPU computer. Change `N` with any number you like provided it is withing your cloud account limits.
+7. tear down infrastructure at any time with `python3 infrastructure.py down` in order to shutdown things (and save cash). this will shut down all cloud servers that belong to all API tokens saved in the `.env` file
 
 The GPU console will cycle status messages from all droplets. If you wish to SSH into any droplet you can use this command: `ssh -oStrictHostKeyChecking=no -oIdentitiesOnly=yes -i~/.ssh/id_cah crawl@<<droplet_ip>>`. The crawling script is ran as a service, check logs with `tail -f crawl.log`. Access service status or commands with `sudo systemctl stop|restart|start crawl`
 
