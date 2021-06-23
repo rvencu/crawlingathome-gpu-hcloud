@@ -122,7 +122,7 @@ def process_img_content(response, alt_text, license, sample_id):
 async def request_image(datas, start_sampleid):
     tmp_data = []
 
-    session = asks.Session(connections=128)
+    session = asks.Session(connections=160)
     session.headers = {
         "User-Agent": "Googlebot-Image",
         "Accept-Language": "en-US",
