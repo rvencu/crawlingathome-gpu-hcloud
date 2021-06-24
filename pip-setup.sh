@@ -14,7 +14,7 @@ python3 -m venv venv && . venv/bin/activate
 
 git clone "https://github.com/TheoCoombes/crawlingathome" crawlingathome_client
 pip install torch==1.7.1+cu110 torchvision==0.8.2+cu110 -f https://download.pytorch.org/whl/torch_stable.html
-pip3 install git+https://github.com/rvencu/asks
+#pip3 install git+https://github.com/rvencu/asks
 pip3 install -r crawlingathome_client/requirements.txt --no-cache-dir
 pip3 install -r requirements.txt --no-cache-dir
 pip3 install tensorflow --no-cache-dir

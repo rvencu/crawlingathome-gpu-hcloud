@@ -143,7 +143,7 @@ if __name__ == "__main__":
             print (f"[{ip}] " + infrastructure.last_status("crawl@"+ip, '/home/crawl/crawl.log').split("Downloaded:")[-1].rstrip())
             newjob = infrastructure.exists_remote("crawl@"+ip, "/home/crawl/semaphore", True)
             if not newjob:
-                time.sleep(5) # wait until cloud-init finishes then until jobs are ready for GPU
+                continue
             else:
                 start = time.time()
 
