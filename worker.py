@@ -17,7 +17,7 @@ from io import BytesIO
 from requests import get
 from urllib.parse import urljoin
 sys.path.append('./crawlingathome-worker/')
-from PIL import Image, ImageFile, UnidentifiedImageError
+from PIL import Image, ImageFile, UnidentifiedImageError 
 
 import asks
 asks.init("trio")
