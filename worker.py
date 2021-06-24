@@ -8,6 +8,7 @@ import pipes
 import shutil
 import random
 import zipfile
+import urllib
 import subprocess
 import pandas as pd
 from glob import glob
@@ -119,10 +120,10 @@ def process_img_content(response, alt_text, license, sample_id):
     return [str(sample_id), out_fname, response.url, alt_text, width, height, license]
 
 
-async def request_image(datas, start_sampleid):
+async def request_image(datas, start_sampleid, tout, contout, con):
     tmp_data = []
 
-    session = asks.Session(connections=160)
+    session = asks.Session(connections=con)
     session.headers = {
         "User-Agent": "Googlebot-Image",
         "Accept-Language": "en-US",
@@ -137,7 +138,7 @@ async def request_image(datas, start_sampleid):
         task.custom_sleep_data = None
         try:
             proces = process_img_content(
-                await session.get(url, timeout=5, connection_timeout=15), alt_text, license, sample_id
+                await session.get(url, timeout=tout, connection_timeout=contout), alt_text, license, sample_id
             )
             if proces is not None:
                 tmp_data.append(proces)
@@ -156,12 +157,12 @@ async def request_image(datas, start_sampleid):
     return
 
 
-def dl_wat(valid_data, first_sample_id):
+def dl_wat(valid_data, first_sample_id, tout, contout, con):
     import pandas as pd
     
     # Download every image available
     processed_samples = []
-    trio.run(request_image, valid_data, first_sample_id, instruments=[TrioProgress(len(valid_data), False)] )
+    trio.run(request_image, valid_data, first_sample_id,  tout, contout, con, instruments=[TrioProgress(len(valid_data), False)] )
 
     for tmpf in glob(".tmp/*.json"):
         processed_samples.extend(ujson.load(open(tmpf)))
@@ -265,6 +266,18 @@ if __name__ == "__main__":
     while client.jobCount() > 0:
 
         try:
+            params = [5, 40, 160]
+            
+            try:
+                url = "https://raw.githubusercontent.com/rvencu/crawlingathome-gpu-hcloud/main/worker_params.txt"
+                for line in urllib.request.urlopen(url):
+                    params = line.decode("utf-8").split(",")
+                for param in params:
+                    param = int(param)
+                print (f"[worker] using new params {params[0]}, {params[1]}, {params[2]}")
+            except:
+                print (f"[worker] could not read new online params, using {params[0]}, {params[1]}, {params[2]}")
+
             lastext = f". Last job had {lastlinks} links and got {lastcount} img in {last} s = {lasteff} eff [{myip}]"
 
             start = time.time()
@@ -312,7 +325,7 @@ if __name__ == "__main__":
             lastlinks = len(parsed_data)
 
             client.log("Downloading images" + lastext)
-            dlparse_df = dl_wat( parsed_data, first_sample_id)
+            dlparse_df = dl_wat( parsed_data, first_sample_id, params[0], params[1], params[2])
             dlparse_df.to_csv(output_folder + out_fname + ".csv", index=False, sep="|")
             dlparse_df.to_csv(output_folder + out_fname + "_unfiltered.csv", index=False, sep="|")
             print (f"downloaded {len(dlparse_df)} in {round(time.time() - start)} seconds")
