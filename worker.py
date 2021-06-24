@@ -137,7 +137,7 @@ async def request_image(datas, start_sampleid):
         task.custom_sleep_data = None
         try:
             proces = process_img_content(
-                await session.get(url, timeout=5, connection_timeout=40), alt_text, license, sample_id
+                await session.get(url, timeout=5, connection_timeout=15), alt_text, license, sample_id
             )
             if proces is not None:
                 tmp_data.append(proces)
