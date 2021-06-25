@@ -121,8 +121,9 @@ if __name__ == "__main__":
 
     nodes = sys.argv[1]
     location = None
-    if len(sys.argv) == 2:
+    if len(sys.argv) > 1:
         location = sys.argv[2]
+    print(location)
     workers = []
 
     try:

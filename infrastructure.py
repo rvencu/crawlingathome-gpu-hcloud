@@ -25,7 +25,7 @@ async def list_servers(tok=""):
         servers = servers + hclient.servers.get_all()
     return servers
 
-async def up(nodes, location, server_type="cx11"):
+async def up(nodes, pref_loc, server_type="cx11"):
     workers = []
     tokens = []
     script = ""
@@ -36,11 +36,14 @@ async def up(nodes, location, server_type="cx11"):
     for token in tokens:
         print(nodes)
         hclient = Client(token=token.rstrip())
-        if location == None:
+        if pref_loc == None:
+            print ("[swarm] no specific location provided")
             locations = hclient.locations.get_all()
             loc = cycle(locations)
             zip = [[i, next(loc)] for i in range(int(nodes))]
         else:
+            print (f"[swarm] using {pref_loc} location")
+            location = hclient.locations.get_by_name(pref_loc)
             zip = [[i, location] for i in range(int(nodes))]
         for i, loc in zip:
             try:
