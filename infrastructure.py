@@ -25,7 +25,7 @@ async def list_servers(tok=""):
         servers = servers + hclient.servers.get_all()
     return servers
 
-async def up(nodes, server_type="cx11"):
+async def up(nodes, location, server_type="cx11"):
     workers = []
     tokens = []
     script = ""
@@ -36,9 +36,12 @@ async def up(nodes, server_type="cx11"):
     for token in tokens:
         print(nodes)
         hclient = Client(token=token.rstrip())
-        locations = hclient.locations.get_all()
-        loc = cycle(locations)
-        zip = [[i, next(loc)] for i in range(int(nodes))]
+        if location == None:
+            locations = hclient.locations.get_all()
+            loc = cycle(locations)
+            zip = [[i, next(loc)] for i in range(int(nodes))]
+        else:
+            zip = [[i, location] for i in range(int(nodes))]
         for i, loc in zip:
             try:
                 response = hclient.servers.create(

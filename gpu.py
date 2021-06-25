@@ -120,12 +120,15 @@ if __name__ == "__main__":
     print (f"[GPU] starting session under `{YOUR_NICKNAME_FOR_THE_LEADERBOARD}` nickname")
 
     nodes = sys.argv[1]
+    location = None
+    if len(sys.argv) == 2:
+        location = sys.argv[2]
     workers = []
 
     try:
         start = time.time()
         # generate cloud workers
-        workers = trio.run(infrastructure.up, nodes)
+        workers = trio.run(infrastructure.up, nodes, location)
         trio.run(infrastructure.wait_for_infrastructure, workers)
         print(f"[infrastructure] {len(workers)} nodes cloud infrastructure is up and initialized in {round(time.time() - start)}s")
     except KeyboardInterrupt:
