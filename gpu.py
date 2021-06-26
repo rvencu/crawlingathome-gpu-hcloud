@@ -16,7 +16,7 @@ from copy import copy
 from tqdm import tqdm
 from pathlib import Path
 sys.path.append('./crawlingathome-worker/')
-import threading, queue
+from multiprocessing import Process, Queue
 from PIL import Image, ImageFile, UnidentifiedImageError
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True  # https://stackoverflow.com/a/47958486
@@ -146,32 +146,32 @@ if __name__ == "__main__":
         print(f"[infrastructure] Error, could not bring up infrastructure... please consider shutting down all workers via `python3 infrastructure.py down`")
         print (e)
 
-    incoming = queue.SimpleQueue()
-    outgoing = queue.SimpleQueue()
+    incoming = Queue()
+    outgoing = Queue()
 
-    def incoming_worker(workers):
+    def incoming_worker(ip, queue):
         # poll for new GPU job
-        for ip in itertools.cycle(workers): # make sure we cycle all workers
+        while True:
             print (f"[{ip}] " + infrastructure.last_status("crawl@"+ip, '/home/crawl/crawl.log').split("Downloaded:")[-1].rstrip())
             newjob = infrastructure.exists_remote("crawl@"+ip, "/home/crawl/semaphore", True)
             if newjob:
-
-                ip_output_folder = output_folder + ip.replace(".","-")
-                ip_img_output_folder = img_output_folder + ip.replace(".","-")       
+                output_folder = "./save" +  + ip.replace(".","-") + "/"
+                csv_output_folder = output_folder
+                img_output_folder = output_folder + "images/"
 
                 print (f"[{ip}] sending job to GPU")
-                if os.path.exists(ip_output_folder):
-                    shutil.rmtree(ip_output_folder)
+                if os.path.exists(output_folder):
+                    shutil.rmtree(output_folder)
                 if os.path.exists(".tmp"):
                     shutil.rmtree(".tmp")
 
-                os.mkdir(ip_output_folder)
-                os.mkdir(ip_img_output_folder)
+                os.mkdir(output_folder)
+                os.mkdir(img_output_folder)
                 os.mkdir(".tmp")
 
                 # receive gpu job data (~500MB)
                 subprocess.call(
-                    ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "crawl@" + ip + ":" + "gpujob.zip", ip_output_folder],
+                    ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "crawl@" + ip + ":" + "gpujob.zip", output_folder],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
@@ -186,34 +186,31 @@ if __name__ == "__main__":
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
-                with zipfile.ZipFile(ip_output_folder+"gpujob.zip", 'r') as zip_ref:
+                with zipfile.ZipFile(output_folder+"gpujob.zip", 'r') as zip_ref:
                     zip_ref.extractall("./")
-                os.remove(ip_output_folder+"gpujob.zip")
+                os.remove(output_folder+"gpujob.zip")
 
-                incoming.put(ip)
+                queue.put(ip)
             else:
                 time.sleep(1)
                 continue
 
                 
-
-
-    def outgoing_worker():
+    def outgoing_worker(ip, queue):
         while True:
-            if not outgoing.empty:
-                ip = outgoing.get()
-                ip_output_folder = output_folder + ip.replace(".","-")
-                ip_img_output_folder = img_output_folder + ip.replace(".","-")
+            if not queue.empty and ip == queue.get_nowait():
+                output_folder = "./save" +  + ip.replace(".","-") + "/"
+                csv_output_folder = output_folder
+                img_output_folder = output_folder + "images/"
                 # clean img_output_folder now since we have all results do not want to transfer back all images...
                 try:
-                    shutil.rmtree(ip_img_output_folder)
-                    #os.mkdir(img_output_folder + ip.replace(".","-"))
+                    shutil.rmtree(img_output_folder)
                 except OSError as e:
                     print("[GPU] Error deleting images: %s - %s." % (e.filename, e.strerror))
 
                 # send GPU results
                 subprocess.call(
-                    ["zip", "-r", "gpujobdone"+ip.replace(".","-")+".zip", ip_output_folder],
+                    ["zip", "-r", "gpujobdone"+ip.replace(".","-")+".zip", output_folder],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
@@ -237,60 +234,54 @@ if __name__ == "__main__":
                 os.remove("gpusemaphore"+ip.replace(".","-"))
 
                 print (f"[{ip}] resuming job with GPU results")
-                outgoing.task_done()
+                queue.task_done()
             else:
                 time.sleep(1)             
-
-    
-    def gpu_worker():
-        while True:
-            if not incoming.empty:
-                ip = incoming.get()
-                ip_output_folder = output_folder + ip.replace(".","-")
-                ip_img_output_folder = img_output_folder + ip.replace(".","-")
-
-                all_csv_files = []
-                for path, subdir, files in os.walk(ip_output_folder):
-                    for file in glob(os.path.join(path, "*.csv")):
-                        all_csv_files.append(file)
-
-                # get name of csv file
-                out_path = all_csv_files[0]
-                out_fname = Path(out_path).stem.strip("_unfiltered").strip(".")
-
-                # recreate parsed dataset and run CLIP filtering
-                dlparse_df = pd.read_csv(ip_output_folder + out_fname + ".csv", sep="|")
-                filtered_df, img_embeddings = df_clipfilter(dlparse_df)
-                filtered_df.to_csv(ip_output_folder + out_fname + ".csv", index=False, sep="|")
-                
-                img_embeds_sampleid = {}
-                for i, img_embed_it in enumerate(img_embeddings):
-                    dfid_index = filtered_df.at[i, "SAMPLE_ID"]
-                    img_embeds_sampleid[str(dfid_index)] = img_embed_it
-                with open(f"{ip_output_folder}image_embedding_dict-{out_fname}.pkl", "wb") as f:
-                    pickle.dump(img_embeds_sampleid, f)
-                
-                df_tfrecords(
-                    filtered_df,
-                    f"{ip_output_folder}crawling_at_home_{out_fname}__00000-of-00001.tfrecord",
-                )
-
-                outgoing.put(ip)
-                incoming.task_done()
-            else:
-                time.sleep(1)
+        
 
 try:
-    from multiprocessing import cpu_count
-    cpu = cpu_count()
-    if cpu > 2:
-        chunks = list(chunks(workers,cpu-2))
-        for i in range (cpu-2):
-            threading.Thread(target=incoming_worker, args=[chunks[i]], daemon=True).start()
-        threading.Thread(target=gpu_worker, daemon=True).start()
-        threading.Thread(target=outgoing_worker, daemon=True).start()
-    else:
-        print ("You need minimum 3 CPU threads for this to work")
+    for ip in workers:
+        Process(target=incoming_worker, args=[ip, incoming], daemon=True).start()
+        Process(target=outgoing_worker, args=[ip, outgoing], daemon=True).start()
+
+    while True:
+        if not incoming.empty:
+            print (f"incoming queue length={incoming.qsize}")
+            ip = incoming.get()
+            ip_output_folder = output_folder + ip.replace(".","-")
+            ip_img_output_folder = img_output_folder + ip.replace(".","-")
+
+            all_csv_files = []
+            for path, subdir, files in os.walk(ip_output_folder):
+                for file in glob(os.path.join(path, "*.csv")):
+                    all_csv_files.append(file)
+
+            # get name of csv file
+            out_path = all_csv_files[0]
+            out_fname = Path(out_path).stem.strip("_unfiltered").strip(".")
+
+            # recreate parsed dataset and run CLIP filtering
+            dlparse_df = pd.read_csv(ip_output_folder + out_fname + ".csv", sep="|")
+            filtered_df, img_embeddings = df_clipfilter(dlparse_df)
+            filtered_df.to_csv(ip_output_folder + out_fname + ".csv", index=False, sep="|")
+            
+            img_embeds_sampleid = {}
+            for i, img_embed_it in enumerate(img_embeddings):
+                dfid_index = filtered_df.at[i, "SAMPLE_ID"]
+                img_embeds_sampleid[str(dfid_index)] = img_embed_it
+            with open(f"{ip_output_folder}image_embedding_dict-{out_fname}.pkl", "wb") as f:
+                pickle.dump(img_embeds_sampleid, f)
+            
+            df_tfrecords(
+                filtered_df,
+                f"{ip_output_folder}crawling_at_home_{out_fname}__00000-of-00001.tfrecord",
+            )
+
+            outgoing.put(ip)
+            incoming.task_done()
+        else:
+            print ("empty incoming queue")
+            time.sleep(1)
 
 except KeyboardInterrupt:
     print(f"[GPU] Abort! Deleting cloud infrastructure...")
