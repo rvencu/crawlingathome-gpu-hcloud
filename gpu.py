@@ -16,10 +16,16 @@ from copy import copy
 from tqdm import tqdm
 from pathlib import Path
 sys.path.append('./crawlingathome-worker/')
+import threading, queue
 from PIL import Image, ImageFile, UnidentifiedImageError
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True  # https://stackoverflow.com/a/47958486
 
+def chunks(lst, n):
+    size = int(len(lst)/n)+1
+    """Yield successive size-sized chunks from lst."""
+    for i in range(0, len(lst), size):
+        yield lst[i:i + size]
 
 def zipfolder(filename, target_dir):            
     zipobj = zipfile.ZipFile(filename, 'w', zipfile.ZIP_DEFLATED)
@@ -140,32 +146,32 @@ if __name__ == "__main__":
         print(f"[infrastructure] Error, could not bring up infrastructure... please consider shutting down all workers via `python3 infrastructure.py down`")
         print (e)
 
-    # poll for new GPU job
-    for ip in itertools.cycle(workers): # make sure we cycle all workers
-        try:
-            print (f"[GPU] Checking {ip} node")
+    incoming = queue.SimpleQueue()
+    outgoing = queue.SimpleQueue()
+
+    def incoming_worker(workers):
+        # poll for new GPU job
+        for ip in itertools.cycle(workers): # make sure we cycle all workers
             print (f"[{ip}] " + infrastructure.last_status("crawl@"+ip, '/home/crawl/crawl.log').split("Downloaded:")[-1].rstrip())
             newjob = infrastructure.exists_remote("crawl@"+ip, "/home/crawl/semaphore", True)
-            if not newjob:
-                continue
-            else:
-                start = time.time()
+            if newjob:
+
+                ip_output_folder = output_folder + ip.replace(".","-")
+                ip_img_output_folder = img_output_folder + ip.replace(".","-")       
 
                 print (f"[{ip}] sending job to GPU")
-                if os.path.exists(output_folder):
-                    shutil.rmtree(output_folder)
+                if os.path.exists(ip_output_folder):
+                    shutil.rmtree(ip_output_folder)
                 if os.path.exists(".tmp"):
                     shutil.rmtree(".tmp")
 
-                os.mkdir(output_folder)
-                os.mkdir(img_output_folder)
+                os.mkdir(ip_output_folder)
+                os.mkdir(ip_img_output_folder)
                 os.mkdir(".tmp")
-
-                start2 = time.time()
 
                 # receive gpu job data (~500MB)
                 subprocess.call(
-                    ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "crawl@" + ip + ":" + "gpujob.zip", output_folder],
+                    ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "crawl@" + ip + ":" + "gpujob.zip", ip_output_folder],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
@@ -180,88 +186,121 @@ if __name__ == "__main__":
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
-                with zipfile.ZipFile(output_folder+"gpujob.zip", 'r') as zip_ref:
+                with zipfile.ZipFile(ip_output_folder+"gpujob.zip", 'r') as zip_ref:
                     zip_ref.extractall("./")
-                os.remove(output_folder+"gpujob.zip")
+                os.remove(ip_output_folder+"gpujob.zip")
+
+                incoming.put(ip)
+            else:
+                time.sleep(1)
+                continue
+
+                
+
+
+    def outgoing_worker():
+        while True:
+            if not outgoing.empty:
+                ip = outgoing.get()
+                ip_output_folder = output_folder + ip.replace(".","-")
+                ip_img_output_folder = img_output_folder + ip.replace(".","-")
+                # clean img_output_folder now since we have all results do not want to transfer back all images...
+                try:
+                    shutil.rmtree(ip_img_output_folder)
+                    #os.mkdir(img_output_folder + ip.replace(".","-"))
+                except OSError as e:
+                    print("[GPU] Error deleting images: %s - %s." % (e.filename, e.strerror))
+
+                # send GPU results
+                subprocess.call(
+                    ["zip", "-r", "gpujobdone"+ip.replace(".","-")+".zip", ip_output_folder],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                subprocess.call(
+                    ["touch", "gpusemaphore"+ip.replace(".","-")],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+
+                subprocess.call(
+                    ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "gpujobdone"+ip.replace(".","-")+".zip", "crawl@"+ip + ":~/gpujobdone.zip"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                subprocess.call(
+                    ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "gpusemaphore"+ip.replace(".","-"), "crawl@"+ip + ":~/gpusemaphore"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                os.remove("gpujobdone"+ip.replace(".","-")+".zip")
+                os.remove("gpusemaphore"+ip.replace(".","-"))
+
+                print (f"[{ip}] resuming job with GPU results")
+                outgoing.task_done()
+            else:
+                time.sleep(1)             
+
+    
+    def gpu_worker():
+        while True:
+            if not incoming.empty:
+                ip = incoming.get()
+                ip_output_folder = output_folder + ip.replace(".","-")
+                ip_img_output_folder = img_output_folder + ip.replace(".","-")
 
                 all_csv_files = []
-                for path, subdir, files in os.walk(output_folder):
+                for path, subdir, files in os.walk(ip_output_folder):
                     for file in glob(os.path.join(path, "*.csv")):
                         all_csv_files.append(file)
 
                 # get name of csv file
                 out_path = all_csv_files[0]
                 out_fname = Path(out_path).stem.strip("_unfiltered").strip(".")
-                print (out_fname)
 
                 # recreate parsed dataset and run CLIP filtering
-                dlparse_df = pd.read_csv(output_folder + out_fname + ".csv", sep="|")
+                dlparse_df = pd.read_csv(ip_output_folder + out_fname + ".csv", sep="|")
                 filtered_df, img_embeddings = df_clipfilter(dlparse_df)
-                filtered_df.to_csv(output_folder + out_fname + ".csv", index=False, sep="|")
+                filtered_df.to_csv(ip_output_folder + out_fname + ".csv", index=False, sep="|")
                 
                 img_embeds_sampleid = {}
                 for i, img_embed_it in enumerate(img_embeddings):
                     dfid_index = filtered_df.at[i, "SAMPLE_ID"]
                     img_embeds_sampleid[str(dfid_index)] = img_embed_it
-                with open(f"{output_folder}image_embedding_dict-{out_fname}.pkl", "wb") as f:
+                with open(f"{ip_output_folder}image_embedding_dict-{out_fname}.pkl", "wb") as f:
                     pickle.dump(img_embeds_sampleid, f)
                 
                 df_tfrecords(
                     filtered_df,
-                    f"{output_folder}crawling_at_home_{out_fname}__00000-of-00001.tfrecord",
+                    f"{ip_output_folder}crawling_at_home_{out_fname}__00000-of-00001.tfrecord",
                 )
 
-                # clean img_output_folder now since we have all results do not want to transfer back all images...
-                try:
-                    shutil.rmtree(img_output_folder)
-                    os.mkdir(img_output_folder)
-                except OSError as e:
-                    print("[GPU] Error deleting images: %s - %s." % (e.filename, e.strerror))
+                outgoing.put(ip)
+                incoming.task_done()
+            else:
+                time.sleep(1)
 
-                # send GPU results
-                subprocess.call(
-                    ["zip", "-r", "gpujobdone.zip", output_folder],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-                subprocess.call(
-                    ["touch", "gpusemaphore"],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
+try:
+    from multiprocessing import cpu_count
+    cpu = cpu_count()
+    if cpu > 2:
+        chunks = list(chunks(workers,cpu-2))
+        for i in range (cpu-2):
+            threading.Thread(target=incoming_worker, args=[chunks[i]], daemon=True).start()
+        threading.Thread(target=gpu_worker, daemon=True).start()
+        threading.Thread(target=outgoing_worker, daemon=True).start()
+    else:
+        print ("You need minimum 3 CPU threads for this to work")
 
-                subprocess.call(
-                    ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "gpujobdone.zip", "crawl@"+ip + ":~/gpujobdone.zip"],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-                subprocess.call(
-                    ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "gpusemaphore", "crawl@"+ip + ":~/gpusemaphore"],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-                os.remove("gpujobdone.zip")
-                os.remove("gpusemaphore")
-
-                print(f"[GPU] GPU job completed in {round(time.time() - start2)} seconds")
-                print (f"[{ip}] resuming job with GPU results")
-                
-        except KeyboardInterrupt:
-            print(f"[GPU] Abort! Deleting cloud infrastructure...")
-            letters = string.ascii_lowercase
-            suffix = ''.join(random.choice(letters) for i in range(3))
-            for ip in workers:
-                subprocess.call(
-                        ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "crawl@" + ip + ":" + "crawl.log", ip + "_" + suffix + ".log"],
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                    )
-            trio.run(infrastructure.down)
-            print (f"[infrastructure] Cloud infrastructure was shutdown")
-        
-        except Exception as e:
-            # todo shutdown and restart the offending ip
-            print (f"[GPU] fault detected in job at worker-{ip}. Respawning offending worker...")
-            print (e)
-            workers = trio.run(infrastructure.respawn, workers, ip)
-            continue
+except KeyboardInterrupt:
+    print(f"[GPU] Abort! Deleting cloud infrastructure...")
+    letters = string.ascii_lowercase
+    suffix = ''.join(random.choice(letters) for i in range(3))
+    for ip in workers:
+        subprocess.call(
+                ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "crawl@" + ip + ":" + "crawl.log", ip + "_" + suffix + ".log"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+    trio.run(infrastructure.down)
+    print (f"[infrastructure] Cloud infrastructure was shutdown")

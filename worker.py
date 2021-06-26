@@ -238,14 +238,15 @@ class FileData:
         return self._length
 
 if __name__ == "__main__":
-    output_folder = "./save/"
+    myip = ip = get('https://api.ipify.org').text
+    output_folder = "./save" + ip.replace(".","-") + "/" 
     csv_output_folder = output_folder
     img_output_folder = output_folder + "images/"
 
     YOUR_NICKNAME_FOR_THE_LEADERBOARD = os.getenv('CAH_NICKNAME')
     if YOUR_NICKNAME_FOR_THE_LEADERBOARD is None:
         YOUR_NICKNAME_FOR_THE_LEADERBOARD = "anonymous"
-    CRAWLINGATHOME_SERVER_URL = "http://crawlingathome.duckdns.org/"
+    CRAWLINGATHOME_SERVER_URL = "https://api.gagepiracy.com:4483/"
 
     print (f"starting session under `{YOUR_NICKNAME_FOR_THE_LEADERBOARD}` nickname")
 
@@ -260,8 +261,6 @@ if __name__ == "__main__":
     lasteff = 0
     lastcount = 0
     lastlinks = 0
-
-    myip = ip = get('https://api.ipify.org').text
 
     while client.jobCount() > 0:
 
