@@ -267,7 +267,7 @@ if __name__ == "__main__":
 
         try:
 
-            lastext = f". Last job had {lastlinks} links and got {lastcount} img in {last} s = {lasteff} eff [{myip}]"
+            lastext = f". Last job had {lastlinks} links, {lastcount} img in {last} s = {lasteff} eff"
 
             start = time.time()
 
