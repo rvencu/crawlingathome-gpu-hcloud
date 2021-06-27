@@ -1,6 +1,3 @@
-from PIL import Image, ImageFile, UnidentifiedImageError
-from multiprocessing import Pool, Queue, Process, Manager
-import multiprocessing
 import os
 import sys
 import time
@@ -19,6 +16,8 @@ from copy import copy
 from tqdm import tqdm
 from pathlib import Path
 sys.path.append('./crawlingathome-worker/')
+from PIL import Image, ImageFile, UnidentifiedImageError
+from multiprocessing import Pool, JoinableQueue, Process, Manager
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True  # https://stackoverflow.com/a/47958486
 
@@ -112,9 +111,6 @@ def df_tfrecords(df, output_fname):
 
 
 if __name__ == "__main__":
-    output_folder = "./save/"
-    csv_output_folder = output_folder
-    img_output_folder = output_folder + "images/"
 
     YOUR_NICKNAME_FOR_THE_LEADERBOARD = os.getenv('CAH_NICKNAME')
     if YOUR_NICKNAME_FOR_THE_LEADERBOARD is None:
@@ -138,7 +134,7 @@ if __name__ == "__main__":
             start = time.time()
             # generate cloud workers
             workers = trio.run(infrastructure.up, nodes, location)
-            with open ("workers.txt","w") as f:
+            with open("workers.txt", "w") as f:
                 for ip in workers:
                     f.write(ip + "\n")
 
@@ -153,7 +149,7 @@ if __name__ == "__main__":
             print(f"[infrastructure] Error, could not bring up infrastructure... please consider shutting down all workers via `python3 infrastructure.py down`")
             print(e)
     else:
-        with open ("workers.txt","r") as f:
+        with open("workers.txt", "r") as f:
             for line in f.readlines():
                 workers.append(line.strip("\n"))
 
@@ -203,7 +199,7 @@ if __name__ == "__main__":
                 os.remove(output_folder+"gpujob.zip")
 
                 queue.put(ip)
-                print (f"{ip} inserted to the inbound queue")
+                print(f"{ip} inserted to the inbound queue")
             else:
                 time.sleep(1)
                 continue
@@ -213,7 +209,7 @@ if __name__ == "__main__":
         time.sleep(10)
         while True:
             if queue.qsize() > 0:
-                ip == queue.get()
+                ip = queue.get()
                 output_folder = "./" + ip.replace(".", "-") + "/save/"
                 img_output_folder = output_folder + "images/"
                 # clean img_output_folder now since we have all results do not want to transfer back all images...
@@ -225,7 +221,8 @@ if __name__ == "__main__":
 
                 # send GPU results
                 subprocess.call(
-                    ["zip", "-r", "./" + ip.replace(".", "-") + "gpujobdone.zip", output_folder],
+                    ["zip", "-r", "./" +
+                        ip.replace(".", "-") + "gpujobdone.zip", output_folder],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
@@ -236,12 +233,14 @@ if __name__ == "__main__":
                 )
 
                 subprocess.call(
-                    ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "./" + ip.replace(".", "-") + "gpujobdone.zip", "crawl@"+ip + ":~/gpujobdone.zip"],
+                    ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "./" +
+                        ip.replace(".", "-") + "gpujobdone.zip", "crawl@"+ip + ":~/gpujobdone.zip"],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
                 subprocess.call(
-                    ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "./" + ip.replace(".", "-") + "gpusemaphore", "crawl@"+ip + ":~/gpusemaphore"],
+                    ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "./" +
+                        ip.replace(".", "-") + "gpusemaphore", "crawl@"+ip + ":~/gpusemaphore"],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
@@ -253,10 +252,11 @@ if __name__ == "__main__":
             else:
                 time.sleep(1)
 
-inbound = Queue()
-outbound = Queue()
+inbound = JoinableQueue()
+outbound = JoinableQueue()
 
-inb = Process(target=incoming_worker, args=[workers, inbound], daemon=False).start()
+inb = Process(target=incoming_worker, args=[
+              workers, inbound], daemon=False).start()
 time.sleep(10)
 otb = Process(target=outgoing_worker, args=[outbound], daemon=False).start()
 time.sleep(10)
@@ -268,7 +268,7 @@ try:
         time.sleep(10)
         while inbound.qsize() > 0:
             ip = inbound.get()
-            print (f"gpu processing job for {ip}")
+            print(f"gpu processing job for {ip}")
             output_folder = "./" + ip.replace(".", "-") + "/save/"
             img_output_folder = output_folder + "images/"
 
@@ -284,8 +284,9 @@ try:
             # recreate parsed dataset and run CLIP filtering
             dlparse_df = pd.read_csv(
                 output_folder + out_fname + ".csv", sep="|")
-            
-            dlparse_df["PATH"] = "./" + ip.replace(".", "-") + "/" + dlparse_df["PATH"]
+
+            dlparse_df["PATH"] = "./" + \
+                ip.replace(".", "-") + "/" + dlparse_df["PATH"]
 
             filtered_df, img_embeddings = df_clipfilter(dlparse_df)
             filtered_df.to_csv(output_folder + out_fname +
@@ -322,6 +323,5 @@ except KeyboardInterrupt:
             stderr=subprocess.DEVNULL,
         )
     trio.run(infrastructure.down)
-
 
     print(f"[infrastructure] Cloud infrastructure was shutdown")
