@@ -174,9 +174,9 @@ if __name__ == "__main__":
                 if os.path.exists(".tmp"):
                     shutil.rmtree(".tmp")
 
-                os.mkdir(output_folder)
-                os.mkdir(img_output_folder)
-                os.mkdir(".tmp")
+                os.makedirs(output_folder)
+                os.makedirs(img_output_folder)
+                os.makedirs(".tmp")
 
                 # receive gpu job data (~500MB)
                 subprocess.call(
@@ -199,7 +199,7 @@ if __name__ == "__main__":
                     stderr=subprocess.DEVNULL,
                 )
                 with zipfile.ZipFile(output_folder+"gpujob.zip", 'r') as zip_ref:
-                    zip_ref.extractall("./")
+                    zip_ref.extractall("./"+ip.replace(".", "-")+"/")
                 os.remove(output_folder+"gpujob.zip")
 
                 queue.put(ip)
@@ -225,31 +225,28 @@ if __name__ == "__main__":
 
                 # send GPU results
                 subprocess.call(
-                    ["zip", "-r", "gpujobdone" +
-                        ip.replace(".", "-")+".zip", output_folder],
+                    ["zip", "-r", "./" + ip.replace(".", "-") + "gpujobdone.zip", output_folder],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
                 subprocess.call(
-                    ["touch", "gpusemaphore"+ip.replace(".", "-")],
+                    ["touch", "./" + ip.replace(".", "-") + "gpusemaphore"],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
 
                 subprocess.call(
-                    ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "gpujobdone" +
-                        ip.replace(".", "-")+".zip", "crawl@"+ip + ":~/gpujobdone.zip"],
+                    ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "./" + ip.replace(".", "-") + "gpujobdone.zip", "crawl@"+ip + ":~/gpujobdone.zip"],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
                 subprocess.call(
-                    ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "gpusemaphore" +
-                        ip.replace(".", "-"), "crawl@"+ip + ":~/gpusemaphore"],
+                    ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "./" + ip.replace(".", "-") + "gpusemaphore", "crawl@"+ip + ":~/gpusemaphore"],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
-                os.remove("gpujobdone"+ip.replace(".", "-")+".zip")
-                os.remove("gpusemaphore"+ip.replace(".", "-"))
+                os.remove("./" + ip.replace(".", "-") + "gpujobdone.zip")
+                os.remove("./" + ip.replace(".", "-") + "gpusemaphore")
 
                 print(f"[{ip}] resuming job with GPU results")
                 queue.task_done()
@@ -260,7 +257,9 @@ inbound = Queue()
 outbound = Queue()
 
 inb = Process(target=incoming_worker, args=[workers, inbound], daemon=False).start()
+time.sleep(10)
 otb = Process(target=outgoing_worker, args=[outbound], daemon=False).start()
+time.sleep(10)
 
 try:
 
@@ -269,6 +268,7 @@ try:
         time.sleep(10)
         while inbound.qsize() > 0:
             ip = inbound.get()
+            print (f"gpu processing job for {ip}")
             output_folder = "./" + ip.replace(".", "-") + "/save/"
             img_output_folder = output_folder + "images/"
 
