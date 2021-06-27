@@ -244,13 +244,13 @@ if __name__ == "__main__":
             else:
                 time.sleep(1)
 
+inbound = Queue()
+outbound = Queue()
+
+inb = Process(target=incoming_worker, args=[workers, inbound], daemon=False).start
+otb = Process(target=outgoing_worker, args=[outbound], daemon=False).start
+
 try:
-
-    inbound = Queue()
-    outbound = Queue()
-
-    inb = Process(target=incoming_worker, args=[workers, inbound], daemon=True).start
-    otb = Process(target=outgoing_worker, args=[outbound], daemon=True).start
 
     while True:
         print(f"incoming queue length={inbound.qsize()}")
@@ -293,6 +293,8 @@ try:
 
 except KeyboardInterrupt:
     print(f"[GPU] Abort! Deleting cloud infrastructure...")
+    inb.join()
+    otb.join()
     letters = string.ascii_lowercase
     suffix = ''.join(random.choice(letters) for i in range(3))
     for ip in workers:
@@ -303,4 +305,6 @@ except KeyboardInterrupt:
             stderr=subprocess.DEVNULL,
         )
     trio.run(infrastructure.down)
+
+
     print(f"[infrastructure] Cloud infrastructure was shutdown")
