@@ -1,3 +1,4 @@
+import multiprocessing
 import os
 import sys
 import time
@@ -16,7 +17,7 @@ from copy import copy
 from tqdm import tqdm
 from pathlib import Path
 sys.path.append('./crawlingathome-worker/')
-from multiprocessing import Process, Queue
+from multiprocessing import Pool, Queue, Process, Manager
 from PIL import Image, ImageFile, UnidentifiedImageError
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True  # https://stackoverflow.com/a/47958486
@@ -140,12 +141,9 @@ if __name__ == "__main__":
         print(f"[infrastructure] Error, could not bring up infrastructure... please consider shutting down all workers via `python3 infrastructure.py down`")
         print (e)
 
-    incoming = Queue()
-    outgoing = Queue()
-
-    def incoming_worker(ip, queue):
+    def incoming_worker(workers, queue):
         # poll for new GPU job
-        while True:
+        for ip in itertools.cycle(workers):
             print (f"[{ip}] " + infrastructure.last_status("crawl@"+ip, '/home/crawl/crawl.log').split("Downloaded:")[-1].rstrip())
             newjob = infrastructure.exists_remote("crawl@"+ip, "/home/crawl/semaphore", True)
             if newjob:
@@ -190,9 +188,10 @@ if __name__ == "__main__":
                 continue
 
                 
-    def outgoing_worker(ip, queue):
+    def outgoing_worker(workers, queue):
         while True:
-            if not queue.empty and ip == queue.get_nowait():
+            if not queue.empty:
+                ip == queue.get()
                 output_folder = "./save" +  + ip.replace(".","-") + "/"
                 csv_output_folder = output_folder
                 img_output_folder = output_folder + "images/"
@@ -234,14 +233,48 @@ if __name__ == "__main__":
         
 
 try:
+    cpus = multiprocessing.cpu_count()
+
+    m = Manager()
+
+    inbound = m.Queue()
+    outbound = m.Queue()
+
+    num_inbound = int(cpus/2)
+    num_outbound = int(cpus/6)
+
+    inb = Pool(num_inbound, incoming_worker)
+    otb = Pool(num_outbound, outgoing_worker)
+
+    newjobs = []
     for ip in workers:
-        Process(target=incoming_worker, args=[ip, incoming], daemon=True).start()
-        Process(target=outgoing_worker, args=[ip, outgoing], daemon=True).start()
+        newjobs.append(inb.apply_async(incoming_worker, (ip,inbound,)))
+    
+    # Wait for the asynchrounous reader threads to finish
+    try:
+        [r.get() for r in newjobs]
+    except:
+        print("Interrupted")
+        inb.terminate()
+        inb.join()
+
+    newresults = []
+    for i in range(len(workers)):
+        newresults.append(inb.apply_async(outgoing_worker, (outbound,)))
+    
+    # Wait for the asynchrounous reader threads to finish
+    try:
+        [r.get() for r in newresults]
+    except:
+        print("Interrupted")
+        otb.terminate()
+        otb.join()
+
 
     while True:
-        if not incoming.empty:
-            print (f"incoming queue length={incoming.qsize}")
-            ip = incoming.get()
+        while not inbound.empty:
+            print (f"incoming queue length={inbound.qsize}")
+            ip = inbound.get()
             ip_output_folder = output_folder + ip.replace(".","-")
             ip_img_output_folder = img_output_folder + ip.replace(".","-")
 
@@ -271,11 +304,8 @@ try:
                 f"{ip_output_folder}crawling_at_home_{out_fname}__00000-of-00001.tfrecord",
             )
 
-            outgoing.put(ip)
-            incoming.task_done()
-        else:
-            print ("empty incoming queue")
-            time.sleep(1)
+            outbound.put(ip)
+            inbound.task_done()
 
 except KeyboardInterrupt:
     print(f"[GPU] Abort! Deleting cloud infrastructure...")
