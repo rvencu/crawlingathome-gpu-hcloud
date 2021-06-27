@@ -29,7 +29,7 @@ async def up(nodes, pref_loc, server_type="cx11"):
     workers = []
     tokens = []
     script = ""
-    with open(".env", "r") as auth:
+    with open(".env2", "r") as auth:
         tokens = auth.readlines()
     with open("cloud-init", "r") as user_data:
         script = user_data.read()
