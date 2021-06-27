@@ -156,8 +156,8 @@ if __name__ == "__main__":
     def incoming_worker(workers, queue):
         # poll for new GPU job
         for ip in itertools.cycle(workers):
-            print(f"[{ip}] " + infrastructure.last_status("crawl@"+ip,
-                  '/home/crawl/crawl.log').split("Downloaded:")[-1].rstrip())
+            #print(f"[{ip}] " + infrastructure.last_status("crawl@"+ip,
+            #      '/home/crawl/crawl.log').split("Downloaded:")[-1].rstrip())
             newjob = infrastructure.exists_remote(
                 "crawl@"+ip, "/home/crawl/semaphore", True)
             if newjob:
@@ -205,7 +205,7 @@ if __name__ == "__main__":
                 continue
 
     def outgoing_worker(queue):
-        print(f"outgoing queue length={queue.qsize()}")
+        #print(f"outgoing queue length={queue.qsize()}")
         time.sleep(10)
         while True:
             if queue.qsize() > 0:
@@ -222,30 +222,31 @@ if __name__ == "__main__":
                 # send GPU results
                 subprocess.call(
                     ["zip", "-r", "./" +
-                        ip.replace(".", "-") + "gpujobdone.zip", output_folder],
+                        ip.replace(".", "-") + "/gpujobdone.zip", "./" +
+                        ip.replace(".", "-")+"/*"],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
                 subprocess.call(
-                    ["touch", "./" + ip.replace(".", "-") + "gpusemaphore"],
+                    ["touch", "./" + ip.replace(".", "-") + "/gpusemaphore"],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
 
                 subprocess.call(
                     ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "./" +
-                        ip.replace(".", "-") + "gpujobdone.zip", "crawl@"+ip + ":~/gpujobdone.zip"],
+                        ip.replace(".", "-") + "/gpujobdone.zip", "crawl@"+ip + ":~/gpujobdone.zip"],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
                 subprocess.call(
                     ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "./" +
-                        ip.replace(".", "-") + "gpusemaphore", "crawl@"+ip + ":~/gpusemaphore"],
+                        ip.replace(".", "-") + "/gpusemaphore", "crawl@"+ip + ":~/gpusemaphore"],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
-                os.remove("./" + ip.replace(".", "-") + "gpujobdone.zip")
-                os.remove("./" + ip.replace(".", "-") + "gpusemaphore")
+                os.remove("./" + ip.replace(".", "-") + "/gpujobdone.zip")
+                os.remove("./" + ip.replace(".", "-") + "/gpusemaphore")
 
                 print(f"[{ip}] resuming job with GPU results")
                 queue.task_done()
@@ -264,8 +265,8 @@ time.sleep(10)
 try:
 
     while True:
-        print(f"incoming queue length={inbound.qsize()}")
-        time.sleep(10)
+        #print(f"incoming queue length={inbound.qsize()}")
+        #time.sleep(10)
         while inbound.qsize() > 0:
             ip = inbound.get()
             print(f"gpu processing job for {ip}")
