@@ -126,20 +126,22 @@ if __name__ == "__main__":
 
     nodes = sys.argv[1]
     location = None
-    if len(sys.argv) > 1:
+    skip = None
+    if len(sys.argv) > 2:
         location = sys.argv[2]
-    print(location)
+    if len(sys.argv) > 3:
+        skip = sys.argv[3]
     workers = []
 
-    with open ("workers.txt","r") as f:
-        for line in f.readlines():
-            workers.append(line.strip("\n"))
-
-    if len(workers) == 0:
+    if skip is None:
         try:
             start = time.time()
             # generate cloud workers
             workers = trio.run(infrastructure.up, nodes, location)
+            with open ("workers.txt","w") as f:
+                for ip in workers:
+                    f.write(ip + "\n")
+
             trio.run(infrastructure.wait_for_infrastructure, workers)
             print(
                 f"[infrastructure] {len(workers)} nodes cloud infrastructure is up and initialized in {round(time.time() - start)}s")
@@ -150,6 +152,10 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"[infrastructure] Error, could not bring up infrastructure... please consider shutting down all workers via `python3 infrastructure.py down`")
             print(e)
+    else:
+        with open ("workers.txt","r") as f:
+            for line in f.readlines():
+                workers.append(line.strip("\n"))
 
     def incoming_worker(workers, queue):
         # poll for new GPU job
