@@ -197,8 +197,10 @@ if __name__ == "__main__":
                 continue
 
     def outgoing_worker(queue):
+        print(f"outgoing queue length={queue.qsize()}")
+        time.sleep(10)
         while True:
-            if not queue.empty:
+            if queue.qsize() > 0:
                 ip == queue.get()
                 output_folder = "./" + + ip.replace(".", "-") + "/save/"
                 img_output_folder = output_folder + "images/"
@@ -247,13 +249,13 @@ try:
     inbound = Queue()
     outbound = Queue()
 
-    inb = Process(target=incoming_worker, args=[
-                  workers, inbound], daemon=True).start
+    inb = Process(target=incoming_worker, args=[workers, inbound], daemon=True).start
     otb = Process(target=outgoing_worker, args=[outbound], daemon=True).start
 
     while True:
-        while not inbound.empty:
-            print(f"incoming queue length={inbound.qsize}")
+        print(f"incoming queue length={inbound.qsize()}")
+        time.sleep(10)
+        while inbound.qsize() > 0:
             ip = inbound.get()
             output_folder = "./" + + ip.replace(".", "-") + "/save/"
             img_output_folder = output_folder + "images/"
