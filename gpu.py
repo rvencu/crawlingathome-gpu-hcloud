@@ -233,44 +233,13 @@ if __name__ == "__main__":
         
 
 try:
-    cpus = multiprocessing.cpu_count()
 
-    m = Manager()
+    inbound = Queue()
+    outbound = Queue()
 
-    inbound = m.Queue()
-    outbound = m.Queue()
-
-    num_inbound = int(cpus/2)
-    num_outbound = int(cpus/6)
-
-    inb = Pool(num_inbound, incoming_worker)
-    otb = Pool(num_outbound, outgoing_worker)
-
-    newjobs = []
-    for ip in workers:
-        newjobs.append(inb.apply_async(incoming_worker, (ip,inbound,)))
+    inb = Process(target=incoming_worker, args=[workers, inbound], daemon=True).start
+    otb = Process(target=outgoing_worker, args=[outbound], daemon=True).start
     
-    # Wait for the asynchrounous reader threads to finish
-    try:
-        [r.get() for r in newjobs]
-    except:
-        print("Interrupted")
-        inb.terminate()
-        inb.join()
-
-    newresults = []
-    for i in range(len(workers)):
-        newresults.append(inb.apply_async(outgoing_worker, (outbound,)))
-    
-    # Wait for the asynchrounous reader threads to finish
-    try:
-        [r.get() for r in newresults]
-    except:
-        print("Interrupted")
-        otb.terminate()
-        otb.join()
-
-
     while True:
         while not inbound.empty:
             print (f"incoming queue length={inbound.qsize}")
