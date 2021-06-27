@@ -192,6 +192,7 @@ if __name__ == "__main__":
                 os.remove(output_folder+"gpujob.zip")
 
                 queue.put(ip)
+                print (f"{ip} inserted to the inbound queue")
             else:
                 time.sleep(1)
                 continue
@@ -247,8 +248,8 @@ if __name__ == "__main__":
 inbound = Queue()
 outbound = Queue()
 
-inb = Process(target=incoming_worker, args=[workers, inbound], daemon=False).start
-otb = Process(target=outgoing_worker, args=[outbound], daemon=False).start
+inb = Process(target=incoming_worker, args=[workers, inbound], daemon=False).start()
+otb = Process(target=outgoing_worker, args=[outbound], daemon=False).start()
 
 try:
 
@@ -289,7 +290,9 @@ try:
             )
 
             outbound.put(ip)
+            print(f"{ip} inserted to the outbound queue")
             inbound.task_done()
+            print(f"{ip} removed from the inbound queue")
 
 except KeyboardInterrupt:
     print(f"[GPU] Abort! Deleting cloud infrastructure...")
