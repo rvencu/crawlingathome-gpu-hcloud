@@ -59,7 +59,7 @@ def parse_wat(content, start, line_count):
     import ftfy
     import pycld2 as cld2
 
-    blocklist = open("blocklist-domain.txt").read().splitlines()
+    blocklist = open("crawlingathome-gpu-hcloud/blocklist-domain.txt").read().splitlines()
 
     valid_data = []
     content.seek(start)
