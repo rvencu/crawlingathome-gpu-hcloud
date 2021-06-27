@@ -1,3 +1,5 @@
+from PIL import Image, ImageFile, UnidentifiedImageError
+from multiprocessing import Pool, Queue, Process, Manager
 import multiprocessing
 import os
 import sys
@@ -17,18 +19,18 @@ from copy import copy
 from tqdm import tqdm
 from pathlib import Path
 sys.path.append('./crawlingathome-worker/')
-from multiprocessing import Pool, Queue, Process, Manager
-from PIL import Image, ImageFile, UnidentifiedImageError
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True  # https://stackoverflow.com/a/47958486
 
-def zipfolder(filename, target_dir):            
+
+def zipfolder(filename, target_dir):
     zipobj = zipfile.ZipFile(filename, 'w', zipfile.ZIP_DEFLATED)
     rootlen = len(target_dir) + 1
     for base, dirs, files in os.walk(target_dir):
         for file in files:
             fn = os.path.join(base, file)
             zipobj.write(fn, fn[rootlen:])
+
 
 def df_clipfilter(df):
     sim_threshold = 0.3
@@ -108,6 +110,7 @@ def df_tfrecords(df, output_fname):
             )
             tfrecord_writer.write(example.SerializeToString())
 
+
 if __name__ == "__main__":
     output_folder = "./save/"
     csv_output_folder = output_folder
@@ -118,7 +121,8 @@ if __name__ == "__main__":
         YOUR_NICKNAME_FOR_THE_LEADERBOARD = "anonymous"
     CRAWLINGATHOME_SERVER_URL = "https://api.gagepiracy.com:4483/"
 
-    print (f"[GPU] starting session under `{YOUR_NICKNAME_FOR_THE_LEADERBOARD}` nickname")
+    print(
+        f"[GPU] starting session under `{YOUR_NICKNAME_FOR_THE_LEADERBOARD}` nickname")
 
     nodes = sys.argv[1]
     location = None
@@ -132,26 +136,28 @@ if __name__ == "__main__":
         # generate cloud workers
         workers = trio.run(infrastructure.up, nodes, location)
         trio.run(infrastructure.wait_for_infrastructure, workers)
-        print(f"[infrastructure] {len(workers)} nodes cloud infrastructure is up and initialized in {round(time.time() - start)}s")
+        print(
+            f"[infrastructure] {len(workers)} nodes cloud infrastructure is up and initialized in {round(time.time() - start)}s")
     except KeyboardInterrupt:
         print(f"[infrastructure] Abort! Deleting cloud infrastructure...")
         trio.run(infrastructure.down, nodes)
-        print (f"[infrastructure] Cloud infrastructure was shutdown")
+        print(f"[infrastructure] Cloud infrastructure was shutdown")
     except Exception as e:
         print(f"[infrastructure] Error, could not bring up infrastructure... please consider shutting down all workers via `python3 infrastructure.py down`")
-        print (e)
+        print(e)
 
     def incoming_worker(workers, queue):
         # poll for new GPU job
         for ip in itertools.cycle(workers):
-            print (f"[{ip}] " + infrastructure.last_status("crawl@"+ip, '/home/crawl/crawl.log').split("Downloaded:")[-1].rstrip())
-            newjob = infrastructure.exists_remote("crawl@"+ip, "/home/crawl/semaphore", True)
+            print(f"[{ip}] " + infrastructure.last_status("crawl@"+ip,
+                  '/home/crawl/crawl.log').split("Downloaded:")[-1].rstrip())
+            newjob = infrastructure.exists_remote(
+                "crawl@"+ip, "/home/crawl/semaphore", True)
             if newjob:
-                output_folder = "./save" +  + ip.replace(".","-") + "/"
-                csv_output_folder = output_folder
+                output_folder = "./" + + ip.replace(".", "-") + "/save/"
                 img_output_folder = output_folder + "images/"
 
-                print (f"[{ip}] sending job to GPU")
+                print(f"[{ip}] sending job to GPU")
                 if os.path.exists(output_folder):
                     shutil.rmtree(output_folder)
                 if os.path.exists(".tmp"):
@@ -163,18 +169,21 @@ if __name__ == "__main__":
 
                 # receive gpu job data (~500MB)
                 subprocess.call(
-                    ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "crawl@" + ip + ":" + "gpujob.zip", output_folder],
+                    ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah",
+                        "crawl@" + ip + ":" + "gpujob.zip", output_folder],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
                 # delete file on remote so there is no secondary download
                 subprocess.call(
-                    ["ssh", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "crawl@" + ip, "rm -rf gpujob.zip"],
+                    ["ssh", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah",
+                        "crawl@" + ip, "rm -rf gpujob.zip"],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
                 subprocess.call(
-                    ["ssh", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "crawl@" + ip, "rm -rf semaphore"],
+                    ["ssh", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah",
+                        "crawl@" + ip, "rm -rf semaphore"],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
@@ -187,68 +196,70 @@ if __name__ == "__main__":
                 time.sleep(1)
                 continue
 
-                
     def outgoing_worker(queue):
         while True:
             if not queue.empty:
                 ip == queue.get()
-                output_folder = "./save" +  + ip.replace(".","-") + "/"
-                csv_output_folder = output_folder
+                output_folder = "./" + + ip.replace(".", "-") + "/save/"
                 img_output_folder = output_folder + "images/"
                 # clean img_output_folder now since we have all results do not want to transfer back all images...
                 try:
                     shutil.rmtree(img_output_folder)
                 except OSError as e:
-                    print("[GPU] Error deleting images: %s - %s." % (e.filename, e.strerror))
+                    print("[GPU] Error deleting images: %s - %s." %
+                          (e.filename, e.strerror))
 
                 # send GPU results
                 subprocess.call(
-                    ["zip", "-r", "gpujobdone"+ip.replace(".","-")+".zip", output_folder],
+                    ["zip", "-r", "gpujobdone" +
+                        ip.replace(".", "-")+".zip", output_folder],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
                 subprocess.call(
-                    ["touch", "gpusemaphore"+ip.replace(".","-")],
+                    ["touch", "gpusemaphore"+ip.replace(".", "-")],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
 
                 subprocess.call(
-                    ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "gpujobdone"+ip.replace(".","-")+".zip", "crawl@"+ip + ":~/gpujobdone.zip"],
+                    ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "gpujobdone" +
+                        ip.replace(".", "-")+".zip", "crawl@"+ip + ":~/gpujobdone.zip"],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
                 subprocess.call(
-                    ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "gpusemaphore"+ip.replace(".","-"), "crawl@"+ip + ":~/gpusemaphore"],
+                    ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "gpusemaphore" +
+                        ip.replace(".", "-"), "crawl@"+ip + ":~/gpusemaphore"],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
-                os.remove("gpujobdone"+ip.replace(".","-")+".zip")
-                os.remove("gpusemaphore"+ip.replace(".","-"))
+                os.remove("gpujobdone"+ip.replace(".", "-")+".zip")
+                os.remove("gpusemaphore"+ip.replace(".", "-"))
 
-                print (f"[{ip}] resuming job with GPU results")
+                print(f"[{ip}] resuming job with GPU results")
                 queue.task_done()
             else:
-                time.sleep(1)             
-        
+                time.sleep(1)
 
 try:
 
     inbound = Queue()
     outbound = Queue()
 
-    inb = Process(target=incoming_worker, args=[workers, inbound], daemon=True).start
+    inb = Process(target=incoming_worker, args=[
+                  workers, inbound], daemon=True).start
     otb = Process(target=outgoing_worker, args=[outbound], daemon=True).start
-    
+
     while True:
         while not inbound.empty:
-            print (f"incoming queue length={inbound.qsize}")
+            print(f"incoming queue length={inbound.qsize}")
             ip = inbound.get()
-            ip_output_folder = output_folder + ip.replace(".","-")
-            ip_img_output_folder = img_output_folder + ip.replace(".","-")
+            output_folder = "./" + + ip.replace(".", "-") + "/save/"
+            img_output_folder = output_folder + "images/"
 
             all_csv_files = []
-            for path, subdir, files in os.walk(ip_output_folder):
+            for path, subdir, files in os.walk(output_folder):
                 for file in glob(os.path.join(path, "*.csv")):
                     all_csv_files.append(file)
 
@@ -257,20 +268,22 @@ try:
             out_fname = Path(out_path).stem.strip("_unfiltered").strip(".")
 
             # recreate parsed dataset and run CLIP filtering
-            dlparse_df = pd.read_csv(ip_output_folder + out_fname + ".csv", sep="|")
+            dlparse_df = pd.read_csv(
+                output_folder + out_fname + ".csv", sep="|")
             filtered_df, img_embeddings = df_clipfilter(dlparse_df)
-            filtered_df.to_csv(ip_output_folder + out_fname + ".csv", index=False, sep="|")
-            
+            filtered_df.to_csv(output_folder + out_fname +
+                               ".csv", index=False, sep="|")
+
             img_embeds_sampleid = {}
             for i, img_embed_it in enumerate(img_embeddings):
                 dfid_index = filtered_df.at[i, "SAMPLE_ID"]
                 img_embeds_sampleid[str(dfid_index)] = img_embed_it
-            with open(f"{ip_output_folder}image_embedding_dict-{out_fname}.pkl", "wb") as f:
+            with open(f"{output_folder}image_embedding_dict-{out_fname}.pkl", "wb") as f:
                 pickle.dump(img_embeds_sampleid, f)
-            
+
             df_tfrecords(
                 filtered_df,
-                f"{ip_output_folder}crawling_at_home_{out_fname}__00000-of-00001.tfrecord",
+                f"{output_folder}crawling_at_home_{out_fname}__00000-of-00001.tfrecord",
             )
 
             outbound.put(ip)
@@ -282,9 +295,10 @@ except KeyboardInterrupt:
     suffix = ''.join(random.choice(letters) for i in range(3))
     for ip in workers:
         subprocess.call(
-                ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "crawl@" + ip + ":" + "crawl.log", ip + "_" + suffix + ".log"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
+            ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "crawl@" +
+                ip + ":" + "crawl.log", ip + "_" + suffix + ".log"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
     trio.run(infrastructure.down)
-    print (f"[infrastructure] Cloud infrastructure was shutdown")
+    print(f"[infrastructure] Cloud infrastructure was shutdown")
