@@ -284,6 +284,9 @@ try:
             # recreate parsed dataset and run CLIP filtering
             dlparse_df = pd.read_csv(
                 output_folder + out_fname + ".csv", sep="|")
+            
+            dlparse_df["PATH"] = "./" + ip.replace(".", "-") + "/" + dlparse_df["PATH"]
+
             filtered_df, img_embeddings = df_clipfilter(dlparse_df)
             filtered_df.to_csv(output_folder + out_fname +
                                ".csv", index=False, sep="|")
