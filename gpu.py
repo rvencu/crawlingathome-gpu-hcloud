@@ -131,20 +131,25 @@ if __name__ == "__main__":
     print(location)
     workers = []
 
-    try:
-        start = time.time()
-        # generate cloud workers
-        workers = trio.run(infrastructure.up, nodes, location)
-        trio.run(infrastructure.wait_for_infrastructure, workers)
-        print(
-            f"[infrastructure] {len(workers)} nodes cloud infrastructure is up and initialized in {round(time.time() - start)}s")
-    except KeyboardInterrupt:
-        print(f"[infrastructure] Abort! Deleting cloud infrastructure...")
-        trio.run(infrastructure.down, nodes)
-        print(f"[infrastructure] Cloud infrastructure was shutdown")
-    except Exception as e:
-        print(f"[infrastructure] Error, could not bring up infrastructure... please consider shutting down all workers via `python3 infrastructure.py down`")
-        print(e)
+    with open ("workers.txt","r") as f:
+        for line in f.readlines():
+            workers.append(line.strip("\n"))
+
+    if len(workers) == 0:
+        try:
+            start = time.time()
+            # generate cloud workers
+            workers = trio.run(infrastructure.up, nodes, location)
+            trio.run(infrastructure.wait_for_infrastructure, workers)
+            print(
+                f"[infrastructure] {len(workers)} nodes cloud infrastructure is up and initialized in {round(time.time() - start)}s")
+        except KeyboardInterrupt:
+            print(f"[infrastructure] Abort! Deleting cloud infrastructure...")
+            trio.run(infrastructure.down, nodes)
+            print(f"[infrastructure] Cloud infrastructure was shutdown")
+        except Exception as e:
+            print(f"[infrastructure] Error, could not bring up infrastructure... please consider shutting down all workers via `python3 infrastructure.py down`")
+            print(e)
 
     def incoming_worker(workers, queue):
         # poll for new GPU job
@@ -154,7 +159,7 @@ if __name__ == "__main__":
             newjob = infrastructure.exists_remote(
                 "crawl@"+ip, "/home/crawl/semaphore", True)
             if newjob:
-                output_folder = "./" + + ip.replace(".", "-") + "/save/"
+                output_folder = "./" + ip.replace(".", "-") + "/save/"
                 img_output_folder = output_folder + "images/"
 
                 print(f"[{ip}] sending job to GPU")
@@ -203,7 +208,7 @@ if __name__ == "__main__":
         while True:
             if queue.qsize() > 0:
                 ip == queue.get()
-                output_folder = "./" + + ip.replace(".", "-") + "/save/"
+                output_folder = "./" + ip.replace(".", "-") + "/save/"
                 img_output_folder = output_folder + "images/"
                 # clean img_output_folder now since we have all results do not want to transfer back all images...
                 try:
@@ -258,7 +263,7 @@ try:
         time.sleep(10)
         while inbound.qsize() > 0:
             ip = inbound.get()
-            output_folder = "./" + + ip.replace(".", "-") + "/save/"
+            output_folder = "./" + ip.replace(".", "-") + "/save/"
             img_output_folder = output_folder + "images/"
 
             all_csv_files = []
