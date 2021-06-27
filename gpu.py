@@ -20,7 +20,6 @@ from PIL import Image, ImageFile, UnidentifiedImageError
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True  # https://stackoverflow.com/a/47958486
 
-
 def zipfolder(filename, target_dir):            
     zipobj = zipfile.ZipFile(filename, 'w', zipfile.ZIP_DEFLATED)
     rootlen = len(target_dir) + 1

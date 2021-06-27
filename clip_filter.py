@@ -7,7 +7,9 @@ from PIL import Image
 device = "cuda" if torch.cuda.is_available() else "cpu"
 datasets.set_caching_enabled(False)
 
-batch_size = 512 if device == "cuda" else 8
+vmem = torch.cuda.get_device_properties(0).total_memory if device == "cuda" else 0
+batch_size = 128 * int(vmem/1800) if device == "cuda" else 8
+print(f"batch size = {batch_size}")
 
 class CLIP:
     def __init__(self):
