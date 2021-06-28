@@ -312,6 +312,7 @@ if __name__ == "__main__":
             random.shuffle(parsed_data) # attempt to spread out clusters of urls pointing to the same domain name
             
             lastlinks = len(parsed_data)
+            print (f"this job has {lastlinks} links")
 
             client.log("Downloading images" + lastext)
             dlparse_df = dl_wat( parsed_data, first_sample_id)
@@ -319,10 +320,11 @@ if __name__ == "__main__":
             dlparse_df.to_csv(output_folder + out_fname + "_unfiltered.csv", index=False, sep="|")
             print (f"downloaded {len(dlparse_df)} in {round(time.time() - start)} seconds")
             print (f"download efficiency {len(dlparse_df)/(time.time() - start)} img/sec")
+            print (f"crawl efficiency {lastlinks/(time.time() - start)} links/sec")
 
             start2 = time.time()
 
-            client.log("[w/GPU] Dropping NSFW keywords" + lastext)
+            client.log("@GPU: dropping NSFW keywords" + lastext)
             # insert GPU job
             subprocess.call(
                 ["zip", "-r", "gpujob.zip", output_folder],
