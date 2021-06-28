@@ -61,6 +61,10 @@ If you are asked for any droplet root password at any time, it means you need to
 - [ ] Add continuous deployment pipline so workers get updates without shutting down
 - [x] Add option to use multiple HCLOUD API keys (to aggregate multiple accounts into the same swarm)
 - [x] Add Colab compatible notebook with hcould swarm. Swarm ratio is about 5 nodes for 1 colab notebook
+- [x] Add Kaggle automation (launch scripts on Kaggle with GPU)
+- [x] Optimize GPU workflow (separate processes for jobs downloading, inference and uploading)
+- [x] Optimize cloud workers: do not install unnecessary packages, remove swap file, use ramdisk for downloading images
+- [ ] Use SSH and SCP libraries from Python instead of subprocess calls (gpu and worker)
 
 This work is based on code written by:
 - https://github.com/TheoCoombes/crawlingathome

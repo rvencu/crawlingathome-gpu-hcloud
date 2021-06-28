@@ -10,7 +10,6 @@ users:
 package_update: true
 package_upgrade: true
 packages:
- - zip
  - python3-pip
  - git
  - build-essential
@@ -19,6 +18,7 @@ packages:
  - python3-dev
  - libwebp-dev
  - libjpeg-dev
+ - python3-venv
 write_files:
 - path: /etc/environment
   content: |
@@ -30,14 +30,16 @@ runcmd:
  - [ sh, -c, echo "=========hello crawl'=========" ]
  - ls -l /root
  # make swap file so tensorflow and pytorch can install
- - fallocate -l 5G /swapfile
- - chmod 600 /swapfile
- - mkswap /swapfile
- - swapon /swapfile
- - cp /etc/fstab /etc/fstab.bak
- - 'echo "/swapfile none swap sw 0 0" | tee -a /etc/fstab'
- - sysctl vm.swappiness=75
- - 'echo "vm.swappiness=75" | tee -a /etc/sysctl.conf'
+ #- fallocate -l 5G /swapfile
+ #- chmod 600 /swapfile
+ #- mkswap /swapfile
+ #- swapon /swapfile
+ #- cp /etc/fstab /etc/fstab.bak
+ #- 'echo "/swapfile none swap sw 0 0" | tee -a /etc/fstab'
+ #- sysctl vm.swappiness=75
+ #- 'echo "vm.swappiness=75" | tee -a /etc/sysctl.conf'
+ # make ramdisk
+ - 'echo "tmpfs  /home/crawl/save  tmpfs  rw,size=512M  0   0" | tee -a /etc/fstab'
 # take care of max open files
  - echo "* soft     nproc          65535 " >> /etc/security/limits.conf
  - echo "* hard     nproc          65535 " >> /etc/security/limits.conf
@@ -60,9 +62,9 @@ runcmd:
  - sed -i '$a AllowUsers crawl' /etc/ssh/sshd_config
  # install the script
  - cd /home/crawl
- - git clone https://github.com/rvencu/crawlingathome-gpu-hcloud
+ - git clone https://github.com/rvencu/crawlingathome-gpu-hcloud --branch gpu-queue
  - cd crawlingathome-gpu-hcloud
- - bash pip-setup.sh
+ - bash worker-setup.sh
  # make the script run as a service at startup
  - echo "[Unit]" >> /etc/systemd/system/crawl.service
  - echo "After=network.service" >> /etc/systemd/system/crawl.service

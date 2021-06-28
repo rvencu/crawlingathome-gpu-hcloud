@@ -127,7 +127,7 @@ def process_img_content(response, alt_text, license, sample_id):
 async def request_image(datas, start_sampleid):
     tmp_data = []
 
-    session = asks.Session(connections=176)
+    session = asks.Session(connections=192)
     session.headers = {
         "User-Agent": "Googlebot-Image",
         "Accept-Language": "en-US",
@@ -166,7 +166,8 @@ def dl_wat(valid_data, first_sample_id):
     
     # Download every image available
     processed_samples = []
-    trio.run(request_image, valid_data, first_sample_id, instruments=[TrioProgress(len(valid_data), False)] )
+    #trio.run(request_image, valid_data, first_sample_id, instruments=[TrioProgress(len(valid_data), False)] )
+    trio.run( request_image, valid_data, first_sample_id )
 
     for tmpf in glob(".tmp/*.json"):
         processed_samples.extend(ujson.load(open(tmpf)))
@@ -242,6 +243,7 @@ class FileData:
         return self._length
 
 if __name__ == "__main__":
+    myip = ip = get('https://api.ipify.org').text
     output_folder = "./save/"
     csv_output_folder = output_folder
     img_output_folder = output_folder + "images/"
@@ -265,8 +267,6 @@ if __name__ == "__main__":
     lastcount = 0
     lastlinks = 0
 
-    myip = ip = get('https://api.ipify.org').text
-
     while client.jobCount() > 0:
 
         try:
@@ -276,11 +276,11 @@ if __name__ == "__main__":
             start = time.time()
 
             if os.path.exists(output_folder):
-                shutil.rmtree(output_folder)
+                shutil.rmtree(output_folder, ignore_errors=True) # fix for ramdisk already existing at location
             if os.path.exists(".tmp"):
                 shutil.rmtree(".tmp")
 
-            os.mkdir(output_folder)
+            #os.mkdir(output_folder)
             os.mkdir(img_output_folder)
             os.mkdir(".tmp")
 
@@ -316,6 +316,7 @@ if __name__ == "__main__":
             random.shuffle(parsed_data) # attempt to spread out clusters of urls pointing to the same domain name
             
             lastlinks = len(parsed_data)
+            print (f"this job has {lastlinks} links")
 
             client.log("Downloading images" + lastext)
             dlparse_df = dl_wat( parsed_data, first_sample_id)
@@ -323,16 +324,20 @@ if __name__ == "__main__":
             dlparse_df.to_csv(output_folder + out_fname + "_unfiltered.csv", index=False, sep="|")
             print (f"downloaded {len(dlparse_df)} in {round(time.time() - start)} seconds")
             print (f"download efficiency {len(dlparse_df)/(time.time() - start)} img/sec")
+            print (f"crawl efficiency {lastlinks/(time.time() - start)} links/sec")
 
             start2 = time.time()
 
-            client.log("[w/GPU] Dropping NSFW keywords" + lastext)
+            client.log("@GPU: dropping NSFW keywords" + lastext)
             # insert GPU job
+            shutil.make_archive("gpujob", "zip", ".", output_folder)
+            '''
             subprocess.call(
                 ["zip", "-r", "gpujob.zip", output_folder],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
+            '''
             subprocess.call(
                 ["touch", "semaphore"],
                 stdout=subprocess.DEVNULL,

@@ -1,0 +1,6 @@
+ftfy
+pandas
+pycld2
+trio
+ujson
+asks
