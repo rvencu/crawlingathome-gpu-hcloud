@@ -21,7 +21,6 @@ from multiprocessing import Pool, JoinableQueue, Process, Manager
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True  # https://stackoverflow.com/a/47958486
 
-
 def df_clipfilter(df):
     sim_threshold = 0.3
     underaged_text = ["teen", "kid", "child", "baby"]
