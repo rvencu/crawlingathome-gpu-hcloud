@@ -240,7 +240,7 @@ class FileData:
 
 if __name__ == "__main__":
     myip = ip = get('https://api.ipify.org').text
-    output_folder = "./save" + ip.replace(".","-") + "/" 
+    output_folder = "./save/"
     csv_output_folder = output_folder
     img_output_folder = output_folder + "images/"
 
