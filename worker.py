@@ -326,7 +326,7 @@ if __name__ == "__main__":
 
             client.log("@GPU: dropping NSFW keywords" + lastext)
             # insert GPU job
-            shutil.make_archive("gpujob", "zip", output_folder, "./")
+            shutil.make_archive("gpujob", "zip", ".", output_folder)
             '''
             subprocess.call(
                 ["zip", "-r", "gpujob.zip", output_folder],
