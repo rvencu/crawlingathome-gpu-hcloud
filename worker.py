@@ -162,7 +162,8 @@ def dl_wat(valid_data, first_sample_id):
     
     # Download every image available
     processed_samples = []
-    trio.run(request_image, valid_data, first_sample_id, instruments=[TrioProgress(len(valid_data), False)] )
+    #trio.run(request_image, valid_data, first_sample_id, instruments=[TrioProgress(len(valid_data), False)] )
+    trio.run( request_image, valid_data, first_sample_id )
 
     for tmpf in glob(".tmp/*.json"):
         processed_samples.extend(ujson.load(open(tmpf)))
@@ -271,11 +272,11 @@ if __name__ == "__main__":
             start = time.time()
 
             if os.path.exists(output_folder):
-                shutil.rmtree(output_folder)
+                shutil.rmtree(output_folder, ignore_errors=True) # fix for ramdisk already existing at location
             if os.path.exists(".tmp"):
                 shutil.rmtree(".tmp")
 
-            os.mkdir(output_folder)
+            #os.mkdir(output_folder)
             os.mkdir(img_output_folder)
             os.mkdir(".tmp")
 
