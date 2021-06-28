@@ -22,15 +22,6 @@ from multiprocessing import Pool, JoinableQueue, Process, Manager
 ImageFile.LOAD_TRUNCATED_IMAGES = True  # https://stackoverflow.com/a/47958486
 
 
-def zipfolder(filename, target_dir):
-    zipobj = zipfile.ZipFile(filename, 'w', zipfile.ZIP_DEFLATED)
-    rootlen = len(target_dir) + 1
-    for base, dirs, files in os.walk(target_dir):
-        for file in files:
-            fn = os.path.join(base, file)
-            zipobj.write(fn, fn[rootlen:])
-
-
 def df_clipfilter(df):
     sim_threshold = 0.3
     underaged_text = ["teen", "kid", "child", "baby"]
