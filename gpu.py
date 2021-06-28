@@ -253,9 +253,9 @@ inbound = JoinableQueue()
 outbound = JoinableQueue()
 
 inb = Process(target=incoming_worker, args=[
-              workers, inbound], daemon=False).start()
+              workers, inbound], daemon=True).start()
 time.sleep(10)
-otb = Process(target=outgoing_worker, args=[outbound], daemon=False).start()
+otb = Process(target=outgoing_worker, args=[outbound], daemon=True).start()
 time.sleep(10)
 
 try:
