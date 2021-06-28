@@ -220,11 +220,8 @@ if __name__ == "__main__":
                           (e.filename, e.strerror))
 
                 # send GPU results
-                subprocess.call(
-                    ["zip", "-r", base + "/gpujobdone.zip", base + "/\*"],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
+                shutil.make_archive(base + "/gpujobdone", "zip", base, "save")
+                
                 subprocess.call(
                     ["touch", base + "/gpusemaphore"],
                     stdout=subprocess.DEVNULL,
