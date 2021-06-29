@@ -51,7 +51,7 @@ class CLIP:
 
     def preprocess_images(self, df):
         im_dataset = datasets.Dataset.from_pandas(df)
-        im_dataset = im_dataset.map(self.similarity_imgalt, batched=True, batch_size=batch_size)
+        im_dataset = im_dataset.map(self.similarity_imgalt, batched=True, batch_size=batch_size, keep_in_memory=True, desc="CLIP inference")
         return im_dataset["image_features"], im_dataset["similarity"]
 
     def prob(self, image_features, text_features):
