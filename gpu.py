@@ -154,7 +154,7 @@ if __name__ == "__main__":
                 output_folder = "./" + ip.replace(".", "-") + "/save/"
                 img_output_folder = output_folder + "images/"
 
-                print(f"[{ip}] sending job to GPU")
+                #print(f"[{ip}] sending job to GPU")
                 if os.path.exists(output_folder):
                     shutil.rmtree(output_folder)
                 if os.path.exists(".tmp"):
@@ -189,7 +189,7 @@ if __name__ == "__main__":
                 os.remove(output_folder+"gpujob.zip")
 
                 queue.put(ip)
-                print(f"{ip} inserted to the inbound queue")
+                #print(f"{ip} inserted to the inbound queue")
             else:
                 time.sleep(1)
                 continue
@@ -231,7 +231,7 @@ if __name__ == "__main__":
                 os.remove(base + "/gpujobdone.zip")
                 os.remove(base + "/gpusemaphore")
 
-                print(f"[{ip}] resuming job with GPU results")
+                #print(f"[{ip}] resuming job with GPU results")
                 queue.task_done()
             else:
                 time.sleep(1)
@@ -245,9 +245,17 @@ time.sleep(10)
 otb = Process(target=outgoing_worker, args=[outbound], daemon=True).start()
 time.sleep(10)
 
+probar = tqdm(total=int(nodes), desc="Executed jobs", position=2, bar_format='{desc}: {n_fmt} ({rate_fmt})')
+incbar = tqdm(total=int(nodes), desc="Inbound queue", position=1, bar_format='{desc}: {n_fmt}/{total_fmt} ({percentage:0.0f}%)')
+outbar = tqdm(total=int(nodes), desc="Outbound queue", position=0, bar_format='{desc}: {n_fmt}/{total_fmt} ({percentage:0.0f}%)')
+
 try:
     print (f"gpu worker started")
     while True:
+        incbar.n = inbound.qsize()
+        outbar.n = outbound.qsize()
+        incbar.refresh()
+        outbar.refresh()
         while inbound.qsize() > 0:
             ip = inbound.get()
             print(f"gpu processing job for {ip}")
@@ -287,9 +295,12 @@ try:
             )
 
             outbound.put(ip)
-            print(f"{ip} inserted to the outbound queue")
             inbound.task_done()
-            print(f"{ip} removed from the inbound queue")
+            incbar.n = inbound.qsize()
+            outbar.n = outbound.qsize()
+            incbar.refresh()
+            outbar.refresh()
+            probar.update(1)
 
 except KeyboardInterrupt:
     print(f"[GPU] Abort! Deleting cloud infrastructure...")
