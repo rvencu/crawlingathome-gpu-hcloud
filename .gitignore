@@ -151,3 +151,10 @@ gpusemaphore
 superseeded*
 kaggle.py
 workers.txt
+crawling_at_home*
+FIRST_SAMPLE*
+image_embedding*
+*.jpg
+*.png 
+*.jpeg
+*.webp
