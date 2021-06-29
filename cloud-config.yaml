@@ -62,7 +62,7 @@ runcmd:
  - sed -i '$a AllowUsers crawl' /etc/ssh/sshd_config
  # install the script
  - cd /home/crawl
- - git clone https://github.com/rvencu/crawlingathome-gpu-hcloud --branch gpu-queue
+ - git clone https://github.com/rvencu/crawlingathome-gpu-hcloud
  - cd crawlingathome-gpu-hcloud
  - bash worker-setup.sh
  # make the script run as a service at startup

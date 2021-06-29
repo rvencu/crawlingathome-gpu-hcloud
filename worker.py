@@ -251,7 +251,7 @@ if __name__ == "__main__":
     YOUR_NICKNAME_FOR_THE_LEADERBOARD = os.getenv('CAH_NICKNAME')
     if YOUR_NICKNAME_FOR_THE_LEADERBOARD is None:
         YOUR_NICKNAME_FOR_THE_LEADERBOARD = "anonymous"
-    CRAWLINGATHOME_SERVER_URL = "http://api.gagepiracy.com:4483/"
+    CRAWLINGATHOME_SERVER_URL = "https://api.gagepiracy.com:4483/"
 
     print (f"starting session under `{YOUR_NICKNAME_FOR_THE_LEADERBOARD}` nickname")
 
