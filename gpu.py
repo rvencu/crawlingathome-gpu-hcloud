@@ -145,9 +145,8 @@ if __name__ == "__main__":
 
     def incoming_worker(workers, queue):
         print (f"inbound worker started")
-        for ip in itertools.cycle(workers):
-            #print(f"[{ip}] " + infrastructure.last_status("crawl@"+ip,
-            #      '/home/crawl/crawl.log').split("Downloaded:")[-1].rstrip())
+
+        async def _get_job(ip,queue):
             newjob = infrastructure.exists_remote(
                 "crawl@"+ip, "/home/crawl/semaphore", True)
             if newjob:
@@ -192,7 +191,15 @@ if __name__ == "__main__":
                 #print(f"{ip} inserted to the inbound queue")
             else:
                 time.sleep(1)
-                continue
+
+        async def find_jobs(workers, queue):
+            async with trio.open_nursery() as n:
+                for ip in workers:
+                    n.start_soon(_get_job, ip, queue)
+        
+        while True:
+           trio.run(find_jobs, workers, queue)
+           time.sleep(1)
 
     def outgoing_worker(queue):
         print (f"outbound worker started")
@@ -245,9 +252,9 @@ time.sleep(10)
 otb = Process(target=outgoing_worker, args=[outbound], daemon=True).start()
 time.sleep(10)
 
-probar = tqdm(total=int(nodes), desc="Executed jobs", position=2, bar_format='{desc}: {n_fmt} ({rate_fmt})                                        ')
-incbar = tqdm(total=int(nodes), desc="Inbound queue", position=1, bar_format='{desc}: {n_fmt}/{total_fmt} ({percentage:0.0f}%)                                        ')
-outbar = tqdm(total=int(nodes), desc="Outbound queue", position=0, bar_format='{desc}: {n_fmt}/{total_fmt} ({percentage:0.0f}%)                                        ')
+probar = tqdm(total=int(nodes), desc="Executed GPU jobs", position=2, bar_format='{desc}: {n_fmt} ({rate_fmt})                    ')
+incbar = tqdm(total=int(nodes), desc="Inbound pipeline", position=1, bar_format='{desc}: {n_fmt}/{total_fmt} ({percentage:0.0f}%)                    ')
+outbar = tqdm(total=int(nodes), desc="Outbound pipeline", position=0, bar_format='{desc}: {n_fmt}/{total_fmt} ({percentage:0.0f}%)                    ')
 
 try:
     print (f"gpu worker started")
