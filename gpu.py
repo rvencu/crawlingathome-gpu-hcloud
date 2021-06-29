@@ -245,9 +245,9 @@ time.sleep(10)
 otb = Process(target=outgoing_worker, args=[outbound], daemon=True).start()
 time.sleep(10)
 
-probar = tqdm(total=int(nodes), desc="Executed jobs", position=2, bar_format='{desc}: {n_fmt} ({rate_fmt})')
-incbar = tqdm(total=int(nodes), desc="Inbound queue", position=1, bar_format='{desc}: {n_fmt}/{total_fmt} ({percentage:0.0f}%)')
-outbar = tqdm(total=int(nodes), desc="Outbound queue", position=0, bar_format='{desc}: {n_fmt}/{total_fmt} ({percentage:0.0f}%)')
+probar = tqdm(total=int(nodes), desc="Executed jobs", position=2, bar_format='{desc}: {n_fmt} ({rate_fmt})                                        ')
+incbar = tqdm(total=int(nodes), desc="Inbound queue", position=1, bar_format='{desc}: {n_fmt}/{total_fmt} ({percentage:0.0f}%)                                        ')
+outbar = tqdm(total=int(nodes), desc="Outbound queue", position=0, bar_format='{desc}: {n_fmt}/{total_fmt} ({percentage:0.0f}%)                                        ')
 
 try:
     print (f"gpu worker started")
@@ -258,7 +258,7 @@ try:
         outbar.refresh()
         while inbound.qsize() > 0:
             ip = inbound.get()
-            print(f"gpu processing job for {ip}")
+            #print(f"gpu processing job for {ip}")
             output_folder = "./" + ip.replace(".", "-") + "/save/"
             img_output_folder = output_folder + "images/"
 
