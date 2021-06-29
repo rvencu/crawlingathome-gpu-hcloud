@@ -83,7 +83,7 @@ def df_tfrecords(df, output_fname):
         )
 
     with tf.io.TFRecordWriter(output_fname) as tfrecord_writer:
-        for i in tqdm(range(len(df)), position=3, desc="TF records"):
+        for i in range(len(df)):
             df_image = df.iloc[i]
             image_fname = df_image["PATH"]
             file_type = image_fname.split(".")[-1]
@@ -245,8 +245,9 @@ time.sleep(10)
 otb = Process(target=outgoing_worker, args=[outbound], daemon=True).start()
 time.sleep(10)
 
+probar = tqdm(total=int(nodes), desc="Executed jobs", position=2, bar_format='{desc}: {n_fmt} ({rate_fmt})')
 incbar = tqdm(total=int(nodes), desc="Inbound queue", position=1, bar_format='{desc}: {n_fmt}/{total_fmt} ({percentage:0.0f}%)')
-outbar = tqdm(total=int(nodes), desc="Outbound queue", position=2, bar_format='{desc}: {n_fmt}/{total_fmt} ({percentage:0.0f}%)')
+outbar = tqdm(total=int(nodes), desc="Outbound queue", position=0, bar_format='{desc}: {n_fmt}/{total_fmt} ({percentage:0.0f}%)')
 
 try:
     print (f"gpu worker started")
@@ -255,7 +256,6 @@ try:
         outbar.n = outbound.qsize()
         incbar.refresh()
         outbar.refresh()
-        time.sleep(1)
         while inbound.qsize() > 0:
             ip = inbound.get()
             print(f"gpu processing job for {ip}")
@@ -283,7 +283,7 @@ try:
                                ".csv", index=False, sep="|")
 
             img_embeds_sampleid = {}
-            for i, img_embed_it in tqdm(enumerate(img_embeddings), position=3, desc="Image embeddings"):
+            for i, img_embed_it in enumerate(img_embeddings):
                 dfid_index = filtered_df.at[i, "SAMPLE_ID"]
                 img_embeds_sampleid[str(dfid_index)] = img_embed_it
             with open(f"{output_folder}image_embedding_dict-{out_fname}.pkl", "wb") as f:
@@ -300,9 +300,7 @@ try:
             outbar.n = outbound.qsize()
             incbar.refresh()
             outbar.refresh()
-            print()
-            time.sleep(1)
-            
+            probar.update(1)
 
 except KeyboardInterrupt:
     print(f"[GPU] Abort! Deleting cloud infrastructure...")

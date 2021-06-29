@@ -3,6 +3,8 @@ import datasets
 import torch
 from anyascii import anyascii
 from PIL import Image
+from datasets.utils.logging import set_verbosity_error
+set_verbosity_error()
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 datasets.set_caching_enabled(False)
