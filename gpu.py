@@ -245,8 +245,8 @@ time.sleep(10)
 otb = Process(target=outgoing_worker, args=[outbound], daemon=True).start()
 time.sleep(10)
 
-incbar = tqdm(total=nodes, desc="Inbound queue", position = 1, bar_format='{desc}: {percentage:0.0f}%')
-outbar = tqdm(total=nodes, desc="Outbound queue", position = 2, bar_format='{desc}: {percentage:0.0f}%')
+incbar = tqdm(total=int(nodes), desc="Inbound queue", position = 1, bar_format='{desc}: {n_fmt}/{total_fmt} ({percentage:0.0f}%)')
+outbar = tqdm(total=int(nodes), desc="Outbound queue", position = 2, bar_format='{desc}: {n_fmt}/{total_fmt} ({percentage:0.0f}%)')
 
 try:
     print (f"gpu worker started")
@@ -300,6 +300,7 @@ try:
             outbar.n = outbound.qsize()
             incbar.refresh()
             outbar.refresh()
+            print()
             time.sleep(1)
             
 
