@@ -111,6 +111,8 @@ def process_img_content(response, alt_text, license, sample_id):
         img_data = BytesIO(response.content)
         with Image.open(img_data) as im:
             width, height = im.size
+            if width * height > 89478484:
+                return
             im_format = im.format
             out_fname = f"{img_output_folder}{str(sample_id)}.{im_format.lower()}"
             if im_format not in ["JPEG", "JPG", "PNG", "WEBP"]:
