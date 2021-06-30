@@ -82,7 +82,11 @@ runcmd:
  - systemctl daemon-reload
  - systemctl enable crawl.service
  - echo "#!/bin/bash" >> /home/crawl/crawl.sh
+ - echo "while true" >> /home/crawl/crawl.sh
+ - echo "do" >> /home/crawl/crawl.sh
  - echo "python3 -u /home/crawl/crawlingathome-gpu-hcloud/worker.py >> /home/crawl/crawl.log 2>&1" >> /home/crawl/crawl.sh
+ - echo "sleep 1" >> /home/crawl/crawl.sh
+ - echo "done" >> /home/crawl/crawl.sh
  - chmod 744 /home/crawl/crawl.sh
  - chown crawl:adm -R /home/crawl/
  - apt clean
