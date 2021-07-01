@@ -260,16 +260,22 @@ if __name__ == "__main__":
 
     import crawlingathome_client as cah
 
-    client = cah.init(
-        url=CRAWLINGATHOME_SERVER_URL, nickname=YOUR_NICKNAME_FOR_THE_LEADERBOARD
-    )
+    client = None
+    while True:
+        try:
+            client = cah.init(
+                url=CRAWLINGATHOME_SERVER_URL, nickname=YOUR_NICKNAME_FOR_THE_LEADERBOARD
+            )
+            break
+        except:
+            time.sleep(5)
 
     last = 0
     lasteff = 0
     lastcount = 0
     lastlinks = 0
 
-    while client.jobCount() > 0:
+    while True:
 
         try:
 
@@ -290,10 +296,9 @@ if __name__ == "__main__":
                 try:
                     client.newJob()
                     client.downloadShard()
+                    break
                 except:
                     time.sleep(30)
-                    continue
-                break
             
             first_sample_id = int(client.start_id)
             last_sample_id = int(client.end_id)
@@ -311,7 +316,13 @@ if __name__ == "__main__":
             out_fname = f"FIRST_SAMPLE_ID_IN_SHARD_{str(first_sample_id)}_LAST_SAMPLE_ID_IN_SHARD_{str(last_sample_id)}_{shard_of_chunk}"
             print (f"[crawling@home] shard id {out_fname}") # in case test fails, we need to remove bad data
 
-            client.log("Processing shard" + lastext)
+            while True:
+                try:
+                    client.log("Processing shard" + lastext)
+                    break
+                except:
+                    time.sleep(5)
+
             with open("shard.wat", "r") as infile:
                 parsed_data = parse_wat(infile, start_index, lines)
 
@@ -320,7 +331,13 @@ if __name__ == "__main__":
             lastlinks = len(parsed_data)
             print (f"this job has {lastlinks} links")
 
-            client.log("Downloading images" + lastext)
+            while True:
+                try:
+                    client.log("Downloading images" + lastext)
+                    break
+                except:
+                    time.sleep(5)
+            
             dlparse_df = dl_wat( parsed_data, first_sample_id)
             dlparse_df.to_csv(output_folder + out_fname + ".csv", index=False, sep="|")
             dlparse_df.to_csv(output_folder + out_fname + "_unfiltered.csv", index=False, sep="|")
@@ -330,7 +347,13 @@ if __name__ == "__main__":
 
             start2 = time.time()
 
-            client.log("@GPU: dropping NSFW keywords" + lastext)
+            while True:
+                try:
+                    client.log("@GPU: dropping NSFW keywords" + lastext)
+                    break
+                except:
+                    time.sleep(5)
+            
             # insert GPU job
             shutil.make_archive("gpujob", "zip", ".", output_folder)
             '''
@@ -367,7 +390,13 @@ if __name__ == "__main__":
             os.remove("gpujobdone.zip")
             os.remove("gpusemaphore")
 
-            client.log("Uploading results" + lastext)
+            while True:
+                try:
+                    client.log("Uploading results" + lastext)
+                    break
+                except:
+                    time.sleep(5)
+            
             filtered_df = pd.read_csv(output_folder + out_fname + ".csv", sep="|")
             print (f"CLIP filtered {len(filtered_df)} in {round(time.time() - start2)} seconds")
             print (f"CLIP efficiency {len(dlparse_df)/(time.time() - start2)} img/sec")
@@ -384,7 +413,13 @@ if __name__ == "__main__":
             print(f"job completed in {last} seconds")
             print(f"job efficiency {lasteff} pairs/sec")
 
-            client._markjobasdone(len(filtered_df))
+            while True:
+                try:
+                    client._markjobasdone(len(filtered_df))
+                    break
+                except:
+                    time.sleep(5)
+            
         except Exception as e:
             print (e)
             print ("Worker crashed")
