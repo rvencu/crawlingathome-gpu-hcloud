@@ -59,7 +59,12 @@ def parse_wat(content, start, line_count, blocked_domaindex):
     import ftfy
     import pycld2 as cld2
 
-    #blocklist = open("crawlingathome-gpu-hcloud/blocklist-domain.txt").read().splitlines()
+     #filter out blocked domains
+    blocked_domaindex = esm.Index()
+    blocked = open("crawlingathome-gpu-hcloud/blocklist-domain.txt").read().splitlines()
+    for x in blocked:
+        blocked_domaindex.enter(x)
+    blocked_domaindex.fix()
 
     valid_data = []
     content.seek(start)
@@ -82,7 +87,7 @@ def parse_wat(content, start, line_count, blocked_domaindex):
             if "alt" not in e:
                 continue
             url = e["url"]
-            if bool(blocked_domaindex.query(url)):
+            if any( x in url for x in blocked):
                 continue
             if any( x in url for x in [".svg", ".gif", "data:image", "javascript:"] ):
                 continue
@@ -283,6 +288,7 @@ if __name__ == "__main__":
             lastext = f". Last job eff: {lasteff}"
 
             start = time.time()
+            start0 = start
 
             if os.path.exists(output_folder):
                 shutil.rmtree(output_folder, ignore_errors=True) # fix for ramdisk already existing at location
@@ -328,18 +334,8 @@ if __name__ == "__main__":
                     continue
                 break
 
-            #filter out blocked domains
-            blocked_domaindex = esm.Index()
-            blocked = open("crawlingathome-gpu-hcloud/blocklist-domain.txt").read().splitlines()
-            for x in blocked:
-                blocked_domaindex.enter(x)
-            blocked_domaindex.fix()
-            print(time.time()-start)
-            start = time.time()
-            print ("built domains blocklist index")
-
             with open("shard.wat", "r") as infile:
-                parsed_data = parse_wat(infile, start_index, lines, blocked_domaindex)
+                parsed_data = parse_wat(infile, start_index, lines)
             print(time.time()-start)
             start = time.time()
             print ("parsed wat")
@@ -427,8 +423,8 @@ if __name__ == "__main__":
 
             # update job stats to be displayed on next run on leaderboard
             lastcount = len(filtered_df)
-            last = round(time.time() - start)
-            lasteff = round( (filtered_df.shape[0] * 100) / (time.time() - start)) / 100
+            last = round(time.time() - start0)
+            lasteff = round( (filtered_df.shape[0] * 100) / (time.time() - start0)) / 100
 
             print(f"job completed in {last} seconds")
             print(f"job efficiency {lasteff} pairs/sec")
