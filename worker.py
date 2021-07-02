@@ -325,6 +325,7 @@ if __name__ == "__main__":
 
             with open("shard.wat", "r") as infile:
                 parsed_data = parse_wat(infile, start_index, lines)
+                parsed_data.to_csv(output_folder + out_fname + "_parsed.csv", index=False, sep="|")
 
             random.shuffle(parsed_data) # attempt to spread out clusters of urls pointing to the same domain name
             
@@ -404,6 +405,7 @@ if __name__ == "__main__":
             upload_gdrive(f"{output_folder}crawling_at_home_{out_fname}__00000-of-00001.tfrecord")
             upload_gdrive(output_folder + out_fname + ".csv")
             upload_gdrive(output_folder + out_fname + "_unfiltered.csv", True)
+            upload_gdrive(output_folder + out_fname + "_parsed.csv", True)
 
             # update job stats to be displayed on next run on leaderboard
             lastcount = len(filtered_df)

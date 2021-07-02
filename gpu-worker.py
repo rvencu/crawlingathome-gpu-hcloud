@@ -218,7 +218,7 @@ if __name__ == "__main__":
     print(
         f"[GPU] starting session under `{YOUR_NICKNAME_FOR_THE_LEADERBOARD}` nickname")
 
-    import crawlingathome as cah
+    import crawlingathome_client as cah
 
     clients = []
     for i in range(5):
