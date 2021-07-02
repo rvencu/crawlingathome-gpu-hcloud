@@ -15,7 +15,7 @@ from glob import glob
 from uuid import uuid1
 from io import BytesIO
 from requests import get
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 sys.path.append('./crawlingathome-worker/')
 from PIL import Image, ImageFile, UnidentifiedImageError 
 
@@ -85,7 +85,7 @@ def parse_wat(content, start, line_count):
             alt_text = ftfy.fix_text(e["alt"].replace("\n", " ")).strip()
             if any(
                 x in url for x in [".svg", ".gif", "data:image", "javascript:"]
-            ) or urllib.parse.urlparse(url).netloc in blocklist:
+            ) or urlparse(url).netloc in blocklist:
                 continue
             try:
                 _, _, details = cld2.detect(alt_text)
