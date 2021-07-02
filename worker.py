@@ -296,9 +296,10 @@ if __name__ == "__main__":
                 try:
                     client.newJob()
                     client.downloadShard()
-                    break
                 except:
                     time.sleep(30)
+                    continue
+                break
             
             first_sample_id = int(client.start_id)
             last_sample_id = int(client.end_id)
@@ -319,9 +320,11 @@ if __name__ == "__main__":
             while True:
                 try:
                     client.log("Processing shard" + lastext)
-                    break
                 except:
                     time.sleep(5)
+                    continue
+                break
+
 
             with open("shard.wat", "r") as infile:
                 parsed_data = parse_wat(infile, start_index, lines)
@@ -335,9 +338,10 @@ if __name__ == "__main__":
             while True:
                 try:
                     client.log("Downloading images" + lastext)
-                    break
                 except:
                     time.sleep(5)
+                    continue
+                break
             
             dlparse_df = dl_wat( parsed_data, first_sample_id)
             dlparse_df.to_csv(output_folder + out_fname + ".csv", index=False, sep="|")
@@ -351,9 +355,10 @@ if __name__ == "__main__":
             while True:
                 try:
                     client.log("@GPU: dropping NSFW keywords" + lastext)
-                    break
                 except:
                     time.sleep(5)
+                    continue
+                break
             
             # insert GPU job
             shutil.make_archive("gpujob", "zip", ".", output_folder)
@@ -394,9 +399,10 @@ if __name__ == "__main__":
             while True:
                 try:
                     client.log("Uploading results" + lastext)
-                    break
                 except:
                     time.sleep(5)
+                    continue
+                break
             
             filtered_df = pd.read_csv(output_folder + out_fname + ".csv", sep="|")
             print (f"CLIP filtered {len(filtered_df)} in {round(time.time() - start2)} seconds")
@@ -418,9 +424,10 @@ if __name__ == "__main__":
             while True:
                 try:
                     client._markjobasdone(len(filtered_df))
-                    break
                 except:
                     time.sleep(5)
+                    continue
+                break
             
         except Exception as e:
             print (e)
