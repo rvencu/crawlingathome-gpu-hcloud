@@ -276,11 +276,10 @@ try:
 
             # get name of csv file
             out_path = all_csv_files[0]
-            out_fname = Path(out_path).stem.strip("_unfiltered").strip(".")
+            out_fname = Path(out_path).stem.strip("_unfiltered").strip(".parsed").strip(".")
 
             # recreate parsed dataset and run CLIP filtering
-            dlparse_df = pd.read_csv(
-                output_folder + out_fname + ".csv", sep="|")
+            dlparse_df = pd.read_csv(output_folder + out_fname + ".csv", sep="|")
 
             dlparse_df["PATH"] = "./" + \
                 ip.replace(".", "-") + "/" + dlparse_df["PATH"]
