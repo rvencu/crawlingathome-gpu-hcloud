@@ -1,5 +1,6 @@
 import gc 
 import os
+import esm
 import sys
 import time
 import trio
@@ -55,7 +56,7 @@ def remove_bad_chars(text):
     return "".join(c for c in text if c.isprintable())
 
 
-def parse_wat(content, start, line_count):
+def parse_wat(content, start, line_count, blocked_domaindex):
     import ftfy
     import pycld2 as cld2
 
@@ -85,7 +86,7 @@ def parse_wat(content, start, line_count):
             alt_text = ftfy.fix_text(e["alt"].replace("\n", " ")).strip()
             if any(
                 x in url for x in [".svg", ".gif", "data:image", "javascript:"]
-            ) or urlparse(url).netloc in blocklist:
+            ) or bool(blocked_domaindex.query(url)):
                 continue
             try:
                 _, _, details = cld2.detect(alt_text)
@@ -325,11 +326,19 @@ if __name__ == "__main__":
                     continue
                 break
 
+            #filter out blocked domains
+            blocked_domaindex = esm.Index()
+            blocked = open("blocklist-domain.txt").read().splitlines()
+            for x in blocked:
+                blocked_domaindex.enter(x)
+            blocked_domaindex.fix()
 
             with open("shard.wat", "r") as infile:
-                parsed_data = parse_wat(infile, start_index, lines)
-                parsed_df = pd.DataFrame(parsed_data, columns=["URL","TEXT","LICENSE"])
-                parsed_df.to_csv(output_folder + out_fname + "_parsed.csv", index=False, sep="|")
+                parsed_data = parse_wat(infile, start_index, lines, blocked_domaindex)
+
+
+            parsed_df = pd.DataFrame(parsed_data, columns=["URL","TEXT","LICENSE"])
+            parsed_df.to_csv(output_folder + out_fname + "_parsed.csv", index=False, sep="|")
 
             random.shuffle(parsed_data) # attempt to spread out clusters of urls pointing to the same domain name
             
