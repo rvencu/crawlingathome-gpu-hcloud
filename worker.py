@@ -328,7 +328,7 @@ if __name__ == "__main__":
 
             #filter out blocked domains
             blocked_domaindex = esm.Index()
-            blocked = open("blocklist-domain.txt").read().splitlines()
+            blocked = open("crawlingathome-gpu-hcloud/blocklist-domain.txt").read().splitlines()
             for x in blocked:
                 blocked_domaindex.enter(x)
             blocked_domaindex.fix()
