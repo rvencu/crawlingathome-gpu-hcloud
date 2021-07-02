@@ -328,7 +328,8 @@ if __name__ == "__main__":
 
             with open("shard.wat", "r") as infile:
                 parsed_data = parse_wat(infile, start_index, lines)
-                parsed_data.to_csv(output_folder + out_fname + "_parsed.csv", index=False, sep="|")
+                parsed_df = pd.DataFrame(parsed_data, columns=["URL","TEXT","LICENSE"])
+                parsed_df.to_csv(output_folder + out_fname + "_parsed.csv", index=False, sep="|")
 
             random.shuffle(parsed_data) # attempt to spread out clusters of urls pointing to the same domain name
             
