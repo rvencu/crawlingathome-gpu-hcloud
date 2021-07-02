@@ -55,7 +55,7 @@ def remove_bad_chars(text):
     return "".join(c for c in text if c.isprintable())
 
 
-def parse_wat(content, start, line_count, blocked_domaindex):
+def parse_wat(content, start, line_count):
     import ftfy
     import pycld2 as cld2
 
