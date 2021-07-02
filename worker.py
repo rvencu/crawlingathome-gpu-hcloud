@@ -9,7 +9,6 @@ import pipes
 import shutil
 import random
 import zipfile
-import urllib
 import subprocess
 import pandas as pd
 from glob import glob
@@ -60,7 +59,7 @@ def parse_wat(content, start, line_count, blocked_domaindex):
     import ftfy
     import pycld2 as cld2
 
-    blocklist = open("crawlingathome-gpu-hcloud/blocklist-domain.txt").read().splitlines()
+    #blocklist = open("crawlingathome-gpu-hcloud/blocklist-domain.txt").read().splitlines()
 
     valid_data = []
     content.seek(start)
@@ -83,11 +82,12 @@ def parse_wat(content, start, line_count, blocked_domaindex):
             if "alt" not in e:
                 continue
             url = e["url"]
-            alt_text = ftfy.fix_text(e["alt"].replace("\n", " ")).strip()
-            if any(
-                x in url for x in [".svg", ".gif", "data:image", "javascript:"]
-            ) or bool(blocked_domaindex.query(url)):
+            if bool(blocked_domaindex.query(url)):
                 continue
+            if any( x in url for x in [".svg", ".gif", "data:image", "javascript:"] ):
+                continue
+
+            alt_text = ftfy.fix_text(e["alt"].replace("\n", " ")).strip()
             try:
                 _, _, details = cld2.detect(alt_text)
             except Exception as e:
@@ -316,6 +316,8 @@ if __name__ == "__main__":
             lines = int(len(fd)*0.5)
 
             out_fname = f"FIRST_SAMPLE_ID_IN_SHARD_{str(first_sample_id)}_LAST_SAMPLE_ID_IN_SHARD_{str(last_sample_id)}_{shard_of_chunk}"
+            print(time.time()-start)
+            start = time.time()
             print (f"[crawling@home] shard id {out_fname}") # in case test fails, we need to remove bad data
 
             while True:
@@ -332,10 +334,15 @@ if __name__ == "__main__":
             for x in blocked:
                 blocked_domaindex.enter(x)
             blocked_domaindex.fix()
+            print(time.time()-start)
+            start = time.time()
+            print ("built domains blocklist index")
 
             with open("shard.wat", "r") as infile:
                 parsed_data = parse_wat(infile, start_index, lines, blocked_domaindex)
-
+            print(time.time()-start)
+            start = time.time()
+            print ("parsed wat")
 
             parsed_df = pd.DataFrame(parsed_data, columns=["URL","TEXT","LICENSE"])
             parsed_df.to_csv(output_folder + out_fname + "_parsed.csv", index=False, sep="|")
@@ -343,6 +350,8 @@ if __name__ == "__main__":
             random.shuffle(parsed_data) # attempt to spread out clusters of urls pointing to the same domain name
             
             lastlinks = len(parsed_data)
+            print(time.time()-start)
+            start = time.time()
             print (f"this job has {lastlinks} links")
 
             while True:
@@ -372,13 +381,6 @@ if __name__ == "__main__":
             
             # insert GPU job
             shutil.make_archive("gpujob", "zip", ".", output_folder)
-            '''
-            subprocess.call(
-                ["zip", "-r", "gpujob.zip", output_folder],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-            '''
             subprocess.call(
                 ["touch", "semaphore"],
                 stdout=subprocess.DEVNULL,
