@@ -85,7 +85,7 @@ def parse_wat(content, start, line_count):
             alt_text = ftfy.fix_text(e["alt"].replace("\n", " ")).strip()
             if any(
                 x in url for x in [".svg", ".gif", "data:image", "javascript:"]
-            ) or any(bl in url for bl in blocklist):
+            ) or urllib.parse.urlparse(url).netloc in blocklist:
                 continue
             try:
                 _, _, details = cld2.detect(alt_text)
