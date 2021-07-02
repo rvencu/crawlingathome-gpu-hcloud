@@ -60,11 +60,11 @@ def parse_wat(content, start, line_count):
     import pycld2 as cld2
 
      #filter out blocked domains
-    blocked_domaindex = esm.Index()
-    blocked = open("crawlingathome-gpu-hcloud/blocklist-domain.txt").read().splitlines()
-    for x in blocked:
-        blocked_domaindex.enter(x)
-    blocked_domaindex.fix()
+    #blocked_domaindex = esm.Index()
+    blocked = set(open("crawlingathome-gpu-hcloud/blocklist-domain.txt").read().splitlines())
+    #for x in blocked:
+    #    blocked_domaindex.enter(x)
+    #blocked_domaindex.fix()
 
     valid_data = []
     content.seek(start)
@@ -87,7 +87,7 @@ def parse_wat(content, start, line_count):
             if "alt" not in e:
                 continue
             url = e["url"]
-            if any( x in url for x in blocked):
+            if urlparse(url).netloc in blocked:
                 continue
             if any( x in url for x in [".svg", ".gif", "data:image", "javascript:"] ):
                 continue
