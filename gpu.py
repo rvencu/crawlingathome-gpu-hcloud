@@ -276,7 +276,7 @@ try:
 
             # get name of csv file
             out_path = all_csv_files[0]
-            out_fname = Path(out_path).stem.strip("_unfiltered").strip(".parsed").strip(".")
+            out_fname = Path(out_path).stem.strip("_unfiltered").strip("_parsed").strip(".")
 
             # recreate parsed dataset and run CLIP filtering
             dlparse_df = pd.read_csv(output_folder + out_fname + ".csv", sep="|")
