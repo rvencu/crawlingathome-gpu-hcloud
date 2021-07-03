@@ -147,59 +147,59 @@ if __name__ == "__main__":
         print (f"inbound worker started")
 
         async def _get_job(ip,queue):
-            newjob = infrastructure.exists_remote(
-                "crawl@"+ip, "/home/crawl/semaphore", True)
-            if newjob:
-                output_folder = "./" + ip.replace(".", "-") + "/save/"
-                img_output_folder = output_folder + "images/"
+            while True:
+                newjob = infrastructure.exists_remote(
+                    "crawl@"+ip, "/home/crawl/semaphore", True)
+                if newjob:
+                    output_folder = "./" + ip.replace(".", "-") + "/save/"
+                    img_output_folder = output_folder + "images/"
 
-                #print(f"[{ip}] sending job to GPU")
-                if os.path.exists(output_folder):
-                    shutil.rmtree(output_folder)
-                if os.path.exists(".tmp"):
-                    shutil.rmtree(".tmp")
+                    #print(f"[{ip}] sending job to GPU")
+                    if os.path.exists(output_folder):
+                        shutil.rmtree(output_folder)
+                    if os.path.exists(".tmp"):
+                        shutil.rmtree(".tmp")
 
-                os.makedirs(output_folder)
-                os.makedirs(img_output_folder)
-                os.makedirs(".tmp")
+                    os.makedirs(output_folder)
+                    os.makedirs(img_output_folder)
+                    os.makedirs(".tmp")
 
-                # receive gpu job data (~500MB)
-                subprocess.call(
-                    ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah",
-                        "crawl@" + ip + ":" + "gpujob.zip", output_folder],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-                # delete file on remote so there is no secondary download
-                subprocess.call(
-                    ["ssh", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah",
-                        "crawl@" + ip, "rm -rf gpujob.zip"],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-                subprocess.call(
-                    ["ssh", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah",
-                        "crawl@" + ip, "rm -rf semaphore"],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-                with zipfile.ZipFile(output_folder+"gpujob.zip", 'r') as zip_ref:
-                    zip_ref.extractall("./"+ip.replace(".", "-")+"/")
-                os.remove(output_folder+"gpujob.zip")
+                    # receive gpu job data (~500MB)
+                    subprocess.call(
+                        ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah",
+                            "crawl@" + ip + ":" + "gpujob.zip", output_folder],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
+                    # delete file on remote so there is no secondary download
+                    subprocess.call(
+                        ["ssh", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah",
+                            "crawl@" + ip, "rm -rf gpujob.zip"],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
+                    subprocess.call(
+                        ["ssh", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah",
+                            "crawl@" + ip, "rm -rf semaphore"],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
+                    with zipfile.ZipFile(output_folder+"gpujob.zip", 'r') as zip_ref:
+                        zip_ref.extractall("./"+ip.replace(".", "-")+"/")
+                    os.remove(output_folder+"gpujob.zip")
 
-                queue.put(ip)
-                #print(f"{ip} inserted to the inbound queue")
-            else:
-                time.sleep(1)
+                    queue.put(ip)
+                    time.sleep(600)
+                else:
+                    time.sleep(20)
 
         async def find_jobs(workers, queue):
             async with trio.open_nursery() as n:
                 for ip in workers:
                     n.start_soon(_get_job, ip, queue)
         
-        while True:
-           trio.run(find_jobs, workers, queue)
-           time.sleep(1)
+        trio.run(find_jobs, workers, queue)
+
 
     def outgoing_worker(queue):
         print (f"outbound worker started")
