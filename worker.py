@@ -33,7 +33,7 @@ urllib3_cn.allowed_gai_family = allowed_gai_family
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True  # https://stackoverflow.com/a/47958486
 
-
+'''
 class TrioProgress(trio.abc.Instrument):
 
     def __init__(self, total, notebook_mode=False, **kwargs):
@@ -51,7 +51,7 @@ class TrioProgress(trio.abc.Instrument):
             self.tqdm.update(7)
             self.tqdm.desc = self.tqdm.desc.split(":")[0] + ": [ " + str( int(self.tqdm.desc.split(":")[1].split(" ")[2]) + 1 ) + " ] / Links "
             self.tqdm.refresh()
-
+'''
 def zipfolder(filename, target_dir):            
     zipobj = zipfile.ZipFile(filename, 'w', zipfile.ZIP_DEFLATED)
     rootlen = len(target_dir) + 1
@@ -68,12 +68,10 @@ def parse_wat(content, start, line_count):
     import ftfy
     import pycld2 as cld2
 
-     #filter out blocked domains
-    #blocked_domaindex = esm.Index()
+    #filter out blocked domains
     blocked = set(open("crawlingathome-gpu-hcloud/blocklist-domain.txt").read().splitlines())
-    #for x in blocked:
-    #    blocked_domaindex.enter(x)
-    #blocked_domaindex.fix()
+    failed = set(open("crawlingathome-gpu-hcloud/failed-domains.txt").read().splitlines())
+    blocked |= failed # merge the 2 sets
 
     valid_data = []
     content.seek(start)
@@ -96,10 +94,11 @@ def parse_wat(content, start, line_count):
             if "alt" not in e:
                 continue
             url = e["url"]
-            if urlparse(url).netloc in blocked:
-                continue
             if any( x in url for x in [".svg", ".gif", "data:image", "javascript:"] ):
                 continue
+            if urlparse(url).netloc in blocked:
+                continue
+            
 
             alt_text = ftfy.fix_text(e["alt"].replace("\n", " ")).strip()
             try:
