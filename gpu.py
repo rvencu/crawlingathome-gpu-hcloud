@@ -7,7 +7,6 @@ import random
 import pickle
 import shutil
 import zipfile
-import itertools
 import subprocess
 import pandas as pd
 import infrastructure
@@ -310,8 +309,7 @@ try:
 
 except KeyboardInterrupt:
     print(f"[GPU] Abort! Deleting cloud infrastructure...")
-    inb.join()
-    otb.join()
+
     letters = string.ascii_lowercase
     suffix = ''.join(random.choice(letters) for i in range(3))
     for ip in workers:
