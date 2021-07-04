@@ -96,9 +96,12 @@ def parse_wat(content, start, line_count):
             url = e["url"]
             if any( x in url for x in [".svg", ".gif", "data:image", "javascript:"] ):
                 continue
-            if urlparse(url).netloc in blocked:
+            try:
+                if urlparse(url).netloc in blocked:
+                    continue
+            except:
+                # cannot even parse the url
                 continue
-            
 
             alt_text = ftfy.fix_text(e["alt"].replace("\n", " ")).strip()
             try:
