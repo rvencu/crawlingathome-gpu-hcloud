@@ -142,61 +142,69 @@ if __name__ == "__main__":
             for line in f.readlines():
                 workers.append(line.strip("\n"))
 
+    def incoming_worker_new(workers, queue):
+        from pssh.clients import ParallelSSHClient
+        pclient = ParallelSSHClient(workers, pkey="~/.ssh/id_cah")
+        output = pclient.run_command('test -f /home/crawl/semaphore')
+        for host_output in output:
+            hostname = host_output.host
+            exit_code = host_output.exit_code
+    
     def incoming_worker(workers, queue):
         print (f"inbound worker started")
-
+        
         async def _get_job(ip,queue):
-            while True:
-                newjob = infrastructure.exists_remote(
-                    "crawl@"+ip, "/home/crawl/semaphore", True)
-                if newjob:
-                    output_folder = "./" + ip.replace(".", "-") + "/save/"
-                    img_output_folder = output_folder + "images/"
+            #print (f"check ip {ip}")
+            newjob = infrastructure.exists_remote(
+                "crawl@"+ip, "/home/crawl/semaphore", True)
+            if newjob:
+                output_folder = "./" + ip.replace(".", "-") + "/save/"
+                img_output_folder = output_folder + "images/"
 
-                    #print(f"[{ip}] sending job to GPU")
-                    if os.path.exists(output_folder):
-                        shutil.rmtree(output_folder)
-                    if os.path.exists(".tmp"):
-                        shutil.rmtree(".tmp")
+                #print(f"[{ip}] sending job to GPU")
+                if os.path.exists(output_folder):
+                    shutil.rmtree(output_folder)
+                if os.path.exists(".tmp"):
+                    shutil.rmtree(".tmp")
 
-                    os.makedirs(output_folder)
-                    os.makedirs(img_output_folder)
-                    os.makedirs(".tmp")
+                os.makedirs(output_folder)
+                os.makedirs(img_output_folder)
+                os.makedirs(".tmp")
 
-                    # receive gpu job data (~500MB)
-                    subprocess.call(
-                        ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah",
-                            "crawl@" + ip + ":" + "gpujob.zip", output_folder],
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                    )
-                    # delete file on remote so there is no secondary download
-                    subprocess.call(
-                        ["ssh", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah",
-                            "crawl@" + ip, "rm -rf gpujob.zip"],
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                    )
-                    subprocess.call(
-                        ["ssh", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah",
-                            "crawl@" + ip, "rm -rf semaphore"],
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                    )
-                    with zipfile.ZipFile(output_folder+"gpujob.zip", 'r') as zip_ref:
-                        zip_ref.extractall("./"+ip.replace(".", "-")+"/")
-                    os.remove(output_folder+"gpujob.zip")
+                # receive gpu job data (~500MB)
+                subprocess.call(
+                    ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah",
+                        "crawl@" + ip + ":" + "gpujob.zip", output_folder],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                # delete file on remote so there is no secondary download
+                subprocess.call(
+                    ["ssh", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah",
+                        "crawl@" + ip, "rm -rf gpujob.zip"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                subprocess.call(
+                    ["ssh", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah",
+                        "crawl@" + ip, "rm -rf semaphore"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                with zipfile.ZipFile(output_folder+"gpujob.zip", 'r') as zip_ref:
+                    zip_ref.extractall("./"+ip.replace(".", "-")+"/")
+                os.remove(output_folder+"gpujob.zip")
 
-                    queue.put(ip)
-                    time.sleep(600)
-                else:
-                    time.sleep(20)
+                queue.put(ip)
+            else:
+                pass
 
         async def find_jobs(workers, queue):
-            async with trio.open_nursery() as n:
-                for ip in workers:
-                    n.start_soon(_get_job, ip, queue)
-        
+            while True:
+                async with trio.open_nursery() as n:
+                    for ip in workers:
+                        n.start_soon(_get_job, ip, queue)
+
         trio.run(find_jobs, workers, queue)
 
 
@@ -242,20 +250,22 @@ if __name__ == "__main__":
             else:
                 time.sleep(1)
 
-inbound = JoinableQueue()
-outbound = JoinableQueue()
-
-inb = Process(target=incoming_worker, args=[
-              workers, inbound], daemon=True).start()
-time.sleep(10)
-otb = Process(target=outgoing_worker, args=[outbound], daemon=True).start()
-time.sleep(10)
-
-probar = tqdm(total=int(nodes), desc="Executed GPU jobs", position=2, bar_format='{desc}: {n_fmt} ({rate_fmt})                    ')
-incbar = tqdm(total=int(nodes), desc="Inbound pipeline", position=1, bar_format='{desc}: {n_fmt}/{total_fmt} ({percentage:0.0f}%)                    ')
-outbar = tqdm(total=int(nodes), desc="Outbound pipeline", position=0, bar_format='{desc}: {n_fmt}/{total_fmt} ({percentage:0.0f}%)                    ')
-
 try:
+
+    inbound = JoinableQueue()
+    outbound = JoinableQueue()
+
+    inb = Process(target=incoming_worker, args=[
+                workers, inbound], daemon=True).start()
+    time.sleep(10)
+    otb = Process(target=outgoing_worker, args=[outbound], daemon=True).start()
+    time.sleep(10)
+
+    probar = tqdm(total=int(nodes), desc="Executed GPU jobs", position=2, bar_format='{desc}: {n_fmt} ({rate_fmt})                    ')
+    incbar = tqdm(total=int(nodes), desc="Inbound pipeline", position=1, bar_format='{desc}: {n_fmt}/{total_fmt} ({percentage:0.0f}%)                    ')
+    outbar = tqdm(total=int(nodes), desc="Outbound pipeline", position=0, bar_format='{desc}: {n_fmt}/{total_fmt} ({percentage:0.0f}%)                    ')
+
+
     print (f"gpu worker started")
     while True:
         incbar.n = inbound.qsize()
@@ -309,6 +319,7 @@ try:
 
 except KeyboardInterrupt:
     print(f"[GPU] Abort! Deleting cloud infrastructure...")
+    inb.join()
 
     letters = string.ascii_lowercase
     suffix = ''.join(random.choice(letters) for i in range(3))

@@ -21,6 +21,8 @@ pip3 install git+https://github.com/openai/CLIP --no-cache-dir
 git clone "https://github.com/hetznercloud/hcloud-python" hcloud
 pip3 install -e ./hcloud
 
+pip install parallel-ssh
+
 yes | ssh-keygen -t rsa -b 4096 -f $HOME/.ssh/id_cah -q -P ""
 sed -i -e "s/<<your_ssh_public_key>>/$(sed 's:/:\\/:g' ~/.ssh/id_cah.pub)/" cloud-init
 sed -i -e "s/<<your_nickname>>/$nickname/" cloud-init
