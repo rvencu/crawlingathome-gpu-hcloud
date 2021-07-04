@@ -263,7 +263,6 @@ class FileData:
 if __name__ == "__main__":
     myip = ip = get('https://api.ipify.org').text
     output_folder = "./save/"
-    csv_output_folder = output_folder
     img_output_folder = output_folder + "images/"
 
     YOUR_NICKNAME_FOR_THE_LEADERBOARD = os.getenv('CAH_NICKNAME')
@@ -305,7 +304,7 @@ if __name__ == "__main__":
             if os.path.exists(".tmp"):
                 shutil.rmtree(".tmp")
 
-            #os.mkdir(output_folder)
+            os.mkdir(output_folder)
             os.mkdir(img_output_folder)
             os.mkdir(".tmp")
 
