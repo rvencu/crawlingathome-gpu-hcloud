@@ -1,6 +1,5 @@
 import gc 
 import os
-import esm
 import sys
 import time
 import trio
@@ -22,14 +21,14 @@ from PIL import Image, ImageFile, UnidentifiedImageError
 import asks
 asks.init("trio")
 
-import socket
+""" import socket
 import requests.packages.urllib3.util.connection as urllib3_cn
 
 def allowed_gai_family():
     family = socket.AF_INET # force IPv4
     return family
 
-urllib3_cn.allowed_gai_family = allowed_gai_family
+urllib3_cn.allowed_gai_family = allowed_gai_family """
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True  # https://stackoverflow.com/a/47958486
 

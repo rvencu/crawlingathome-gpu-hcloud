@@ -38,8 +38,8 @@ runcmd:
  #- 'echo "/swapfile none swap sw 0 0" | tee -a /etc/fstab'
  #- sysctl vm.swappiness=75
  #- 'echo "vm.swappiness=75" | tee -a /etc/sysctl.conf'
- # make ramdisk
- - 'echo "tmpfs  /home/crawl/save  tmpfs  rw,size=512M  0   0" | tee -a /etc/fstab'
+ # make ramdisk (actually no need for ramdisk)
+ # - 'echo "tmpfs  /home/crawl/save  tmpfs  rw,size=512M  0   0" | tee -a /etc/fstab'
 # take care of max open files
  - echo "* soft     nproc          65535 " >> /etc/security/limits.conf
  - echo "* hard     nproc          65535 " >> /etc/security/limits.conf
