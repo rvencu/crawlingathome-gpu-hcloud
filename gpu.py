@@ -144,11 +144,29 @@ if __name__ == "__main__":
 
     def incoming_worker_new(workers, queue):
         from pssh.clients import ParallelSSHClient
-        pclient = ParallelSSHClient(workers, pkey="~/.ssh/id_cah")
+        from gevent import joinall
+
+        pclient = ParallelSSHClient(workers, user='crawl', pkey="~/.ssh/id_cah")
         output = pclient.run_command('test -f /home/crawl/semaphore')
+        ready = []
+        pclient.join(output)
         for host_output in output:
             hostname = host_output.host
             exit_code = host_output.exit_code
+            if exit_code == "exit_code 0":
+                ready.append(hostname)
+        dclient = ParallelSSHClient(ready, user='crawl', pkey="~/.ssh/id_cah")
+        cmds = dclient.copy_remote_file('gpujob.zip', 'gpujob.zip')
+        joinall(cmds, raise_error=True)
+        dclient.run_command('rm -rf /home/crawl/gpujob.zip; rm -rf /home/crawl/semaphore')
+        
+        for file in glob.glob('gpujob.zip*'):
+            name, ip = file.split("_")
+            with zipfile.ZipFile(file, 'r') as zip_ref:
+                zip_ref.extractall("./test-"+ip.replace(".", "-")+"/")
+            os.remove(file)
+        
+
     
     def incoming_worker(workers, queue):
         print (f"inbound worker started")
