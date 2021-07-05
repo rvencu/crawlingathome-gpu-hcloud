@@ -148,7 +148,7 @@ def parse_wat(content, start, line_count):
                 # reject if pair is a duplicate
                 concat = url + alt_text
                 if concat in duplicates:
-                    return
+                    continue
                 print (f"valid pair found")
                 valid_data.append((url, alt_text, license))
     return [
