@@ -97,7 +97,8 @@ def parse_wat(content, start, line_count):
     blocked = set(open("crawlingathome-gpu-hcloud/blocklists/blocklist-domain.txt").read().splitlines())
     failed = set(open("crawlingathome-gpu-hcloud/blocklists/failed-domains.txt").read().splitlines())
     blocked |= failed # merge the 2 sets and use this to reduce the number of attempted links, reduce crawling time.
-    duplicates = set(open("crawlingathome-gpu-hcloud/blocklists/duplicates-4M.txt").read().splitlines())
+    duplicates = set(open("crawlingathome-gpu-hcloud/blocklists/duplicates-1M.txt").read().splitlines())
+    print (f"duplicates of size {len(duplicates)}")
 
     valid_data = []
     content.seek(start)
@@ -145,8 +146,10 @@ def parse_wat(content, start, line_count):
                 if not url.startswith("http"):
                     url = urljoin(base_url, url)
                 # reject if pair is a duplicate
-                if (url+alt_text in duplicates):
+                concat = url + alt_text
+                if concat in duplicates:
                     return
+                print (f"valid pair found")
                 valid_data.append((url, alt_text, license))
     return [
         t for t in {tuple(i) for i in valid_data}
