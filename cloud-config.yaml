@@ -12,6 +12,7 @@ package_upgrade: true
 packages:
  - python3-pip
  - git
+ - git-lfs
  - build-essential
  - libssl-dev
  - libffi-dev
@@ -51,8 +52,9 @@ runcmd:
  - echo "root hard     nofile         65535" >> /etc/security/limits.conf
  - echo "session required pam_limits.so" >> /etc/pam.d/common-session
  - echo "fs.file-max = 2097152" >> /etc/sysctl.conf
-# disable IPv6
-# - echo "net.ipv6.conf.all.disable_ipv6 = 1" >> /etc/sysctl.d/10-disable-ipv6.conf
+# install git lfs
+ - git lfs install
+ - git lfs track "duplicates*.txt"
 # secure ssh
  - sed -i -e '/^\(#\|\)PermitRootLogin/s/^.*$/PermitRootLogin no/' /etc/ssh/sshd_config
  - sed -i -e '/^\(#\|\)PasswordAuthentication/s/^.*$/PasswordAuthentication no/' /etc/ssh/sshd_config
