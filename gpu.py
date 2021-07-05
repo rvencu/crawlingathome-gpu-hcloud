@@ -161,29 +161,31 @@ if __name__ == "__main__":
                     ready.append(hostname)
             print(f"Took {time.time()-_start} seconds to check {len(ready)} workers that have ready jobs. starting downloading...")
 
-            _start = time.time()
-            with ParallelSSHClient(ready, user='crawl', pkey="~/.ssh/id_cah") as dclient:
+            if len(ready) > 0:
+                _start = time.time()
+                dclient = ParallelSSHClient(ready, user='crawl', pkey="~/.ssh/id_cah")
                 try:
                     cmds = dclient.scp_recv('/home/crawl/gpujob.zip', 'gpujob.zip')
                     joinall (cmds, raise_error=True)
-                    print (f"all jobs downloaded in {time.time()-_start} seconds")
                 except Exception as e:
                     print(e)
+                print (f"all jobs downloaded in {time.time()-_start} seconds")
 
                 _start = time.time()
                 dclient.run_command('rm -rf /home/crawl/gpujob.zip; rm -rf /home/crawl/semaphore')
 
-            if len(glob.glob('gpujob.zip_*')) == len(ready):
-                for file in glob.glob('gpujob.zip_*'):
+                for file in glob('gpujob.zip_*'):
                     name, ip = file.split("_")
                     with zipfile.ZipFile(file, 'r') as zip_ref:
                         zip_ref.extractall(ip.replace(".", "-")+"/")
                     os.remove(file)
-            print (f"unzipped in {time.time()-_start} seconds")
-            for ip in ready:
-                queue.put(ip)       
+                print (f"unzipped in {time.time()-_start} seconds")
+                for ip in ready:
+                    queue.put(ip)
+            else:
+                time.sleep(20)
 
-    
+    '''
     def incoming_worker(workers, queue):
         print (f"inbound worker started")
         
@@ -240,7 +242,7 @@ if __name__ == "__main__":
                         n.start_soon(_get_job, ip, queue)
 
         trio.run(find_jobs, workers, queue)
-
+    '''
 
     def outgoing_worker(queue):
         print (f"outbound worker started")
