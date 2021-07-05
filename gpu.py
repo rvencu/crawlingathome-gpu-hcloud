@@ -147,25 +147,40 @@ if __name__ == "__main__":
         from gevent import joinall
 
         pclient = ParallelSSHClient(workers, user='crawl', pkey="~/.ssh/id_cah")
-        output = pclient.run_command('test -f /home/crawl/semaphore')
-        ready = []
-        pclient.join(output)
-        for host_output in output:
-            hostname = host_output.host
-            exit_code = host_output.exit_code
-            if exit_code == "exit_code 0":
-                ready.append(hostname)
-        dclient = ParallelSSHClient(ready, user='crawl', pkey="~/.ssh/id_cah")
-        cmds = dclient.copy_remote_file('gpujob.zip', 'gpujob.zip')
-        joinall(cmds, raise_error=True)
-        dclient.run_command('rm -rf /home/crawl/gpujob.zip; rm -rf /home/crawl/semaphore')
         
-        for file in glob.glob('gpujob.zip*'):
-            name, ip = file.split("_")
-            with zipfile.ZipFile(file, 'r') as zip_ref:
-                zip_ref.extractall("./test-"+ip.replace(".", "-")+"/")
-            os.remove(file)
-        
+        while True:
+            ready = []
+            _start = time.time()
+            output = pclient.run_command('test -f /home/crawl/semaphore')
+            pclient.join(output)
+            for host_output in output:
+                hostname = host_output.host
+                exit_code = host_output.exit_code
+                if exit_code == 0:
+                    ready.append(hostname)
+            print(f"Took {time.time()-_start} seconds to check {len(ready)} workers that have ready jobs. starting downloading...")
+
+            _start = time.time()
+            with ParallelSSHClient(ready, user='crawl', pkey="~/.ssh/id_cah") as dclient:
+                try:
+                    cmds = dclient.scp_recv('/home/crawl/gpujob.zip', 'gpujob.zip')
+                    joinall (cmds, raise_error=True)
+                    print (f"all jobs downloaded in {time.time()-_start} seconds")
+                except Exception as e:
+                    print(e)
+
+                _start = time.time()
+                dclient.run_command('rm -rf /home/crawl/gpujob.zip; rm -rf /home/crawl/semaphore')
+
+            if len(glob.glob('gpujob.zip_*')) == len(ready):
+                for file in glob.glob('gpujob.zip_*'):
+                    name, ip = file.split("_")
+                    with zipfile.ZipFile(file, 'r') as zip_ref:
+                        zip_ref.extractall(ip.replace(".", "-")+"/")
+                    os.remove(file)
+            print (f"unzipped in {time.time()-_start} seconds")
+            for ip in ready:
+                queue.put(ip)       
 
     
     def incoming_worker(workers, queue):
@@ -273,7 +288,7 @@ try:
     inbound = JoinableQueue()
     outbound = JoinableQueue()
 
-    inb = Process(target=incoming_worker, args=[
+    inb = Process(target=incoming_worker_new, args=[
                 workers, inbound], daemon=True).start()
     time.sleep(10)
     otb = Process(target=outgoing_worker, args=[outbound], daemon=True).start()
