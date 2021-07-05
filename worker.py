@@ -97,7 +97,7 @@ def parse_wat(content, start, line_count):
     blocked = set(open("crawlingathome-gpu-hcloud/blocklists/blocklist-domain.txt").read().splitlines())
     failed = set(open("crawlingathome-gpu-hcloud/blocklists/failed-domains.txt").read().splitlines())
     blocked |= failed # merge the 2 sets and use this to reduce the number of attempted links, reduce crawling time.
-    duplicates = set(open("crawlingathome-gpu-hcloud/blocklists/duplicates.txt").read().splitlines())
+    duplicates = set(open("crawlingathome-gpu-hcloud/blocklists/duplicates-4M.txt").read().splitlines())
 
     valid_data = []
     content.seek(start)
