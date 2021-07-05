@@ -94,9 +94,10 @@ def parse_wat(content, start, line_count):
     # failed-domains.txt contains failed domains, i.e. domains with image links and suitable alt texts that actually
     # do not produce any image. domains that mayb dissapeared, or are good at blocking scrapers. List is also learned from
     # past crawling effort
-    blocked = set(open("crawlingathome-gpu-hcloud/blocklist-domain.txt").read().splitlines())
-    failed = set(open("crawlingathome-gpu-hcloud/failed-domains.txt").read().splitlines())
+    blocked = set(open("crawlingathome-gpu-hcloud/blocklists/blocklist-domain.txt").read().splitlines())
+    failed = set(open("crawlingathome-gpu-hcloud/blocklists/failed-domains.txt").read().splitlines())
     blocked |= failed # merge the 2 sets and use this to reduce the number of attempted links, reduce crawling time.
+    duplicates = set(open("crawlingathome-gpu-hcloud/blocklists/duplicates.txt").read().splitlines())
 
     valid_data = []
     content.seek(start)
@@ -143,6 +144,9 @@ def parse_wat(content, start, line_count):
             if details[0][1] == "en":
                 if not url.startswith("http"):
                     url = urljoin(base_url, url)
+                # reject if pair is a duplicate
+                if (url+alt_text in duplicates):
+                    return
                 valid_data.append((url, alt_text, license))
     return [
         t for t in {tuple(i) for i in valid_data}

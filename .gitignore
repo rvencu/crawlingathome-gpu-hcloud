@@ -160,3 +160,4 @@ image_embedding*
 *.webp
 [1-9]*-[1-9]*-[1-9]*-[1-9]*/
 test.py
+duplicates/
