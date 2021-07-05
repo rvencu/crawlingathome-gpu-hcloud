@@ -151,7 +151,7 @@ if __name__ == "__main__":
         
         while True:
             ready = []
-            _start = time.time()
+            #_start = time.time()
             output = pclient.run_command('test -f /home/crawl/semaphore')
             pclient.join(output)
             for host_output in output:
@@ -159,27 +159,38 @@ if __name__ == "__main__":
                 exit_code = host_output.exit_code
                 if exit_code == 0:
                     ready.append(hostname)
-            print(f"Took {time.time()-_start} seconds to check {len(ready)} workers that have ready jobs. starting downloading...")
+            #print(f"Took {time.time()-_start} seconds to check {len(ready)} workers that have ready jobs. starting downloading...")
 
             if len(ready) > 0:
-                _start = time.time()
+                #_start = time.time()
                 dclient = ParallelSSHClient(ready, user='crawl', pkey="~/.ssh/id_cah")
                 try:
                     cmds = dclient.scp_recv('/home/crawl/gpujob.zip', 'gpujob.zip')
                     joinall (cmds, raise_error=True)
                 except Exception as e:
                     print(e)
-                print (f"all jobs downloaded in {time.time()-_start} seconds")
+                #print (f"all jobs downloaded in {time.time()-_start} seconds")
 
-                _start = time.time()
-                dclient.run_command('rm -rf /home/crawl/gpujob.zip; rm -rf /home/crawl/semaphore')
+                #_start = time.time()
+                dclient.run_command('rm -rf /home/crawl/gpujob.zip')
+                dclient.run_command('rm -rf /home/crawl/semaphore')
 
                 for file in glob('gpujob.zip_*'):
                     name, ip = file.split("_")
+                    output_folder = "./" + ip.replace(".", "-") + "/save/"
+                    img_output_folder = output_folder + "images/"
+                    if os.path.exists(output_folder):
+                        shutil.rmtree(output_folder)
+                    if os.path.exists(".tmp"):
+                        shutil.rmtree(".tmp")
+
+                    os.makedirs(output_folder)
+                    os.makedirs(img_output_folder)
+
                     with zipfile.ZipFile(file, 'r') as zip_ref:
                         zip_ref.extractall(ip.replace(".", "-")+"/")
                     os.remove(file)
-                print (f"unzipped in {time.time()-_start} seconds")
+                #print (f"unzipped in {time.time()-_start} seconds")
                 for ip in ready:
                     queue.put(ip)
             else:

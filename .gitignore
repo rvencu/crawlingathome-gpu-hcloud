@@ -161,3 +161,4 @@ image_embedding*
 [1-9]*-[1-9]*-[1-9]*-[1-9]*/
 test.py
 duplicates/
+gpujob.zip_*
