@@ -187,12 +187,26 @@ if __name__ == "__main__":
                     os.makedirs(output_folder)
                     os.makedirs(img_output_folder)
 
-                    with zipfile.ZipFile(file, 'r') as zip_ref:
-                        zip_ref.extractall(ip.replace(".", "-")+"/")
+                    try:
+                        with zipfile.ZipFile(file, 'r') as zip_ref:
+                            zip_ref.extractall(ip.replace(".", "-")+"/")
+                        queue.put(ip)
+                    except:
+                        subprocess.call(
+                            ["touch", ip.replace(".", "-") + "/gpuabort"],
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                        )
+                        subprocess.call(
+                            ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", ip.replace(".", "-") + "/gpuabort", "crawl@"+ip + ":~/gpuabort"],
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                        )
+                        os.remove(ip.replace(".", "-") + "/gpuabort")
                     os.remove(file)
+
                 #print (f"unzipped in {time.time()-_start} seconds")
-                for ip in ready:
-                    queue.put(ip)
+                    
             else:
                 time.sleep(20)
 

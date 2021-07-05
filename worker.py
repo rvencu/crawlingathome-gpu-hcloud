@@ -503,7 +503,8 @@ if __name__ == "__main__":
             # wait for GPU results
             print (f"waiting for GPU node to complete job")
             status = True
-            while status:
+            abort = True
+            while status and abort:
                 print(".", end = "", flush=True)
                 time.sleep(10)
                 status = subprocess.call(
@@ -511,6 +512,13 @@ if __name__ == "__main__":
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
+                abort = subprocess.call(
+                    ["test", "-f", "{}".format(pipes.quote("gpuabort"))],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            if not abort:
+                continue
             print()
             print(f"receiving results from GPU")
 
