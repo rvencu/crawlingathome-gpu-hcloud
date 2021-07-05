@@ -143,6 +143,7 @@ if __name__ == "__main__":
                 workers.append(line.strip("\n"))
 
     def incoming_worker_new(workers, queue):
+        print (f"new inbound worker started")
         from pssh.clients import ParallelSSHClient
         from gevent import joinall
 
