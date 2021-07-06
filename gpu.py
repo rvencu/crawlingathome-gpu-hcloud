@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import time
 import trio
@@ -253,6 +254,15 @@ if __name__ == "__main__":
                 time.sleep(1)
 
 try:
+    # initial cleanup - delete all working files in case of crash recovery
+    reg_compile = re.compile(r"^\d{1,3}-\d{1,3}-\d{1,3}-\d{1,3}$")
+    for root, dirnames, filenames in os.walk("."):
+        for filename in filenames:
+            if filename.startswith("gpujob.zip_"):
+                os.remove(filename)
+        for dir in dirnames:
+            if reg_compile.match(dir):
+                shutil.rmtree(dir)
 
     inbound = JoinableQueue()
     outbound = JoinableQueue()
