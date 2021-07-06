@@ -17,6 +17,7 @@ pip3 install -r crawlingathome_client/requirements.txt --no-cache-dir
 pip3 install -r requirements.txt --no-cache-dir
 conda install tensorflow --no-cache-dir
 pip3 install git+https://github.com/openai/CLIP --no-cache-dir
+pip3 install bloom-filter2
 
 git clone "https://github.com/hetznercloud/hcloud-python" hcloud
 pip3 install -e ./hcloud
