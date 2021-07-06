@@ -3,8 +3,10 @@ import os
 import sys
 import time
 import trio
+import gzip
 import ujson
 import pipes
+import pickle
 import shutil
 import random
 import zipfile
@@ -95,15 +97,15 @@ def parse_wat(content, start, line_count):
     # do not produce any image. domains that mayb dissapeared, or are good at blocking scrapers. List is also learned from
     # past crawling effort
     blocked = set()
-    with open("crawlingathome-gpu-hcloud/blocklists/blocklist-domain.txt") as f:
+    with open("crawlingathome-gpu-hcloud/blocklists/blocklist-domain.txt","r") as f:
         blocked = set(f.read().splitlines())
     failed = set()
-    with open("crawlingathome-gpu-hcloud/blocklists/failed-domains.txt") as f:
+    with open("crawlingathome-gpu-hcloud/blocklists/failed-domains.txt","r") as f:
         failed = set(f.read().splitlines())
     blocked |= failed # merge the 2 sets and use this to reduce the number of attempted links, reduce crawling time.
     duplicates = set()
-    with open("crawlingathome-gpu-hcloud/blocklists/5Mduplicates.txt") as f:
-        duplicates = set(f.read().splitlines())
+    with gzip.open("crawlingathome-gpu-hcloud/blocklists/5Mduplicates.gz","rb") as f:
+        duplicates = pickle.load(f)
     print (f"duplicates of size {len(duplicates)}")
 
     valid_data = []
