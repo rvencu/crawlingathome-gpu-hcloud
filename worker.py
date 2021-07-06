@@ -104,7 +104,7 @@ def parse_wat(content, start, line_count):
         failed = set(f.read().splitlines())
     blocked |= failed # merge the 2 sets and use this to reduce the number of attempted links, reduce crawling time.
     duplicates = set()
-    with open("crawlingathome-gpu-hcloud/blocklists/5Mduplicates-rv.txt","rt") as f:
+    with open("crawlingathome-gpu-hcloud/blocklists/5Mduplicates.txt","rt") as f:
         duplicates = set(f.read().splitlines())
     print (f"duplicates of size {len(duplicates)}")
 
