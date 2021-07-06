@@ -76,6 +76,7 @@ runcmd:
  - echo "[Service]" >> /etc/systemd/system/crawl.service
  - echo "Type=simple" >> /etc/systemd/system/crawl.service
  - echo "LimitNOFILE=2097152" >> /etc/systemd/system/crawl.service
+ - echo "PYTHONHASHSEED=0" >> /etc/systemd/system/crawl.service
  - echo "WorkingDirectory=/home/crawl" >> /etc/systemd/system/crawl.service
  - echo "ExecStart=/home/crawl/crawl.sh" >> /etc/systemd/system/crawl.service
  - echo "EnvironmentFile=/etc/environment" >> /etc/systemd/system/crawl.service
@@ -88,7 +89,7 @@ runcmd:
  - echo "#!/bin/bash" >> /home/crawl/crawl.sh
  - echo "while true" >> /home/crawl/crawl.sh
  - echo "do" >> /home/crawl/crawl.sh
- - echo "PYTHONHASHSEED=0 python3 -u /home/crawl/crawlingathome-gpu-hcloud/worker.py >> /home/crawl/crawl.log 2>&1" >> /home/crawl/crawl.sh
+ - echo "python3 -u /home/crawl/crawlingathome-gpu-hcloud/worker.py >> /home/crawl/crawl.log 2>&1" >> /home/crawl/crawl.sh
  - echo "sleep 1" >> /home/crawl/crawl.sh
  - echo "done" >> /home/crawl/crawl.sh
  - chmod 744 /home/crawl/crawl.sh
