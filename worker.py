@@ -154,7 +154,7 @@ def parse_wat(content, start, line_count):
                 if not url.startswith("http"):
                     url = urljoin(base_url, url)
                 # reject if pair is a duplicate
-                concat = hash(url + alt_text)
+                concat = str(hash(url + alt_text))
                 if concat in duplicates:
                     continue
                 valid_data.append((url, alt_text, license))
