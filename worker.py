@@ -104,8 +104,8 @@ def parse_wat(content, start, line_count):
         failed = set(f.read().splitlines())
     blocked |= failed # merge the 2 sets and use this to reduce the number of attempted links, reduce crawling time.
     duplicates = set()
-    with gzip.open("crawlingathome-gpu-hcloud/blocklists/5Mduplicates.gz","rb") as f:
-        duplicates = pickle.load(f)
+    with gzip.open("crawlingathome-gpu-hcloud/blocklists/5Mduplicates.gz","rt") as f:
+        duplicates = set(f.read().splitlines())
     print (f"duplicates of size {len(duplicates)}")
 
     valid_data = []
