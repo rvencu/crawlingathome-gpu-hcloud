@@ -104,10 +104,11 @@ def parse_wat(content, start, line_count):
         failed = set(f.read().splitlines())
     blocked |= failed # merge the 2 sets and use this to reduce the number of attempted links, reduce crawling time.
     duplicates = set()
-    with gzip.open("crawlingathome-gpu-hcloud/blocklists/5Mduplicates.gz","rt") as f:
+    with open("crawlingathome-gpu-hcloud/blocklists/5Mduplicates-rv.txt","rt") as f:
         duplicates = set(f.read().splitlines())
     print (f"duplicates of size {len(duplicates)}")
 
+    deduped = 0
     valid_data = []
     content.seek(start)
     for _ in range(line_count):
@@ -156,11 +157,12 @@ def parse_wat(content, start, line_count):
                 # reject if pair is a duplicate
                 concat = str(hash(url + alt_text))
                 if concat in duplicates:
+                    deduped += 1
                     continue
                 valid_data.append((url, alt_text, license))
-    return [
+    return ([
         t for t in {tuple(i) for i in valid_data}
-    ]  # use a dict in order to remove duplicate tuples from list
+    ], deduped)  # use a dict in order to remove duplicate tuples from list
 
 
 def process_img_content(response, alt_text, license, sample_id):
@@ -448,7 +450,7 @@ if __name__ == "__main__":
 
             # parse valid links from wat file
             with open("shard.wat", "r") as infile:
-                parsed_data = parse_wat(infile, start_index, lines)
+                parsed_data, deduped = parse_wat(infile, start_index, lines)
             print(time.time()-start)
             start = time.time()
             print ("parsed wat")
@@ -463,7 +465,7 @@ if __name__ == "__main__":
             lastlinks = len(parsed_data)
             print(time.time()-start)
             start = time.time()
-            print (f"this job has {lastlinks} links")
+            print (f"this job has {lastlinks} links and deduped {deduped} links")
 
             while True:
                 try:
