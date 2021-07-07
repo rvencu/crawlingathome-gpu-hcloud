@@ -37,56 +37,67 @@ async def up(nodes, pref_loc, server_type="cx11"):
         script = user_data.read()
     for token in tokens:
         print(nodes)
-        hclient = Client(token=token.rstrip())
-        if pref_loc == None:
-            print ("[swarm] no specific location provided")
-            locations = hclient.locations.get_all()
-            loc = cycle(locations)
-            zip = [[i, next(loc)] for i in range(int(nodes))]
-        else:
-            print (f"[swarm] using {pref_loc} location")
-            location = hclient.locations.get_by_name(pref_loc)
-            zip = [[i, location] for i in range(int(nodes))]
-        for i, loc in zip:
-            try:
-                response = hclient.servers.create(
-                    "cah-worker-"+str(i),
-                    ServerType(name=server_type),
-                    Image(name="ubuntu-20.04"),
-                    hclient.ssh_keys.get_all(),
-                    None, #volumes
-                    None, #firewalls
-                    None, #networks
-                    script,
-                    None, #labels
-                    loc, #location - todo: create servers in all locations
-                    None, #datacenter
-                )
-                srv = response.server
-                workers.append(srv.public_net.ipv4.ip)
-            except APIException as e:
-                print (f"[infrastructure] API Exception: " + str(e))
-                nodes = int(nodes) - i
-                break
-            except Exception as e:
-                print(e)
-                nodes = int(nodes) - i
-                break
+        try:
+            hclient = Client(token=token.rstrip())
+            if pref_loc == None:
+                print ("[swarm] no specific location provided")
+                locations = hclient.locations.get_all()
+                loc = cycle(locations)
+                zip = [[i, next(loc)] for i in range(int(nodes))]
+            else:
+                print (f"[swarm] using {pref_loc} location")
+                location = hclient.locations.get_by_name(pref_loc)
+                zip = [[i, location] for i in range(int(nodes))]
+            for i, loc in zip:
+                try:
+                    response = hclient.servers.create(
+                        "cah-worker-"+str(i),
+                        ServerType(name=server_type),
+                        Image(name="ubuntu-20.04"),
+                        hclient.ssh_keys.get_all(),
+                        None, #volumes
+                        None, #firewalls
+                        None, #networks
+                        script,
+                        None, #labels
+                        loc, #location - todo: create servers in all locations
+                        None, #datacenter
+                    )
+                    srv = response.server
+                    workers.append(srv.public_net.ipv4.ip)
+                except APIException as e:
+                    print (f"[swarm] API Exception: " + str(e))
+                    nodes = int(nodes) - i
+                    break
+                except Exception as e:
+                    print(e)
+                    nodes = int(nodes) - i
+                    break
+        except APIException as e:
+            print (f"[swarm] API Exception: " + str(e))
+            continue
+        except Exception as e:
+            print(e)
+            continue
             
-    print (f"[infrastructure] Cloud infrastructure intialized with {len(workers)} nodes. If this is less than expected please check your account limits")
+    print (f"[swarm] Cloud swarm intialized with {len(workers)} nodes. If this is less than expected please check your account limits")
     return workers
 
 async def down():
     with open(".env", "r") as auth:
         tokens = auth.readlines()
     for token in tokens:
-        servers = await list_servers(token.rstrip())
-        hclient = Client(token=token.rstrip())
-        for server in servers:
-            server = hclient.servers.get_by_name(server.name)
-            if server is None:
-                continue
-            server.delete()
+        try:
+            servers = await list_servers(token.rstrip())
+            hclient = Client(token=token.rstrip())
+            for server in servers:
+                server = hclient.servers.get_by_name(server.name)
+                if server is None:
+                    continue
+                server.delete()
+        except APIException as e:
+            print (f"[swarm] API Exception: " + str(e))
+            continue
 
 async def down_server(workers, i):
     with open(".env", "r") as auth:
@@ -141,7 +152,7 @@ async def respawn(workers, ip, server_type="cx11"):
                     workers[index] = srv.public_net.ipv4.ip
                 except APIException as e:
                     # problem. we remove the worker from the dispatcher
-                    print (f"[infrastructure] API Exception: " + str(e))
+                    print (f"[swarm] API Exception: " + str(e))
                     workers.remove(ip)
                     return workers
     return workers
@@ -167,11 +178,12 @@ def exists_remote(host, path, silent=False):
         return False
 
 async def wait_for_infrastructure (workers):
-    print(f"[infrastructure] Waiting for {len(workers)} nodes to become ready")
-    pclient = ParallelSSHClient(workers, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False )
-
+    print(f"[swarm] Waiting for {len(workers)} nodes to become ready. Polling starts after 8 minutes...")
+    time.sleep(500)
     ready = []
+    pclient = ParallelSSHClient(workers, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False, num_retries=20, retry_delay=10 )
     while len(ready) < len(workers):
+        print(".", end = "", flush=True)
         ready = []
         #_start = time.time()
         output = pclient.run_command('test -f /home/crawl/semaphore')
@@ -227,10 +239,10 @@ if __name__ == "__main__":
             trio.run(wait_for_infrastructure, workers)
             end_time = time.time()
             print()
-            print(f"[infrastructure] {len(workers)} nodes infrastructure is up and initialized in {round(end_time - start_time)}s")
+            print(f"[swarm] {len(workers)} nodes swarm is up and initialized in {round(end_time - start_time)}s")
         except KeyboardInterrupt:
-            print(f"[infrastructure] Abort! Deleting cloud infrastructure")
+            print(f"[swarm] Abort! Deleting cloud swarm")
             trio.run(down)
     elif command == "down":
         trio.run(down)
-        print (f"[infrastructure] Cloud infrastructure was shutdown")
+        print (f"[swarm] Cloud swarm was shutdown")

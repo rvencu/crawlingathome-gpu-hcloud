@@ -529,7 +529,7 @@ if __name__ == "__main__":
                     stderr=subprocess.DEVNULL,
                 )
                 '''
-            if not abort:
+            if abort:
                 continue
             print()
             print(f"receiving results from GPU")
