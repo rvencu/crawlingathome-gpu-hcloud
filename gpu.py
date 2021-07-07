@@ -199,7 +199,7 @@ if __name__ == "__main__":
                             stderr=subprocess.DEVNULL,
                         )
                         subprocess.call(
-                            ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", ip.replace(".", "-") + "/gpuabort", "crawl@"+ip + ":~/gpuabort"],
+                            ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "-oStrictHostKeyChecking=no", "-oUserKnownHostsFile=/dev/null", ip.replace(".", "-") + "/gpuabort", "crawl@"+ip + ":~/gpuabort"],
                             stdout=subprocess.DEVNULL,
                             stderr=subprocess.DEVNULL,
                         )

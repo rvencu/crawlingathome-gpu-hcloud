@@ -108,7 +108,7 @@ async def respawn(workers, ip, server_type="cx11"):
         try:
             # first attempt to restart the crawl service
             subprocess.call(
-                ["ssh", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "crawl@" + ip, "sudo", "systemctl", "restart", "crawl"],
+                ["ssh", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "-oStrictHostKeyChecking=no", "-oUserKnownHostsFile=/dev/null", "crawl@" + ip, "sudo", "systemctl", "restart", "crawl"],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
@@ -143,7 +143,7 @@ async def respawn(workers, ip, server_type="cx11"):
 def exists_remote(host, path, silent=False):
     """Test if a file exists at path on a host accessible with SSH."""
     status = subprocess.call(
-        ["ssh", "-oStrictHostKeyChecking=no", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", host, "test -f {}".format(pipes.quote(path))],
+        ["ssh", "-oStrictHostKeyChecking=no", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "-oStrictHostKeyChecking=no", "-oUserKnownHostsFile=/dev/null", host, "test -f {}".format(pipes.quote(path))],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
@@ -170,7 +170,7 @@ async def wait_for_infrastructure (workers):
 
 def last_status(host,path):
     read = subprocess.run(
-        ["ssh", "-oStrictHostKeyChecking=no", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", host, "tail -1 {}".format(pipes.quote(path))],
+        ["ssh", "-oStrictHostKeyChecking=no", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "-oStrictHostKeyChecking=no", "-oUserKnownHostsFile=/dev/null", host, "tail -1 {}".format(pipes.quote(path))],
         capture_output=True,
         text=True
     )
