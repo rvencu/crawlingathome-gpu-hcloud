@@ -110,7 +110,7 @@ async def respawn(workers, ip, server_type="cx11"):
         try:
             # first attempt to restart the crawl service
             aclient = ParallelSSHClient(ip, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False)
-            aclient.run_command('sudo systemctl restart crawl')
+            aclient.run_command(' systemctl restart crawl', sudo=True )
             '''
             subprocess.call(
                 ["ssh", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "-oStrictHostKeyChecking=no", "-oUserKnownHostsFile=/dev/null", "crawl@" + ip, "sudo", "systemctl", "restart", "crawl"],

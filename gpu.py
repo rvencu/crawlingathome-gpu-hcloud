@@ -15,6 +15,7 @@ from glob import glob
 from copy import copy
 from tqdm import tqdm
 from pathlib import Path
+from colorama import Fore, Style
 sys.path.append('./crawlingathome-worker/')
 from PIL import ImageFile
 from multiprocessing import JoinableQueue, Process
@@ -113,13 +114,15 @@ def queue_get_all(q):
             break
     return items
 
-def incoming_worker(workers, queue):
+def incoming_worker(workers, queue, bar):
     print (f"new inbound worker started")
 
     pclient = ParallelSSHClient(workers, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False )
     
     while True:
         ready = []
+        bar.desc = Fore.RED + bar.desc
+        bar.refresh()
         #_start = time.time()
         output = pclient.run_command('test -f /home/crawl/semaphore')
         pclient.join(output)
@@ -131,6 +134,8 @@ def incoming_worker(workers, queue):
         #print(f"Took {time.time()-_start} seconds to check {len(ready)} workers that have ready jobs. starting downloading...")
 
         if len(ready) > 0:
+            bar.desc = Fore.GREEN + bar.desc
+            bar.refresh()
             #_start = time.time()
             dclient = ParallelSSHClient(ready, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False)
             try:
@@ -185,12 +190,15 @@ def incoming_worker(workers, queue):
         else:
             time.sleep(10)
 
-def outgoing_worker(queue):
+def outgoing_worker(queue, bar):
     print (f"outbound worker started")
     while True:
+        bar.desc = Fore.RED + bar.desc
+        bar.refresh()
         if queue.qsize() > 0:
             ready = queue_get_all(queue)
-            
+            bar.desc = Fore.GREEN + bar.desc
+            bar.refresh()
             uclient = ParallelSSHClient(ready, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False)
             copy_args = []
             for ip in ready:
@@ -289,17 +297,19 @@ if __name__ == "__main__":
                 if reg_compile.match(dir):
                     shutil.rmtree(dir)
 
-        inbound = JoinableQueue()
-        outbound = JoinableQueue()
-
-        inb = Process(target=incoming_worker, args=[workers, inbound], daemon=True).start()
-        time.sleep(10)
-        otb = Process(target=outgoing_worker, args=[outbound], daemon=True).start()
-        time.sleep(10)
-
         probar = tqdm(total=int(nodes), desc="Executed GPU jobs", position=2, bar_format='{desc}: {n_fmt} ({rate_fmt})                    ')
         incbar = tqdm(total=int(nodes), desc="Inbound pipeline", position=1, bar_format='{desc}: {n_fmt}/{total_fmt} ({percentage:0.0f}%)                    ')
         outbar = tqdm(total=int(nodes), desc="Outbound pipeline", position=0, bar_format='{desc}: {n_fmt}/{total_fmt} ({percentage:0.0f}%)                    ')
+
+        inbound = JoinableQueue()
+        outbound = JoinableQueue()
+
+        inb = Process(target=incoming_worker, args=[workers, inbound, incbar], daemon=True).start()
+        time.sleep(10)
+        otb = Process(target=outgoing_worker, args=[outbound, outbar], daemon=True).start()
+        time.sleep(10)
+
+
 
 
         print (f"gpu worker started")
@@ -308,7 +318,11 @@ if __name__ == "__main__":
             outbar.n = outbound.qsize()
             incbar.refresh()
             outbar.refresh()
+            probar.desc = Fore.RED + probar.desc
+            probar.refresh()
             while inbound.qsize() > 0:
+                probar.desc = Fore.GREEN + probar.desc
+                probar.refresh()
                 ip = inbound.get()
                 #print(f"gpu processing job for {ip}")
                 output_folder = "./" + ip.replace(".", "-") + "/save/"
