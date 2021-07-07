@@ -3,14 +3,14 @@ import os
 import sys
 import time
 import trio
-import gzip
+#import gzip
 import ujson
-import pipes
-import pickle
+#import pipes
+#import pickle
 import shutil
 import random
 import zipfile
-import subprocess
+#import subprocess
 import pandas as pd
 from glob import glob
 from uuid import uuid1
@@ -484,6 +484,22 @@ if __name__ == "__main__":
             print (f"crawl efficiency {lastlinks/(time.time() - start)} links/sec")
 
             start2 = time.time()
+            
+            # at this point we need to perform CLIP filtering, then save embeddings and tfrecords of filtered images
+            # since inference is best done with GPU, this particular worker is zipping the csv and all downloaded images
+            # and sends them to the GPU node
+            shutil.make_archive("gpujob", "zip", ".", output_folder)
+            # when zip is ready, create semaphore file to signal job data is ready
+            with open('semaphore', 'w') as f:
+                pass
+
+            '''
+            subprocess.call(
+                ["touch", "semaphore"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            '''
 
             while True:
                 try:
@@ -492,18 +508,6 @@ if __name__ == "__main__":
                     time.sleep(5)
                     continue
                 break
-            
-            # at this point we need to perform CLIP filtering, then save embeddings and tfrecords of filtered images
-            # since inference is best done with GPU, this particular worker is zipping the csv and all downloaded images
-            # and sends them to the GPU node
-            shutil.make_archive("gpujob", "zip", ".", output_folder)
-            # when zip is ready, create semaphore file to signal job data is ready
-            subprocess.call(
-                ["touch", "semaphore"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-
             # wait for GPU results
             print (f"waiting for GPU node to complete job")
             status = True
@@ -511,6 +515,9 @@ if __name__ == "__main__":
             while status and abort:
                 print(".", end = "", flush=True)
                 time.sleep(10)
+                status = os.path.exists("gpusemaphore")
+                abort = os.path.exists("gpuabort")
+                '''
                 status = subprocess.call(
                     ["test", "-f", "{}".format(pipes.quote("gpusemaphore"))],
                     stdout=subprocess.DEVNULL,
@@ -521,6 +528,7 @@ if __name__ == "__main__":
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
+                '''
             if not abort:
                 continue
             print()
@@ -571,9 +579,12 @@ if __name__ == "__main__":
             print (e)
             print ("Worker crashed")
             #attempt to solve temporary faliure in name resolution error
+            os.system("sudo apt clean")
+            '''
             subprocess.call(
                 ["sudo", "apt", "clean"],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
+            '''
             time.sleep(30)

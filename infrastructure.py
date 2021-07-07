@@ -3,13 +3,15 @@ import sys
 import trio
 import time
 import pipes
-import subprocess
+#import subprocess
 from itertools import cycle
 from hcloud import Client
 from hcloud.images.domain import Image
 from hcloud.hcloud import APIException
 from hcloud.server_types.client import ServerType
-from hcloud.servers.client import BoundServer, CreateServerResponse
+#from hcloud.servers.client import BoundServer, CreateServerResponse
+from pssh.clients import ParallelSSHClient
+from gevent import joinall
 
 
 async def list_servers(tok=""):
@@ -78,7 +80,7 @@ async def down():
     with open(".env", "r") as auth:
         tokens = auth.readlines()
     for token in tokens:
-        servers = await list_servers(token)
+        servers = await list_servers(token.rstrip())
         hclient = Client(token=token.rstrip())
         for server in servers:
             server = hclient.servers.get_by_name(server.name)
@@ -90,7 +92,7 @@ async def down_server(workers, i):
     with open(".env", "r") as auth:
         tokens = auth.readlines()
     for token in tokens:
-        hclient = Client(token=token)
+        hclient = Client(token=token.rstrip())
         server = hclient.servers.get_by_name("cah-worker-"+str(i))
         if server is None:
             continue
@@ -100,18 +102,22 @@ async def respawn(workers, ip, server_type="cx11"):
     with open(".env", "r") as auth:
         tokens = auth.readlines()
     for token in tokens:
-        hclient = Client(token=os.getenv("HCLOUD_API_TOKEN"))
+        hclient = Client(token=token.rstrip())
         index = workers.index(ip)
         server = hclient.servers.get_by_name(f"cah-worker-{index}")
         if server is None:
             continue
         try:
             # first attempt to restart the crawl service
+            aclient = ParallelSSHClient(ip, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False)
+            aclient.run_command('sudo systemctl restart crawl')
+            '''
             subprocess.call(
                 ["ssh", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "-oStrictHostKeyChecking=no", "-oUserKnownHostsFile=/dev/null", "crawl@" + ip, "sudo", "systemctl", "restart", "crawl"],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
+            '''
         except:
             # if impossible to restart the service then delete the worker and try to re-create it
             server.delete()
@@ -142,11 +148,17 @@ async def respawn(workers, ip, server_type="cx11"):
 
 def exists_remote(host, path, silent=False):
     """Test if a file exists at path on a host accessible with SSH."""
+    aclient = ParallelSSHClient(host, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False )
+    #_start = time.time()
+    output = aclient.run_command("test -f {}".format(pipes.quote(path)))
+    status = output.exit_code
+    '''
     status = subprocess.call(
         ["ssh", "-oStrictHostKeyChecking=no", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "-oStrictHostKeyChecking=no", "-oUserKnownHostsFile=/dev/null", host, "test -f {}".format(pipes.quote(path))],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
+    '''
     if not silent:
         print(".", end = "", flush=True)
     if status == 0:
@@ -156,6 +168,21 @@ def exists_remote(host, path, silent=False):
 
 async def wait_for_infrastructure (workers):
     print(f"[infrastructure] Waiting for {len(workers)} nodes to become ready")
+    pclient = ParallelSSHClient(workers, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False )
+
+    ready = []
+    while len(ready) < len(workers):
+        ready = []
+        #_start = time.time()
+        output = pclient.run_command('test -f /home/crawl/semaphore')
+        pclient.join(output)
+        for host_output in output:
+            hostname = host_output.host
+            exit_code = host_output.exit_code
+            if exit_code == 0:
+                ready.append(hostname)
+        time.sleep(10)
+    '''
     for i in range(len(workers)):
         subprocess.call(
             ["ssh-keygen", "-R", workers[i]],
@@ -167,14 +194,20 @@ async def wait_for_infrastructure (workers):
             f"crawl@{workers[i]}", "/home/crawl/crawl.log"
         ):
             time.sleep(30)
+    '''
 
 def last_status(host,path):
+    aclient = ParallelSSHClient(ip, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False)
+    read = aclient.run_command("tail -1 {}".format(pipes.quote(path)))
+    '''
     read = subprocess.run(
         ["ssh", "-oStrictHostKeyChecking=no", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "-oStrictHostKeyChecking=no", "-oUserKnownHostsFile=/dev/null", host, "tail -1 {}".format(pipes.quote(path))],
         capture_output=True,
         text=True
     )
+    '''
     return read.stdout
+
 
 if __name__ == "__main__":
     command = sys.argv[1]
