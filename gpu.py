@@ -148,7 +148,7 @@ if __name__ == "__main__":
         from pssh.clients import ParallelSSHClient
         from gevent import joinall
 
-        pclient = ParallelSSHClient(workers, user='crawl', pkey="~/.ssh/id_cah")
+        pclient = ParallelSSHClient(workers, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False )
         
         while True:
             ready = []
@@ -164,7 +164,7 @@ if __name__ == "__main__":
 
             if len(ready) > 0:
                 #_start = time.time()
-                dclient = ParallelSSHClient(ready, user='crawl', pkey="~/.ssh/id_cah")
+                dclient = ParallelSSHClient(ready, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False)
                 try:
                     cmds = dclient.scp_recv('/home/crawl/gpujob.zip', 'gpujob.zip')
                     joinall (cmds, raise_error=True)
@@ -236,12 +236,12 @@ if __name__ == "__main__":
                 )
 
                 subprocess.call(
-                    ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", base + "/gpujobdone.zip", "crawl@"+ip + ":~/gpujobdone.zip"],
+                    ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "-oStrictHostKeyChecking=no", "-oUserKnownHostsFile=/dev/null", base + "/gpujobdone.zip", "crawl@"+ip + ":~/gpujobdone.zip"],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
                 subprocess.call(
-                    ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", base + "/gpusemaphore", "crawl@"+ip + ":~/gpusemaphore"],
+                    ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "-oStrictHostKeyChecking=no", "-oUserKnownHostsFile=/dev/null", base + "/gpusemaphore", "crawl@"+ip + ":~/gpusemaphore"],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
