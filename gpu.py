@@ -114,7 +114,7 @@ def queue_get_all(q):
             break
     return items
 
-def incoming_worker(workers, queue):
+def incoming_worker(workers, queue: JoinableQueue):
     print (f"new inbound worker started")
     
     pclient = ParallelSSHClient(workers, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False )
@@ -133,7 +133,7 @@ def incoming_worker(workers, queue):
                 exit_code = host_output.exit_code
                 if exit_code == 0:
                     ready.append(hostname)
-            print(f"Ready workers for download {ready}")
+            #print(f"Ready workers for download {ready}")
 
             if len(ready) > 0:
                 #bar.desc = Fore.GREEN + bar.desc + Fore.RESET
@@ -169,22 +169,9 @@ def incoming_worker(workers, queue):
                         queue.put(ip)
                     except:
                         aclient = SSHClient(ip, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False)
-                        aclient.run_command('touch /home/crawl/gpuabort')
+                        aclient.execute('touch /home/crawl/gpuabort')
+                        aclient.disconnect()
 
-                        '''
-                        subprocess.call(
-                            ["touch", ip.replace(".", "-") + "/gpuabort"],
-                            stdout=subprocess.DEVNULL,
-                            stderr=subprocess.DEVNULL,
-                        )
-
-                        subprocess.call(
-                            ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "-oStrictHostKeyChecking=no", "-oUserKnownHostsFile=/dev/null", ip.replace(".", "-") + "/gpuabort", "crawl@"+ip + ":~/gpuabort"],
-                            stdout=subprocess.DEVNULL,
-                            stderr=subprocess.DEVNULL,
-                        )
-                        os.remove(ip.replace(".", "-") + "/gpuabort")
-                        '''
                     os.remove(file)
 
                 #print (f"unzipped in {time.time()-_start} seconds")
@@ -194,54 +181,53 @@ def incoming_worker(workers, queue):
         except Exception as e:
             print(f"some inbound problem occured: {e}")
 
-def outgoing_worker(queue):
+def outgoing_worker(queue: JoinableQueue):
     print (f"outbound worker started")
     while True:
         #bar.desc = Fore.RED + bar.desc + Fore.RESET
         #bar.refresh()
-        while queue.qsize() > 0:
-            ip = queue.get()
-            #bar.desc = Fore.GREEN + bar.desc + Fore.RESET
-            #bar.refresh()
-            aclient = SSHClient(ip, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False)
-            base = "./" + str(ip.replace(".", "-"))
-            output_folder = base + "/save/"
-            img_output_folder = output_folder + "images/"
+        try:
+            while queue.qsize() > 0:
+                ip = queue.get()
+                #bar.desc = Fore.GREEN + bar.desc + Fore.RESET
+                #bar.refresh()
+                aclient = SSHClient(ip, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False)
+                base = "./" + str(ip.replace(".", "-"))
+                output_folder = base + "/save/"
+                img_output_folder = output_folder + "images/"
 
-            # clean img_output_folder now since we have all results do not want to transfer back all images...
-            try:
-                shutil.rmtree(img_output_folder)
-            except OSError as e:
-                print("[GPU] Error deleting images: %s - %s." %
-                    (e.filename, e.strerror))
+                # clean img_output_folder now since we have all results do not want to transfer back all images...
+                try:
+                    shutil.rmtree(img_output_folder)
+                except OSError as e:
+                    print("[GPU] Error deleting images: %s - %s." %
+                        (e.filename, e.strerror))
 
-            # send GPU results
-            shutil.make_archive(base + "/gpujobdone", "zip", base, "save")
+                # send GPU results
+                shutil.make_archive(base + "/gpujobdone", "zip", base, "save")
 
-            try:
-                aclient.copy_file(base + "/gpujobdone.zip", "~/gpujobdone.zip")
-            except Exception as e:
-                print(f"upload exception {e}")
-            aclient.run_command('touch /home/crawl/semaphore')
+                #print (f"result ready for ip {ip}")
 
-            '''
-            subprocess.call(
-                ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "-oStrictHostKeyChecking=no", "-oUserKnownHostsFile=/dev/null", base + "/gpujobdone.zip", "crawl@"+ip + ":~/gpujobdone.zip"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-            subprocess.call(
-                ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "-oStrictHostKeyChecking=no", "-oUserKnownHostsFile=/dev/null", base + "/gpusemaphore", "crawl@"+ip + ":~/gpusemaphore"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-            os.remove(base + "/gpujobdone.zip")
-            os.remove(base + "/gpusemaphore")
-            '''
-            #print(f"[{ip}] resuming job with GPU results")
-            # queue.task_done() # not needed anymore since we process in parallel
-        else:
-            time.sleep(5)
+                cmd = aclient.scp_send(base + "/gpujobdone.zip", "gpujobdone.zip")
+                time.sleep(2)
+
+                os.remove(base + "/gpujobdone.zip")
+                
+                #print (f"sent result to ip {ip}")
+
+                output = aclient.execute("touch gpusemaphore")
+
+                #print (f"sent signal to ip {ip}")
+
+                aclient.disconnect()
+
+                queue.task_done()
+
+                #print(f"[{ip}] resuming job with GPU results")
+            else:
+                time.sleep(5)
+        except Exception as e:
+            print(f"some outbound problem occured: {e}")
 
 if __name__ == "__main__":
 
@@ -273,7 +259,7 @@ if __name__ == "__main__":
 
             trio.run(infrastructure.wait_for_infrastructure, workers)
             print(
-                f"[swarm] {len(workers)} nodes cloud swarm is up and initialized in {round(time.time() - start)}s")
+                f"[swarm] {len(workers)} nodes cloud swarm is up and was initialized in {round(time.time() - start)}s")
         except KeyboardInterrupt:
             print(f"[swarm] Abort! Deleting cloud swarm...")
             trio.run(infrastructure.down)
@@ -307,11 +293,9 @@ if __name__ == "__main__":
         outbound = JoinableQueue()
 
         inb = Process(target=incoming_worker, args=[workers, inbound], daemon=True).start()
-        time.sleep(10)
+        time.sleep(5)
         otb = Process(target=outgoing_worker, args=[outbound], daemon=True).start()
-        time.sleep(10)
-
-
+        time.sleep(5)
 
         print (f"gpu worker started")
         while True:
@@ -374,10 +358,9 @@ if __name__ == "__main__":
                     probar.desc = Fore.GREEN + probar.desc + Fore.RESET
                 else:
                     probar.desc = Fore.RED + probar.desc + Fore.RESET
-                if outbound.qsize()>0:
-                    outbar.desc = Fore.GREEN + outbar.desc + Fore.RESET
-                else:
-                    outbar.desc = Fore.RED + outbar.desc + Fore.RESET
+           
+                outbar.desc = Fore.GREEN + outbar.desc + Fore.RESET
+            
                 incbar.refresh()
                 outbar.refresh()
 

@@ -122,7 +122,8 @@ async def respawn(workers, ip, server_type="cx11"):
         try:
             # first attempt to restart the crawl service
             aclient = SSHClient(ip, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False)
-            aclient.run_command(' systemctl restart crawl', sudo=True )
+            aclient.execute('systemctl restart crawl', sudo=True )
+            aclient.disconnect()
             '''
             subprocess.call(
                 ["ssh", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "-oStrictHostKeyChecking=no", "-oUserKnownHostsFile=/dev/null", "crawl@" + ip, "sudo", "systemctl", "restart", "crawl"],
@@ -163,7 +164,10 @@ def exists_remote(host, path, silent=False):
     aclient = SSHClient(host, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False )
     #_start = time.time()
     output = aclient.run_command("test -f {}".format(pipes.quote(path)))
+    
     status = output.exit_code
+
+    aclient.disconnect()
     '''
     status = subprocess.call(
         ["ssh", "-oStrictHostKeyChecking=no", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "-oStrictHostKeyChecking=no", "-oUserKnownHostsFile=/dev/null", host, "test -f {}".format(pipes.quote(path))],
@@ -213,6 +217,7 @@ async def wait_for_infrastructure (workers):
 def last_status(host,path):
     aclient = SSHClient(ip, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False)
     read = aclient.run_command("tail -1 {}".format(pipes.quote(path)))
+    aclient.disconnect()
     '''
     read = subprocess.run(
         ["ssh", "-oStrictHostKeyChecking=no", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "-oStrictHostKeyChecking=no", "-oUserKnownHostsFile=/dev/null", host, "tail -1 {}".format(pipes.quote(path))],
