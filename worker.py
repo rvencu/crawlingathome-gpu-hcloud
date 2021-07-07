@@ -510,9 +510,9 @@ if __name__ == "__main__":
                 break
             # wait for GPU results
             print (f"waiting for GPU node to complete job")
-            status = True
-            abort = True
-            while status and abort:
+            status = False
+            abort = False
+            while not (status | abort):
                 print(".", end = "", flush=True)
                 time.sleep(10)
                 status = os.path.exists("gpusemaphore")
