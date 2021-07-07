@@ -313,6 +313,8 @@ if __name__ == "__main__":
             outbar.refresh()
             probar.refresh()
             while inbound.qsize() > 0:
+                probar.desc = Fore.RED + probar.desc + Fore.RESET
+                probar.refresh()
                 ip = inbound.get()
                 #print(f"gpu processing job for {ip}")
                 output_folder = "./" + ip.replace(".", "-") + "/save/"

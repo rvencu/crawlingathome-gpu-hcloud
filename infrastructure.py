@@ -31,24 +31,25 @@ async def up(nodes, pref_loc, server_type="cx11"):
     workers = []
     tokens = []
     script = ""
+    nodes = int(nodes)
     with open(".env", "r") as auth:
         tokens = auth.readlines()
     with open("cloud-init", "r") as user_data:
         script = user_data.read()
     for token in tokens:
-        print(nodes)
-        if (int(nodes)>0):
+        print(f"[swarm] nodes to be spinned out: {nodes}")
+        if (nodes > 0):
             try:
                 hclient = Client(token=token.rstrip())
                 if pref_loc == None:
                     print ("[swarm] no specific location provided")
                     locations = hclient.locations.get_all()
                     loc = cycle(locations)
-                    zip = [[i, next(loc)] for i in range(int(nodes))]
+                    zip = [[i, next(loc)] for i in range(nodes)]
                 else:
                     print (f"[swarm] using {pref_loc} location")
                     location = hclient.locations.get_by_name(pref_loc)
-                    zip = [[i, location] for i in range(int(nodes))]
+                    zip = [[i, location] for i in range(nodes)]
                 for i, loc in zip:
                     try:
                         response = hclient.servers.create(
@@ -66,13 +67,12 @@ async def up(nodes, pref_loc, server_type="cx11"):
                         )
                         srv = response.server
                         workers.append(srv.public_net.ipv4.ip)
+                        nodes = nodes - 1
                     except APIException as e:
                         print (f"[swarm] API Exception: " + str(e))
-                        nodes = int(nodes) - i
                         break
                     except Exception as e:
                         print(e)
-                        nodes = int(nodes) - i
                         break
             except APIException as e:
                 print (f"[swarm] API Exception: " + str(e))
