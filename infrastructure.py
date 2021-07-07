@@ -10,7 +10,7 @@ from hcloud.images.domain import Image
 from hcloud.hcloud import APIException
 from hcloud.server_types.client import ServerType
 #from hcloud.servers.client import BoundServer, CreateServerResponse
-from pssh.clients import ParallelSSHClient
+from pssh.clients import ParallelSSHClient, SSHClient
 from gevent import joinall
 
 
@@ -37,48 +37,49 @@ async def up(nodes, pref_loc, server_type="cx11"):
         script = user_data.read()
     for token in tokens:
         print(nodes)
-        try:
-            hclient = Client(token=token.rstrip())
-            if pref_loc == None:
-                print ("[swarm] no specific location provided")
-                locations = hclient.locations.get_all()
-                loc = cycle(locations)
-                zip = [[i, next(loc)] for i in range(int(nodes))]
-            else:
-                print (f"[swarm] using {pref_loc} location")
-                location = hclient.locations.get_by_name(pref_loc)
-                zip = [[i, location] for i in range(int(nodes))]
-            for i, loc in zip:
-                try:
-                    response = hclient.servers.create(
-                        "cah-worker-"+str(i),
-                        ServerType(name=server_type),
-                        Image(name="ubuntu-20.04"),
-                        hclient.ssh_keys.get_all(),
-                        None, #volumes
-                        None, #firewalls
-                        None, #networks
-                        script,
-                        None, #labels
-                        loc, #location - todo: create servers in all locations
-                        None, #datacenter
-                    )
-                    srv = response.server
-                    workers.append(srv.public_net.ipv4.ip)
-                except APIException as e:
-                    print (f"[swarm] API Exception: " + str(e))
-                    nodes = int(nodes) - i
-                    break
-                except Exception as e:
-                    print(e)
-                    nodes = int(nodes) - i
-                    break
-        except APIException as e:
-            print (f"[swarm] API Exception: " + str(e))
-            continue
-        except Exception as e:
-            print(e)
-            continue
+        if (int(nodes)>0):
+            try:
+                hclient = Client(token=token.rstrip())
+                if pref_loc == None:
+                    print ("[swarm] no specific location provided")
+                    locations = hclient.locations.get_all()
+                    loc = cycle(locations)
+                    zip = [[i, next(loc)] for i in range(int(nodes))]
+                else:
+                    print (f"[swarm] using {pref_loc} location")
+                    location = hclient.locations.get_by_name(pref_loc)
+                    zip = [[i, location] for i in range(int(nodes))]
+                for i, loc in zip:
+                    try:
+                        response = hclient.servers.create(
+                            "cah-worker-"+str(i),
+                            ServerType(name=server_type),
+                            Image(name="ubuntu-20.04"),
+                            hclient.ssh_keys.get_all(),
+                            None, #volumes
+                            None, #firewalls
+                            None, #networks
+                            script,
+                            None, #labels
+                            loc, #location - todo: create servers in all locations
+                            None, #datacenter
+                        )
+                        srv = response.server
+                        workers.append(srv.public_net.ipv4.ip)
+                    except APIException as e:
+                        print (f"[swarm] API Exception: " + str(e))
+                        nodes = int(nodes) - i
+                        break
+                    except Exception as e:
+                        print(e)
+                        nodes = int(nodes) - i
+                        break
+            except APIException as e:
+                print (f"[swarm] API Exception: " + str(e))
+                continue
+            except Exception as e:
+                print(e)
+                continue
             
     print (f"[swarm] Cloud swarm intialized with {len(workers)} nodes. If this is less than expected please check your account limits")
     return workers
@@ -120,7 +121,7 @@ async def respawn(workers, ip, server_type="cx11"):
             continue
         try:
             # first attempt to restart the crawl service
-            aclient = ParallelSSHClient(ip, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False)
+            aclient = SSHClient(ip, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False)
             aclient.run_command(' systemctl restart crawl', sudo=True )
             '''
             subprocess.call(
@@ -159,7 +160,7 @@ async def respawn(workers, ip, server_type="cx11"):
 
 def exists_remote(host, path, silent=False):
     """Test if a file exists at path on a host accessible with SSH."""
-    aclient = ParallelSSHClient(host, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False )
+    aclient = SSHClient(host, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False )
     #_start = time.time()
     output = aclient.run_command("test -f {}".format(pipes.quote(path)))
     status = output.exit_code
@@ -178,21 +179,22 @@ def exists_remote(host, path, silent=False):
         return False
 
 async def wait_for_infrastructure (workers):
-    print(f"[swarm] Waiting for {len(workers)} nodes to become ready. Polling starts after 8 minutes...")
-    time.sleep(500)
+    print(f"[swarm] Waiting for {len(workers)} nodes to become ready. Polling starts after 6 minutes...")
+    time.sleep(400)
     ready = []
-    pclient = ParallelSSHClient(workers, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False, num_retries=20, retry_delay=10 )
+    pclient = ParallelSSHClient(workers, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False )
     while len(ready) < len(workers):
         print(".", end = "", flush=True)
         ready = []
         #_start = time.time()
-        output = pclient.run_command('test -f /home/crawl/semaphore')
+        output = pclient.run_command('test -f /home/crawl/crawl.log')
         pclient.join(output)
         for host_output in output:
             hostname = host_output.host
             exit_code = host_output.exit_code
             if exit_code == 0:
                 ready.append(hostname)
+        #print(len(ready))
         time.sleep(10)
     '''
     for i in range(len(workers)):
@@ -209,7 +211,7 @@ async def wait_for_infrastructure (workers):
     '''
 
 def last_status(host,path):
-    aclient = ParallelSSHClient(ip, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False)
+    aclient = SSHClient(ip, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False)
     read = aclient.run_command("tail -1 {}".format(pipes.quote(path)))
     '''
     read = subprocess.run(

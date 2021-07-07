@@ -217,10 +217,10 @@ async def request_image(datas, start_sampleid):
     session = asks.Session(connections=192)
     # try to make the bot website friendly
     session.headers = {
-        "User-Agent": "Googlebot-Image",
+        "User-Agent": "Crawling at Home Project (http://cah.io.community)",
         "Accept-Language": "en-US",
         "Accept-Encoding": "gzip, deflate",
-        "Referer": "https://www.google.com/",
+        "Referer": "https://commoncrawl.org",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     }
 
