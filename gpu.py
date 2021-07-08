@@ -115,7 +115,7 @@ def queue_get_all(q):
     return items
 
 def incoming_worker(workers, queue: JoinableQueue):
-    print (f"new inbound worker started")
+    print (f"inbound worker started")
     
     pclient = ParallelSSHClient(workers, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False )
     
