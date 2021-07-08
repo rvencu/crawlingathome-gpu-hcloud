@@ -7,5 +7,5 @@ tfr_image
 tractor
 trio
 ujson
-anyascii
-asks
+colorama
+bloom-filter2

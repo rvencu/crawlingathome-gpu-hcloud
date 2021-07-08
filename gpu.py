@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import time
 import trio
@@ -7,17 +8,19 @@ import random
 import pickle
 import shutil
 import zipfile
-import itertools
-import subprocess
+#import subprocess
 import pandas as pd
 import infrastructure
 from glob import glob
 from copy import copy
 from tqdm import tqdm
 from pathlib import Path
+from colorama import Fore, Style
 sys.path.append('./crawlingathome-worker/')
-from PIL import Image, ImageFile, UnidentifiedImageError
-from multiprocessing import Pool, JoinableQueue, Process, Manager
+from PIL import ImageFile
+from multiprocessing import JoinableQueue, Process
+from pssh.clients import ParallelSSHClient, SSHClient
+from gevent import joinall
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True  # https://stackoverflow.com/a/47958486
 
@@ -99,13 +102,139 @@ def df_tfrecords(df, output_fname):
             )
             tfrecord_writer.write(example.SerializeToString())
 
+def queue_get_all(q):
+    items = []
+    maxItemsToRetrieve = 10
+    for numOfItemsRetrieved in range(0, maxItemsToRetrieve):
+        try:
+            if numOfItemsRetrieved == maxItemsToRetrieve:
+                break
+            items.append(q.get_nowait())
+        except:
+            break
+    return items
+
+def incoming_worker(workers, queue: JoinableQueue):
+    print (f"new inbound worker started")
+    
+    pclient = ParallelSSHClient(workers, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False )
+    
+    while True:
+        try:
+            ready = []
+            #bar.desc = Fore.RED + bar.desc + Fore.RESET
+            #bar.refresh()
+            _start = time.time()
+            #print ("search semaphore files")
+            output = pclient.run_command('test -f /home/crawl/semaphore')
+            pclient.join(output)
+            for host_output in output:
+                hostname = host_output.host
+                exit_code = host_output.exit_code
+                if exit_code == 0:
+                    ready.append(hostname)
+            #print(f"Ready workers for download {ready}")
+
+            if len(ready) > 0:
+                #bar.desc = Fore.GREEN + bar.desc + Fore.RESET
+                #bar.refresh()
+                #_start = time.time()
+                dclient = ParallelSSHClient(ready, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False)
+                try:
+                    cmds = dclient.copy_remote_file('/home/crawl/gpujob.zip', 'gpujob.zip')
+                    joinall (cmds, raise_error=False)
+                except Exception as e:
+                    print(e)
+                #print (f"all jobs downloaded in {time.time()-_start} seconds")
+
+                #_start = time.time()
+                dclient.run_command('rm -rf /home/crawl/gpujob.zip')
+                dclient.run_command('rm -rf /home/crawl/semaphore')
+
+                for file in glob('gpujob.zip_*'):
+                    name, ip = file.split("_")
+                    output_folder = "./" + ip.replace(".", "-") + "/save/"
+                    img_output_folder = output_folder + "images/"
+                    if os.path.exists(output_folder):
+                        shutil.rmtree(output_folder)
+                    #if os.path.exists(".tmp"):
+                    #    shutil.rmtree(".tmp")
+
+                    os.makedirs(output_folder)
+                    os.makedirs(img_output_folder)
+
+                    try:
+                        with zipfile.ZipFile(file, 'r') as zip_ref:
+                            zip_ref.extractall(ip.replace(".", "-")+"/")
+                        queue.put(ip)
+                    except:
+                        aclient = SSHClient(ip, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False)
+                        aclient.execute('touch /home/crawl/gpuabort')
+                        aclient.disconnect()
+
+                    os.remove(file)
+
+                #print (f"unzipped in {time.time()-_start} seconds")
+                
+            else:
+                time.sleep(15)
+        except Exception as e:
+            print(f"some inbound problem occured: {e}")
+
+def outgoing_worker(queue: JoinableQueue):
+    print (f"outbound worker started")
+    while True:
+        #bar.desc = Fore.RED + bar.desc + Fore.RESET
+        #bar.refresh()
+        try:
+            while queue.qsize() > 0:
+                ip = queue.get()
+                #bar.desc = Fore.GREEN + bar.desc + Fore.RESET
+                #bar.refresh()
+                aclient = SSHClient(ip, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False)
+                base = "./" + str(ip.replace(".", "-"))
+                output_folder = base + "/save/"
+                img_output_folder = output_folder + "images/"
+
+                # clean img_output_folder now since we have all results do not want to transfer back all images...
+                try:
+                    shutil.rmtree(img_output_folder)
+                except OSError as e:
+                    print("[GPU] Error deleting images: %s - %s." %
+                        (e.filename, e.strerror))
+
+                # send GPU results
+                shutil.make_archive(base + "/gpujobdone", "zip", base, "save")
+
+                #print (f"result ready for ip {ip}")
+
+                cmd = aclient.scp_send(base + "/gpujobdone.zip", "gpujobdone.zip")
+                time.sleep(2)
+
+                os.remove(base + "/gpujobdone.zip")
+                
+                #print (f"sent result to ip {ip}")
+
+                output = aclient.execute("touch gpusemaphore")
+
+                #print (f"sent signal to ip {ip}")
+
+                aclient.disconnect()
+
+                queue.task_done()
+
+                #print(f"[{ip}] resuming job with GPU results")
+            else:
+                time.sleep(5)
+        except Exception as e:
+            print(f"some outbound problem occured: {e}")
 
 if __name__ == "__main__":
 
     YOUR_NICKNAME_FOR_THE_LEADERBOARD = os.getenv('CAH_NICKNAME')
     if YOUR_NICKNAME_FOR_THE_LEADERBOARD is None:
         YOUR_NICKNAME_FOR_THE_LEADERBOARD = "anonymous"
-    CRAWLINGATHOME_SERVER_URL = "https://api.gagepiracy.com:4483/"
+    CRAWLINGATHOME_SERVER_URL = "http://cah.io.community/"
 
     print(
         f"[GPU] starting session under `{YOUR_NICKNAME_FOR_THE_LEADERBOARD}` nickname")
@@ -130,198 +259,136 @@ if __name__ == "__main__":
 
             trio.run(infrastructure.wait_for_infrastructure, workers)
             print(
-                f"[infrastructure] {len(workers)} nodes cloud infrastructure is up and initialized in {round(time.time() - start)}s")
+                f"[swarm] {len(workers)} nodes cloud swarm is up and was initialized in {round(time.time() - start)}s")
         except KeyboardInterrupt:
-            print(f"[infrastructure] Abort! Deleting cloud infrastructure...")
-            trio.run(infrastructure.down, nodes)
-            print(f"[infrastructure] Cloud infrastructure was shutdown")
+            print(f"[swarm] Abort! Deleting cloud swarm...")
+            trio.run(infrastructure.down)
+            print(f"[swarm] Cloud swarm was shutdown")
+            sys.exit()
         except Exception as e:
-            print(f"[infrastructure] Error, could not bring up infrastructure... please consider shutting down all workers via `python3 infrastructure.py down`")
+            print(f"[swarm] Error, could not bring up swarm... please consider shutting down all workers via `python3 infrastructure.py down`")
             print(e)
+            sys.exit()
     else:
         with open("workers.txt", "r") as f:
             for line in f.readlines():
                 workers.append(line.strip("\n"))
 
-    def incoming_worker(workers, queue):
-        print (f"inbound worker started")
+    try:
+        # initial cleanup - delete all working files in case of crash recovery
+        reg_compile = re.compile(r"^\d{1,3}-\d{1,3}-\d{1,3}-\d{1,3}$")
+        for root, dirnames, filenames in os.walk("."):
+            for filename in filenames:
+                if filename.startswith("gpujob.zip_"):
+                    os.remove(filename)
+            for dir in dirnames:
+                if reg_compile.match(dir):
+                    shutil.rmtree(dir)
 
-        async def _get_job(ip,queue):
-            newjob = infrastructure.exists_remote(
-                "crawl@"+ip, "/home/crawl/semaphore", True)
-            if newjob:
+        probar = tqdm(total=int(nodes), desc="Executed GPU jobs", position=2, bar_format='{desc}: {n_fmt} ({rate_fmt})                    ')
+        incbar = tqdm(total=int(nodes), desc="Inbound pipeline", position=1, bar_format='{desc}: {n_fmt}/{total_fmt} ({percentage:0.0f}%)                    ')
+        outbar = tqdm(total=int(nodes), desc="Outbound pipeline", position=0, bar_format='{desc}: {n_fmt}/{total_fmt} ({percentage:0.0f}%)                    ')
+
+        inbound = JoinableQueue()
+        outbound = JoinableQueue()
+
+        inb = Process(target=incoming_worker, args=[workers, inbound], daemon=True).start()
+        time.sleep(5)
+        otb = Process(target=outgoing_worker, args=[outbound], daemon=True).start()
+        time.sleep(5)
+
+        print (f"gpu worker started")
+        while True:
+            incbar.n = inbound.qsize()
+            outbar.n = outbound.qsize()
+            if inbound.qsize()>0:
+                probar.desc = Fore.GREEN + probar.desc + Fore.RESET
+            else:
+                probar.desc = Fore.RED + probar.desc + Fore.RESET
+            if outbound.qsize()>0:
+                outbar.desc = Fore.GREEN + outbar.desc + Fore.RESET
+            else:
+                outbar.desc = Fore.RED + outbar.desc + Fore.RESET
+            incbar.refresh()
+            outbar.refresh()
+            probar.refresh()
+            while inbound.qsize() > 0:
+                probar.desc = Fore.RED + probar.desc + Fore.RESET
+                probar.refresh()
+                ip = inbound.get()
+                #print(f"gpu processing job for {ip}")
                 output_folder = "./" + ip.replace(".", "-") + "/save/"
                 img_output_folder = output_folder + "images/"
 
-                #print(f"[{ip}] sending job to GPU")
-                if os.path.exists(output_folder):
-                    shutil.rmtree(output_folder)
-                if os.path.exists(".tmp"):
-                    shutil.rmtree(".tmp")
+                all_csv_files = []
+                for path, subdir, files in os.walk(output_folder):
+                    for file in glob(os.path.join(path, "*.csv")):
+                        all_csv_files.append(file)
 
-                os.makedirs(output_folder)
-                os.makedirs(img_output_folder)
-                os.makedirs(".tmp")
+                # get name of csv file
+                out_path = all_csv_files[0]
+                out_fname = Path(out_path).stem.strip("_unfiltered").strip("_parsed").strip(".")
 
-                # receive gpu job data (~500MB)
-                subprocess.call(
-                    ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah",
-                        "crawl@" + ip + ":" + "gpujob.zip", output_folder],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-                # delete file on remote so there is no secondary download
-                subprocess.call(
-                    ["ssh", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah",
-                        "crawl@" + ip, "rm -rf gpujob.zip"],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-                subprocess.call(
-                    ["ssh", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah",
-                        "crawl@" + ip, "rm -rf semaphore"],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-                with zipfile.ZipFile(output_folder+"gpujob.zip", 'r') as zip_ref:
-                    zip_ref.extractall("./"+ip.replace(".", "-")+"/")
-                os.remove(output_folder+"gpujob.zip")
+                # recreate parsed dataset and run CLIP filtering
+                dlparse_df = pd.read_csv(output_folder + out_fname + ".csv", sep="|")
 
-                queue.put(ip)
-                #print(f"{ip} inserted to the inbound queue")
-            else:
-                time.sleep(1)
+                dlparse_df["PATH"] = "./" + \
+                    ip.replace(".", "-") + "/" + dlparse_df["PATH"]
 
-        async def find_jobs(workers, queue):
-            async with trio.open_nursery() as n:
-                for ip in workers:
-                    n.start_soon(_get_job, ip, queue)
-        
-        while True:
-           trio.run(find_jobs, workers, queue)
-           time.sleep(1)
+                filtered_df, img_embeddings = df_clipfilter(dlparse_df)
+                filtered_df.to_csv(output_folder + out_fname +
+                                ".csv", index=False, sep="|")
 
-    def outgoing_worker(queue):
-        print (f"outbound worker started")
-        while True:
-            if queue.qsize() > 0:
-                ip = queue.get()
-                base = "./" + str(ip.replace(".", "-"))
-                output_folder = base + "/save/"
-                img_output_folder = output_folder + "images/"
-                # clean img_output_folder now since we have all results do not want to transfer back all images...
-                try:
-                    shutil.rmtree(img_output_folder)
-                except OSError as e:
-                    print("[GPU] Error deleting images: %s - %s." %
-                          (e.filename, e.strerror))
+                img_embeds_sampleid = {}
+                for i, img_embed_it in enumerate(img_embeddings):
+                    dfid_index = filtered_df.at[i, "SAMPLE_ID"]
+                    img_embeds_sampleid[str(dfid_index)] = img_embed_it
+                with open(f"{output_folder}image_embedding_dict-{out_fname}.pkl", "wb") as f:
+                    pickle.dump(img_embeds_sampleid, f)
 
-                # send GPU results
-                shutil.make_archive(base + "/gpujobdone", "zip", base, "save")
-                
-                subprocess.call(
-                    ["touch", base + "/gpusemaphore"],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
+                df_tfrecords(
+                    filtered_df,
+                    f"{output_folder}crawling_at_home_{out_fname}__00000-of-00001.tfrecord",
                 )
 
-                subprocess.call(
-                    ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", base + "/gpujobdone.zip", "crawl@"+ip + ":~/gpujobdone.zip"],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-                subprocess.call(
-                    ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", base + "/gpusemaphore", "crawl@"+ip + ":~/gpusemaphore"],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-                os.remove(base + "/gpujobdone.zip")
-                os.remove(base + "/gpusemaphore")
+                outbound.put(ip)
+                inbound.task_done()
 
-                #print(f"[{ip}] resuming job with GPU results")
-                queue.task_done()
-            else:
-                time.sleep(1)
+                incbar.n = inbound.qsize()
+                outbar.n = outbound.qsize()
+                if inbound.qsize()>0:
+                    probar.desc = Fore.GREEN + probar.desc + Fore.RESET
+                else:
+                    probar.desc = Fore.RED + probar.desc + Fore.RESET
+           
+                outbar.desc = Fore.GREEN + outbar.desc + Fore.RESET
+            
+                incbar.refresh()
+                outbar.refresh()
 
-inbound = JoinableQueue()
-outbound = JoinableQueue()
+                probar.update(1)
 
-inb = Process(target=incoming_worker, args=[
-              workers, inbound], daemon=True).start()
-time.sleep(10)
-otb = Process(target=outgoing_worker, args=[outbound], daemon=True).start()
-time.sleep(10)
+    except KeyboardInterrupt:
+        print(f"[GPU] Abort! Deleting cloud infrastructure...")
 
-probar = tqdm(total=int(nodes), desc="Executed GPU jobs", position=2, bar_format='{desc}: {n_fmt} ({rate_fmt})                    ')
-incbar = tqdm(total=int(nodes), desc="Inbound pipeline", position=1, bar_format='{desc}: {n_fmt}/{total_fmt} ({percentage:0.0f}%)                    ')
-outbar = tqdm(total=int(nodes), desc="Outbound pipeline", position=0, bar_format='{desc}: {n_fmt}/{total_fmt} ({percentage:0.0f}%)                    ')
+        letters = string.ascii_lowercase
+        suffix = ''.join(random.choice(letters) for i in range(3))
 
-try:
-    print (f"gpu worker started")
-    while True:
-        incbar.n = inbound.qsize()
-        outbar.n = outbound.qsize()
-        incbar.refresh()
-        outbar.refresh()
-        while inbound.qsize() > 0:
-            ip = inbound.get()
-            #print(f"gpu processing job for {ip}")
-            output_folder = "./" + ip.replace(".", "-") + "/save/"
-            img_output_folder = output_folder + "images/"
+        pclient = ParallelSSHClient(workers, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False )
+        pclient.scp_recv('/home/crawl/crawl.log', suffix + '_crawl.log')
 
-            all_csv_files = []
-            for path, subdir, files in os.walk(output_folder):
-                for file in glob(os.path.join(path, "*.csv")):
-                    all_csv_files.append(file)
-
-            # get name of csv file
-            out_path = all_csv_files[0]
-            out_fname = Path(out_path).stem.strip("_unfiltered").strip(".")
-
-            # recreate parsed dataset and run CLIP filtering
-            dlparse_df = pd.read_csv(
-                output_folder + out_fname + ".csv", sep="|")
-
-            dlparse_df["PATH"] = "./" + \
-                ip.replace(".", "-") + "/" + dlparse_df["PATH"]
-
-            filtered_df, img_embeddings = df_clipfilter(dlparse_df)
-            filtered_df.to_csv(output_folder + out_fname +
-                               ".csv", index=False, sep="|")
-
-            img_embeds_sampleid = {}
-            for i, img_embed_it in enumerate(img_embeddings):
-                dfid_index = filtered_df.at[i, "SAMPLE_ID"]
-                img_embeds_sampleid[str(dfid_index)] = img_embed_it
-            with open(f"{output_folder}image_embedding_dict-{out_fname}.pkl", "wb") as f:
-                pickle.dump(img_embeds_sampleid, f)
-
-            df_tfrecords(
-                filtered_df,
-                f"{output_folder}crawling_at_home_{out_fname}__00000-of-00001.tfrecord",
+        '''
+        for ip in workers:
+            subprocess.call(
+                ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "crawl@" +
+                    ip + ":" + "crawl.log", ip + "_" + suffix + ".log"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
             )
-
-            outbound.put(ip)
-            inbound.task_done()
-            incbar.n = inbound.qsize()
-            outbar.n = outbound.qsize()
-            incbar.refresh()
-            outbar.refresh()
-            probar.update(1)
-
-except KeyboardInterrupt:
-    print(f"[GPU] Abort! Deleting cloud infrastructure...")
-    inb.join()
-    otb.join()
-    letters = string.ascii_lowercase
-    suffix = ''.join(random.choice(letters) for i in range(3))
-    for ip in workers:
-        subprocess.call(
-            ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "crawl@" +
-                ip + ":" + "crawl.log", ip + "_" + suffix + ".log"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-    trio.run(infrastructure.down)
-
-    print(f"[infrastructure] Cloud infrastructure was shutdown")
+        '''
+        trio.run(infrastructure.down)
+        print(f"[infrastructure] Cloud infrastructure was shutdown")
+        sys.exit()
+    except Exception as e:
+        print (f"general exception: {e}")
+        sys.exit()

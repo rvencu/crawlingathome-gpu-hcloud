@@ -12,6 +12,7 @@ package_upgrade: true
 packages:
  - python3-pip
  - git
+ - git-lfs
  - build-essential
  - libssl-dev
  - libffi-dev
@@ -38,8 +39,8 @@ runcmd:
  #- 'echo "/swapfile none swap sw 0 0" | tee -a /etc/fstab'
  #- sysctl vm.swappiness=75
  #- 'echo "vm.swappiness=75" | tee -a /etc/sysctl.conf'
- # make ramdisk
- - 'echo "tmpfs  /home/crawl/save  tmpfs  rw,size=512M  0   0" | tee -a /etc/fstab'
+ # make ramdisk (actually no need for ramdisk)
+ # - 'echo "tmpfs  /home/crawl/save  tmpfs  rw,size=512M  0   0" | tee -a /etc/fstab'
 # take care of max open files
  - echo "* soft     nproc          65535 " >> /etc/security/limits.conf
  - echo "* hard     nproc          65535 " >> /etc/security/limits.conf
@@ -51,6 +52,9 @@ runcmd:
  - echo "root hard     nofile         65535" >> /etc/security/limits.conf
  - echo "session required pam_limits.so" >> /etc/pam.d/common-session
  - echo "fs.file-max = 2097152" >> /etc/sysctl.conf
+# install git lfs
+ - git lfs install
+ - git lfs track "duplicates*.txt"
 # secure ssh
  - sed -i -e '/^\(#\|\)PermitRootLogin/s/^.*$/PermitRootLogin no/' /etc/ssh/sshd_config
  - sed -i -e '/^\(#\|\)PasswordAuthentication/s/^.*$/PasswordAuthentication no/' /etc/ssh/sshd_config
@@ -72,6 +76,7 @@ runcmd:
  - echo "[Service]" >> /etc/systemd/system/crawl.service
  - echo "Type=simple" >> /etc/systemd/system/crawl.service
  - echo "LimitNOFILE=2097152" >> /etc/systemd/system/crawl.service
+ - echo "PYTHONHASHSEED=0" >> /etc/systemd/system/crawl.service
  - echo "WorkingDirectory=/home/crawl" >> /etc/systemd/system/crawl.service
  - echo "ExecStart=/home/crawl/crawl.sh" >> /etc/systemd/system/crawl.service
  - echo "EnvironmentFile=/etc/environment" >> /etc/systemd/system/crawl.service
@@ -82,7 +87,11 @@ runcmd:
  - systemctl daemon-reload
  - systemctl enable crawl.service
  - echo "#!/bin/bash" >> /home/crawl/crawl.sh
+ - echo "while true" >> /home/crawl/crawl.sh
+ - echo "do" >> /home/crawl/crawl.sh
  - echo "python3 -u /home/crawl/crawlingathome-gpu-hcloud/worker.py >> /home/crawl/crawl.log 2>&1" >> /home/crawl/crawl.sh
+ - echo "sleep 1" >> /home/crawl/crawl.sh
+ - echo "done" >> /home/crawl/crawl.sh
  - chmod 744 /home/crawl/crawl.sh
  - chown crawl:adm -R /home/crawl/
  - apt clean

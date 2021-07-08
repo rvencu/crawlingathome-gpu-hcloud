@@ -13,12 +13,15 @@ sudo apt-get install -y git build-essential python3.7-dev python3-pip python3.7-
 python3 -m venv venv && . venv/bin/activate
 
 git clone "https://github.com/TheoCoombes/crawlingathome" crawlingathome_client
-pip install torch==1.7.1+cu110 torchvision==0.8.2+cu110 -f https://download.pytorch.org/whl/torch_stable.html
+#pip install torch==1.7.1+cu110 torchvision==0.8.2+cu110 -f https://download.pytorch.org/whl/torch_stable.html
+pip3 install torch==1.9.0+cu111 torchvision==0.10.0+cu111 -f https://download.pytorch.org/whl/torch_stable.html
 #pip3 install git+https://github.com/rvencu/asks
 pip3 install -r crawlingathome_client/requirements.txt --no-cache-dir
 pip3 install -r requirements.txt --no-cache-dir
 pip3 install tensorflow --no-cache-dir
-pip3 install git+https://github.com/openai/CLIP --no-cache-dir
+#pip3 install git+https://github.com/openai/CLIP --no-cache-dir
+pip install clip-anytorch
+pip3 install bloom-filter2
 
 git clone "https://github.com/hetznercloud/hcloud-python" hcloud
 pip3 install -e ./hcloud

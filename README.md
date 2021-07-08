@@ -58,13 +58,14 @@ If you are asked for any droplet root password at any time, it means you need to
 - [x] Manage GPU process crashes
 - [x] Make crash resilient workers
 - [x] Spread droplets to all locations to avoid cpu/network competition on same hardware
-- [ ] Add continuous deployment pipline so workers get updates without shutting down
 - [x] Add option to use multiple HCLOUD API keys (to aggregate multiple accounts into the same swarm)
 - [x] Add Colab compatible notebook with hcould swarm. Swarm ratio is about 5 nodes for 1 colab notebook
 - [x] Add Kaggle automation (launch scripts on Kaggle with GPU)
 - [x] Optimize GPU workflow (separate processes for jobs downloading, inference and uploading)
 - [x] Optimize cloud workers: do not install unnecessary packages, remove swap file, use ramdisk for downloading images
-- [ ] Use SSH and SCP libraries from Python instead of subprocess calls (gpu and worker)
+- [x] Use SSH and SCP libraries from Python instead of subprocess calls (gpu and worker)
+- [x] Add deduplication check for top 5M duplicates accrued in 2021 Q2
+
 
 This work is based on code written by:
 - https://github.com/TheoCoombes/crawlingathome
@@ -73,8 +74,8 @@ This work is based on code written by:
 This is a subproject ran by the community around https://github.com/lucidrains/DALLE-pytorch
 
 ## Alternative single computer solutions to contribute to the Crawling@Home dataset
-- this notebook that can run in Google Colab and Kaggle: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/rvencu/crawlingathome-gpu-hcloud/blob/main/gpucah.ipynb) (https://raw.githubusercontent.com/rvencu/crawlingathome-worker/colab-mod-asks/fastcah.ipynb)
-- this notebook in Google Colab: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ARKseal/crawlingathome-worker/blob/colab-gpu/colab-gpu.ipynb)
-- this notebook in Google Colab: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1o8MndyY-l9vaox8pb0xfe7VQXUt8Qq0s)
+- this notebook that can run in Google Colab and Kaggle: [![Open In Colab] (https://colab.research.google.com/assets/colab-badge.svg)] (https://colab.research.google.com/github/rvencu/crawlingathome-gpu-hcloud/blob/main/gpucah.ipynb) (https://raw.githubusercontent.com/rvencu/crawlingathome-worker/colab-mod-asks/fastcah.ipynb)
+- this notebook in Google Colab: [![Open In Colab] (https://colab.research.google.com/assets/colab-badge.svg)] (https://colab.research.google.com/github/ARKseal/crawlingathome-worker/blob/colab-gpu/colab-gpu.ipynb)
+- this notebook in Google Colab: [![Open In Colab] (https://colab.research.google.com/assets/colab-badge.svg)] (https://colab.research.google.com/drive/1o8MndyY-l9vaox8pb0xfe7VQXUt8Qq0s)
 - this repo for autonomous script (on home computer or cloud virtual computer): https://github.com/rvencu/crawlingathome-worker/tree/master
 - this alternate repo for the same: https://github.com/christophschuhmann/crawlingathome-worker
