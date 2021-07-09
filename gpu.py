@@ -121,34 +121,49 @@ def outgoing_worker(queue: JoinableQueue, errors: JoinableQueue, local=False):
 def gpu_worker(inbound: JoinableQueue, outbound: JoinableQueue, counter: JoinableQueue, errors: JoinableQueue, gpuflag: JoinableQueue, test=False):
     print (f"gpu worker started")
     while True:
-        if inbound.qsize() > 0:
-            ip = inbound.get()
-            gpuflag.put(1)
-            errors.put(f"gpu processing job for {ip}")
-            output_folder = "./" + ip.replace(".", "-") + "/save/"
-            img_output_folder = output_folder + "images/"
+        if inbound.qsize() > 10:
+            ips = []
+            concat_parse = None
+            for i in range(10):
+                ip = inbound.get_nowait()
+                output_folder = "./" + ip.replace(".", "-") + "/save/"
+                ips.append(ip)
 
-            all_csv_files = []
-            for path, subdir, files in os.walk(output_folder):
-                for file in glob(os.path.join(path, "*.csv")):
-                    all_csv_files.append(file)
+                all_csv_files = []
+                for path, subdir, files in os.walk(output_folder):
+                    for file in glob(os.path.join(path, "*.csv")):
+                        all_csv_files.append(file)
+                # get name of csv file
+                out_path = all_csv_files[0]
+                out_fname = Path(out_path).stem.strip("_unfiltered").strip("_parsed").strip(".")
 
-            # get name of csv file
-            out_path = all_csv_files[0]
-            out_fname = Path(out_path).stem.strip("_unfiltered").strip("_parsed").strip(".")
+                # recreate parsed dataset and run CLIP filtering
+                dlparse_df = pd.read_csv(output_folder + out_fname + ".csv", sep="|")
+                dlparse_df["PATH"] = "./" + \
+                    ip.replace(".", "-") + "/" + dlparse_df["PATH"]
+                
+                if i==0:
+                    concat_parse = dlparse_df
+                else:
+                    concat_parse = pd.concat([concat_parse,dlparse_df])
+            
+            batch_fname = str(time.time())
 
-            # recreate parsed dataset and run CLIP filtering
-            dlparse_df = pd.read_csv(output_folder + out_fname + ".csv", sep="|")
+            gpuflag.put(10)
+            errors.put(f"gpu processing job for {ips}")
+            
+            print (f"before deduplication {concat_parse.shape[0]}")
+            concat_parse.drop_duplicates(subset=["URL","TEXT"], keep='last', inplace=True)
+            concat_parse.to_csv(batch_fname + "_unfiltered.csv", index=False, sep="|")
+            print (f"after deduplication {concat_parse.shape[0]}")
 
-            dlparse_df["PATH"] = "./" + \
-                ip.replace(".", "-") + "/" + dlparse_df["PATH"]
-
-            final_images = clip_filter.filter(dlparse_df, out_fname, output_folder, errors)
+            final_images = clip_filter.filter(concat_parse, batch_fname, ".", errors)
             errors.put(f"last filtered {final_images} images")
 
-            outbound.put(ip)
-            inbound.task_done()
-            counter.put(1)
+            for ip in ips:
+                outbound.put(ip)
+                #inbound.task_done()
+            counter.put(10)
             gpuflag.get()
             gpuflag.task_done()
 
