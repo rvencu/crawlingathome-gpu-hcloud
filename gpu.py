@@ -283,7 +283,9 @@ def monitor(nodes, inbound, outbound, counter):
 def monitor2(nodes, inbound, outbound, counter, inpsize, stdscr, errors, gpuflag):
     gpujobsdone = 0
     start = time.time()
-    curses.init_pair(1, curses.COLOR_GREEN, -1)
+    curses.curs_set(0)
+    curses.start_color()
+    curses.init_pair(1, curses.COLOR_GREEN, curses.COLOR_BLACK)
     # do stuff
     while True:
         stdscr.clear()
@@ -333,13 +335,12 @@ if __name__ == "__main__":
     nodes = sys.argv[1]
     location = None
     skip = None
-    local = False
+    local = True
     if len(sys.argv) > 2:
         location = sys.argv[2]
     if len(sys.argv) > 3:
         skip = sys.argv[3]
-    if len(sys.argv) > 4:
-        local = sys.argv[4]
+
     workers = []
 
     if skip is None:
@@ -401,12 +402,15 @@ if __name__ == "__main__":
         gpu3 = Process(target=gpu_worker, args=[inbound, outbound, counter, errors, gpuflag], daemon=True).start()
 
         stdscr = curses.initscr()
-        sys.stdout.close()
+        #sys.stdout.close()
         #monitor(nodes, inbound, outbound, counter)
         curses.wrapper(monitor2(nodes, inbound, outbound, counter, inpsize, stdscr, errors, gpuflag))
 
     except KeyboardInterrupt:
+        curses.nocbreak()
+        curses.echo()
         curses.endwin()
+
         print(f"[GPU] Abort! Deleting cloud infrastructure...")
 
         letters = string.ascii_lowercase

@@ -22,34 +22,6 @@ asks.init("trio")
 ImageFile.LOAD_TRUNCATED_IMAGES = True  # https://stackoverflow.com/a/47958486
 
 
-'''
-class TrioProgress(trio.abc.Instrument):
-    """
-    This class creates an instrument to track trio tasks progress.
-
-    Trio is used to spin up async threads, in our script basically to spin up parallel connections to download images
-
-    In case the system had multiple CPUs, trio and tractor can be combined to produce a multiprocess - multithreading 
-    procedure to maximize resources usage and minimize download time. Note that this code is optimized for single CPU
-    therefore there is no tractor code in it
-    """
-
-    def __init__(self, total, notebook_mode=False, **kwargs):
-        if notebook_mode:
-            from tqdm.notebook import tqdm
-        else:
-            from tqdm import tqdm
-
-        self.tqdm = tqdm(total=total, desc="Downloaded: [ 0 ] / Links ", **kwargs)
-
-    def task_exited(self, task):
-        if task.custom_sleep_data == 0:
-            self.tqdm.update(7)
-        if task.custom_sleep_data == 1:
-            self.tqdm.update(7)
-            self.tqdm.desc = self.tqdm.desc.split(":")[0] + ": [ " + str( int(self.tqdm.desc.split(":")[1].split(" ")[2]) + 1 ) + " ] / Links "
-            self.tqdm.refresh()
-'''
 def zipfolder(filename, target_dir):
     """
     Function to unzip files received from GPU node
@@ -489,14 +461,6 @@ if __name__ == "__main__":
             with open('semaphore', 'w') as f:
                 pass
 
-            '''
-            subprocess.call(
-                ["touch", "semaphore"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-            '''
-
             while True:
                 try:
                     client.log("@GPU: dropping NSFW keywords" + lastext)
@@ -504,6 +468,7 @@ if __name__ == "__main__":
                     time.sleep(5)
                     continue
                 break
+
             # wait for GPU results
             print (f"waiting for GPU node to complete job")
             status = False
@@ -515,28 +480,21 @@ if __name__ == "__main__":
                 status = os.path.exists("gpusemaphore")
                 abort = os.path.exists("gpuabort")
                 gpulocal = os.path.exists("gpulocal")
-                '''
-                status = subprocess.call(
-                    ["test", "-f", "{}".format(pipes.quote("gpusemaphore"))],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-                abort = subprocess.call(
-                    ["test", "-f", "{}".format(pipes.quote("gpuabort"))],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-                '''
+
             if abort:
+                os.remove("gpuabort")
                 continue
             print()
             print(f"receiving results from GPU")
 
-            # GPU results received
-            with zipfile.ZipFile("gpujobdone.zip", 'r') as zip_ref:
-                zip_ref.extractall(".")
-            os.remove("gpujobdone.zip")
-            os.remove("gpusemaphore")
+            if not gpulocal:
+                # GPU results received
+                with zipfile.ZipFile("gpujobdone.zip", 'r') as zip_ref:
+                    zip_ref.extractall(".")
+                os.remove("gpujobdone.zip")
+                os.remove("gpusemaphore")
+            else:
+                os.remove("gpulocal")            
 
             while True:
                 try:
@@ -578,13 +536,4 @@ if __name__ == "__main__":
         except Exception as e:
             print (e)
             print ("Worker crashed")
-            #attempt to solve temporary faliure in name resolution error
-            os.system("sudo apt clean")
-            '''
-            subprocess.call(
-                ["sudo", "apt", "clean"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-            '''
             time.sleep(30)
