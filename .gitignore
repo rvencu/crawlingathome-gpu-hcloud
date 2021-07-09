@@ -162,3 +162,4 @@ image_embedding*
 test.py
 duplicates/
 gpujob.zip_*
+results/
