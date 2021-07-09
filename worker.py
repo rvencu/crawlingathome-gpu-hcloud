@@ -3,14 +3,10 @@ import os
 import sys
 import time
 import trio
-#import gzip
 import ujson
-#import pipes
-#import pickle
 import shutil
 import random
 import zipfile
-#import subprocess
 import pandas as pd
 from glob import glob
 from uuid import uuid1
@@ -512,11 +508,13 @@ if __name__ == "__main__":
             print (f"waiting for GPU node to complete job")
             status = False
             abort = False
-            while not (status | abort):
+            gpulocal = False
+            while not (status | abort | gpulocal):
                 print(".", end = "", flush=True)
                 time.sleep(10)
                 status = os.path.exists("gpusemaphore")
                 abort = os.path.exists("gpuabort")
+                gpulocal = os.path.exists("gpulocal")
                 '''
                 status = subprocess.call(
                     ["test", "-f", "{}".format(pipes.quote("gpusemaphore"))],
@@ -552,11 +550,13 @@ if __name__ == "__main__":
             filtered_df = pd.read_csv(output_folder + out_fname + ".csv", sep="|")
             print (f"CLIP filtered {len(filtered_df)} in {round(time.time() - start2)} seconds")
             print (f"CLIP efficiency {len(dlparse_df)/(time.time() - start2)} img/sec")
-            upload_gdrive(f"{output_folder}image_embedding_dict-{out_fname}.pkl")
-            upload_gdrive(f"{output_folder}crawling_at_home_{out_fname}__00000-of-00001.tfrecord")
-            upload_gdrive(output_folder + out_fname + ".csv")
-            upload_gdrive(output_folder + out_fname + "_unfiltered.csv", True)
-            upload_gdrive(output_folder + out_fname + "_parsed.csv", True)
+
+            if not gpulocal:
+                upload_gdrive(f"{output_folder}image_embedding_dict-{out_fname}.pkl")
+                upload_gdrive(f"{output_folder}crawling_at_home_{out_fname}__00000-of-00001.tfrecord")
+                upload_gdrive(output_folder + out_fname + ".csv")
+                upload_gdrive(output_folder + out_fname + "_unfiltered.csv", True)
+                upload_gdrive(output_folder + out_fname + "_parsed.csv", True)
 
             # update job stats to be displayed on next run on leaderboard
             lastcount = len(filtered_df)
