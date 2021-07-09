@@ -102,29 +102,17 @@ def df_tfrecords(df, output_fname):
             )
             tfrecord_writer.write(example.SerializeToString())
 
-def queue_get_all(q):
-    items = []
-    maxItemsToRetrieve = 10
-    for numOfItemsRetrieved in range(0, maxItemsToRetrieve):
-        try:
-            if numOfItemsRetrieved == maxItemsToRetrieve:
-                break
-            items.append(q.get_nowait())
-        except:
-            break
-    return items
 
-def incoming_worker(workers, queue: JoinableQueue):
+def incoming_worker(workers, queue: JoinableQueue, inpsize: JoinableQueue):
     print (f"inbound worker started")
     
     pclient = ParallelSSHClient(workers, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False )
-    
     while True:
         try:
             ready = []
             #bar.desc = Fore.RED + bar.desc + Fore.RESET
             #bar.refresh()
-            _start = time.time()
+            #_start = time.time()
             #print ("search semaphore files")
             output = pclient.run_command('test -f /home/crawl/semaphore')
             pclient.join(output)
@@ -136,6 +124,7 @@ def incoming_worker(workers, queue: JoinableQueue):
             #print(f"Ready workers for download {ready}")
 
             if len(ready) > 0:
+                inpsize.put(len(ready))
                 #bar.desc = Fore.GREEN + bar.desc + Fore.RESET
                 #bar.refresh()
                 #_start = time.time()
@@ -174,7 +163,8 @@ def incoming_worker(workers, queue: JoinableQueue):
 
                     os.remove(file)
 
-                #print (f"unzipped in {time.time()-_start} seconds")
+                inpsize.get()
+                inpsize.task_done() # empty impsize queue to signal no work to be done
                 
             else:
                 time.sleep(15)
@@ -228,6 +218,50 @@ def outgoing_worker(queue: JoinableQueue):
                 time.sleep(5)
         except Exception as e:
             print(f"some outbound problem occured: {e}")
+
+def gpu_worker(inbound: JoinableQueue, outbound: JoinableQueue, counter: JoinableQueue):
+    print (f"gpu worker started")
+    while True:
+        if inbound.qsize() > 0:
+            ip = inbound.get()
+            #print(f"gpu processing job for {ip}")
+            output_folder = "./" + ip.replace(".", "-") + "/save/"
+            img_output_folder = output_folder + "images/"
+
+            all_csv_files = []
+            for path, subdir, files in os.walk(output_folder):
+                for file in glob(os.path.join(path, "*.csv")):
+                    all_csv_files.append(file)
+
+            # get name of csv file
+            out_path = all_csv_files[0]
+            out_fname = Path(out_path).stem.strip("_unfiltered").strip("_parsed").strip(".")
+
+            # recreate parsed dataset and run CLIP filtering
+            dlparse_df = pd.read_csv(output_folder + out_fname + ".csv", sep="|")
+
+            dlparse_df["PATH"] = "./" + \
+                ip.replace(".", "-") + "/" + dlparse_df["PATH"]
+
+            filtered_df, img_embeddings = df_clipfilter(dlparse_df)
+            filtered_df.to_csv(output_folder + out_fname +
+                            ".csv", index=False, sep="|")
+
+            img_embeds_sampleid = {}
+            for i, img_embed_it in enumerate(img_embeddings):
+                dfid_index = filtered_df.at[i, "SAMPLE_ID"]
+                img_embeds_sampleid[str(dfid_index)] = img_embed_it
+            with open(f"{output_folder}image_embedding_dict-{out_fname}.pkl", "wb") as f:
+                pickle.dump(img_embeds_sampleid, f)
+
+            df_tfrecords(
+                filtered_df,
+                f"{output_folder}crawling_at_home_{out_fname}__00000-of-00001.tfrecord",
+            )
+
+            outbound.put(ip)
+            inbound.task_done()
+            counter.put(1)
 
 if __name__ == "__main__":
 
@@ -285,88 +319,50 @@ if __name__ == "__main__":
                 if reg_compile.match(dir):
                     shutil.rmtree(dir)
 
+        # crude term monitor with 3 custom bars.. todo: move to curses module
         probar = tqdm(total=int(nodes), desc="Executed GPU jobs", position=2, bar_format='{desc}: {n_fmt} ({rate_fmt})                    ')
         incbar = tqdm(total=int(nodes), desc="Inbound pipeline", position=1, bar_format='{desc}: {n_fmt}/{total_fmt} ({percentage:0.0f}%)                    ')
         outbar = tqdm(total=int(nodes), desc="Outbound pipeline", position=0, bar_format='{desc}: {n_fmt}/{total_fmt} ({percentage:0.0f}%)                    ')
 
+        #initialize 3 joinable queues to transfer messages between multiprocess processes
         inbound = JoinableQueue()
         outbound = JoinableQueue()
+        counter = JoinableQueue()
+        inpsize = JoinableQueue() # use this to communicate number of jobs downloading now
 
-        inb = Process(target=incoming_worker, args=[workers, inbound], daemon=True).start()
+        # launch separate processes with specialized workers
+        inb = Process(target=incoming_worker, args=[workers, inbound, inpsize], daemon=True).start()
         time.sleep(5)
         otb = Process(target=outgoing_worker, args=[outbound], daemon=True).start()
         time.sleep(5)
+        gpu1 = Process(target=gpu_worker, args=[inbound, outbound, counter], daemon=True).start()
+        gpu2 = Process(target=gpu_worker, args=[inbound, outbound, counter], daemon=True).start()
+        gpu3 = Process(target=gpu_worker, args=[inbound, outbound, counter], daemon=True).start()
 
-        print (f"gpu worker started")
+        # keep main process for monitoring
         while True:
             incbar.n = inbound.qsize()
             outbar.n = outbound.qsize()
+            if inpsize.qsize() > 0:
+                incbar.desc = Fore.GREEN + incbar.desc.strip(Fore.RED).strip(Fore.GREEN).strip(Fore.RESET) + Fore.RESET
+            else:
+                incbar.desc = Fore.RED + incbar.desc.strip(Fore.RED).strip(Fore.GREEN).strip(Fore.RESET) + Fore.RESET
             if inbound.qsize()>0:
-                probar.desc = Fore.GREEN + probar.desc + Fore.RESET
+                probar.desc = Fore.GREEN + probar.desc.strip(Fore.RED).strip(Fore.GREEN).strip(Fore.RESET) + Fore.RESET
             else:
-                probar.desc = Fore.RED + probar.desc + Fore.RESET
+                probar.desc = Fore.RED + probar.desc.strip(Fore.RED).strip(Fore.GREEN).strip(Fore.RESET) + Fore.RESET
             if outbound.qsize()>0:
-                outbar.desc = Fore.GREEN + outbar.desc + Fore.RESET
+                outbar.desc = Fore.GREEN + outbar.desc.strip(Fore.RED).strip(Fore.GREEN).strip(Fore.RESET) + Fore.RESET
             else:
-                outbar.desc = Fore.RED + outbar.desc + Fore.RESET
+                outbar.desc = Fore.RED + outbar.desc.strip(Fore.RED).strip(Fore.GREEN).strip(Fore.RESET) + Fore.RESET
             incbar.refresh()
             outbar.refresh()
             probar.refresh()
-            while inbound.qsize() > 0:
-                probar.desc = Fore.RED + probar.desc + Fore.RESET
-                probar.refresh()
-                ip = inbound.get()
-                #print(f"gpu processing job for {ip}")
-                output_folder = "./" + ip.replace(".", "-") + "/save/"
-                img_output_folder = output_folder + "images/"
-
-                all_csv_files = []
-                for path, subdir, files in os.walk(output_folder):
-                    for file in glob(os.path.join(path, "*.csv")):
-                        all_csv_files.append(file)
-
-                # get name of csv file
-                out_path = all_csv_files[0]
-                out_fname = Path(out_path).stem.strip("_unfiltered").strip("_parsed").strip(".")
-
-                # recreate parsed dataset and run CLIP filtering
-                dlparse_df = pd.read_csv(output_folder + out_fname + ".csv", sep="|")
-
-                dlparse_df["PATH"] = "./" + \
-                    ip.replace(".", "-") + "/" + dlparse_df["PATH"]
-
-                filtered_df, img_embeddings = df_clipfilter(dlparse_df)
-                filtered_df.to_csv(output_folder + out_fname +
-                                ".csv", index=False, sep="|")
-
-                img_embeds_sampleid = {}
-                for i, img_embed_it in enumerate(img_embeddings):
-                    dfid_index = filtered_df.at[i, "SAMPLE_ID"]
-                    img_embeds_sampleid[str(dfid_index)] = img_embed_it
-                with open(f"{output_folder}image_embedding_dict-{out_fname}.pkl", "wb") as f:
-                    pickle.dump(img_embeds_sampleid, f)
-
-                df_tfrecords(
-                    filtered_df,
-                    f"{output_folder}crawling_at_home_{out_fname}__00000-of-00001.tfrecord",
-                )
-
-                outbound.put(ip)
-                inbound.task_done()
-
-                incbar.n = inbound.qsize()
-                outbar.n = outbound.qsize()
-                if inbound.qsize()>0:
-                    probar.desc = Fore.GREEN + probar.desc + Fore.RESET
-                else:
-                    probar.desc = Fore.RED + probar.desc + Fore.RESET
-           
-                outbar.desc = Fore.GREEN + outbar.desc + Fore.RESET
-            
-                incbar.refresh()
-                outbar.refresh()
-
+            while counter.qsize() > 0:
+                counter.get()
                 probar.update(1)
+                counter.task_done()
+            time.sleep(1)
 
     except KeyboardInterrupt:
         print(f"[GPU] Abort! Deleting cloud infrastructure...")
