@@ -7,18 +7,18 @@ import string
 import random
 import pickle
 import shutil
+import curses
 import zipfile
-#import subprocess
 import pandas as pd
 import infrastructure
 from glob import glob
 from copy import copy
 from tqdm import tqdm
 from pathlib import Path
-from colorama import Fore, Style
+from colorama import Fore
 sys.path.append('./crawlingathome-worker/')
 from PIL import ImageFile
-from multiprocessing import JoinableQueue, Process
+from multiprocessing import JoinableQueue, Process, Pool
 from pssh.clients import ParallelSSHClient, SSHClient
 from gevent import joinall
 
@@ -103,17 +103,13 @@ def df_tfrecords(df, output_fname):
             tfrecord_writer.write(example.SerializeToString())
 
 
-def incoming_worker(workers, queue: JoinableQueue, inpsize: JoinableQueue):
+def incoming_worker(workers, queue: JoinableQueue, inpsize: JoinableQueue, errors: JoinableQueue):
     print (f"inbound worker started")
     
     pclient = ParallelSSHClient(workers, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False )
     while True:
         try:
             ready = []
-            #bar.desc = Fore.RED + bar.desc + Fore.RESET
-            #bar.refresh()
-            #_start = time.time()
-            #print ("search semaphore files")
             output = pclient.run_command('test -f /home/crawl/semaphore')
             pclient.join(output)
             for host_output in output:
@@ -121,22 +117,19 @@ def incoming_worker(workers, queue: JoinableQueue, inpsize: JoinableQueue):
                 exit_code = host_output.exit_code
                 if exit_code == 0:
                     ready.append(hostname)
-            #print(f"Ready workers for download {ready}")
+            errors.put(f"Ready workers for download: {len(ready)}")
 
             if len(ready) > 0:
                 inpsize.put(len(ready))
-                #bar.desc = Fore.GREEN + bar.desc + Fore.RESET
-                #bar.refresh()
-                #_start = time.time()
+                _start = time.time()
                 dclient = ParallelSSHClient(ready, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False)
                 try:
                     cmds = dclient.copy_remote_file('/home/crawl/gpujob.zip', 'gpujob.zip')
                     joinall (cmds, raise_error=False)
                 except Exception as e:
                     print(e)
-                #print (f"all jobs downloaded in {time.time()-_start} seconds")
+                errors.put(f"all jobs downloaded in {round(time.time()-_start, 2)} seconds")
 
-                #_start = time.time()
                 dclient.run_command('rm -rf /home/crawl/gpujob.zip')
                 dclient.run_command('rm -rf /home/crawl/semaphore')
 
@@ -146,8 +139,6 @@ def incoming_worker(workers, queue: JoinableQueue, inpsize: JoinableQueue):
                     img_output_folder = output_folder + "images/"
                     if os.path.exists(output_folder):
                         shutil.rmtree(output_folder)
-                    #if os.path.exists(".tmp"):
-                    #    shutil.rmtree(".tmp")
 
                     os.makedirs(output_folder)
                     os.makedirs(img_output_folder)
@@ -171,16 +162,13 @@ def incoming_worker(workers, queue: JoinableQueue, inpsize: JoinableQueue):
         except Exception as e:
             print(f"some inbound problem occured: {e}")
 
-def outgoing_worker(queue: JoinableQueue):
+def outgoing_worker(queue: JoinableQueue, errors: JoinableQueue, local=False):
     print (f"outbound worker started")
     while True:
-        #bar.desc = Fore.RED + bar.desc + Fore.RESET
-        #bar.refresh()
         try:
             while queue.qsize() > 0:
                 ip = queue.get()
-                #bar.desc = Fore.GREEN + bar.desc + Fore.RESET
-                #bar.refresh()
+                
                 aclient = SSHClient(ip, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False)
                 base = "./" + str(ip.replace(".", "-"))
                 output_folder = base + "/save/"
@@ -197,34 +185,31 @@ def outgoing_worker(queue: JoinableQueue):
                 shutil.make_archive(base + "/gpujobdone", "zip", base, "save")
 
                 #print (f"result ready for ip {ip}")
-
-                cmd = aclient.scp_send(base + "/gpujobdone.zip", "gpujobdone.zip")
-                time.sleep(2)
-
-                os.remove(base + "/gpujobdone.zip")
-                
-                #print (f"sent result to ip {ip}")
-
-                output = aclient.execute("touch gpusemaphore")
-
-                #print (f"sent signal to ip {ip}")
+                if local:
+                    os.system(f"mv {base}/gpujobdone.zip results/{time.time()}.zip")
+                    aclient.execute("touch gpulocal")
+                else:    
+                    cmd = aclient.scp_send(base + "/gpujobdone.zip", "gpujobdone.zip")
+                    time.sleep(2)
+                    os.remove(base + "/gpujobdone.zip")
+                    aclient.execute("touch gpusemaphore")
 
                 aclient.disconnect()
-
                 queue.task_done()
 
-                #print(f"[{ip}] resuming job with GPU results")
+                    #print(f"[{ip}] resuming job with GPU results")
             else:
                 time.sleep(5)
         except Exception as e:
             print(f"some outbound problem occured: {e}")
 
-def gpu_worker(inbound: JoinableQueue, outbound: JoinableQueue, counter: JoinableQueue):
+def gpu_worker(inbound: JoinableQueue, outbound: JoinableQueue, counter: JoinableQueue, errors: JoinableQueue, gpuflag: JoinableQueue):
     print (f"gpu worker started")
     while True:
         if inbound.qsize() > 0:
             ip = inbound.get()
-            #print(f"gpu processing job for {ip}")
+            gpuflag.put(1)
+            errors.put(f"gpu processing job for {ip}")
             output_folder = "./" + ip.replace(".", "-") + "/save/"
             img_output_folder = output_folder + "images/"
 
@@ -262,6 +247,78 @@ def gpu_worker(inbound: JoinableQueue, outbound: JoinableQueue, counter: Joinabl
             outbound.put(ip)
             inbound.task_done()
             counter.put(1)
+            gpuflag.get()
+            gpuflag.task_done()
+
+def monitor(nodes, inbound, outbound, counter):
+    # crude term monitor with 3 custom bars.. todo: move to curses module
+    probar = tqdm(total=int(nodes), desc="Executed GPU jobs", position=2, bar_format='{desc}: {n_fmt} ({rate_fmt})                    ')
+    incbar = tqdm(total=int(nodes), desc="Inbound pipeline", position=1, bar_format='{desc}: {n_fmt}/{total_fmt} ({percentage:0.0f}%)                    ')
+    outbar = tqdm(total=int(nodes), desc="Outbound pipeline", position=0, bar_format='{desc}: {n_fmt}/{total_fmt} ({percentage:0.0f}%)                    ')
+    # keep main process for monitoring
+    while True:
+        incbar.n = inbound.qsize()
+        outbar.n = outbound.qsize()
+        if inpsize.qsize() > 0:
+            incbar.desc = Fore.GREEN + incbar.desc.strip(Fore.RED).strip(Fore.GREEN).strip(Fore.RESET) + Fore.RESET
+        else:
+            incbar.desc = Fore.RED + incbar.desc.strip(Fore.RED).strip(Fore.GREEN).strip(Fore.RESET) + Fore.RESET
+        if inbound.qsize()>0:
+            probar.desc = Fore.GREEN + probar.desc.strip(Fore.RED).strip(Fore.GREEN).strip(Fore.RESET) + Fore.RESET
+        else:
+            probar.desc = Fore.RED + probar.desc.strip(Fore.RED).strip(Fore.GREEN).strip(Fore.RESET) + Fore.RESET
+        if outbound.qsize()>0:
+            outbar.desc = Fore.GREEN + outbar.desc.strip(Fore.RED).strip(Fore.GREEN).strip(Fore.RESET) + Fore.RESET
+        else:
+            outbar.desc = Fore.RED + outbar.desc.strip(Fore.RED).strip(Fore.GREEN).strip(Fore.RESET) + Fore.RESET
+        incbar.refresh()
+        outbar.refresh()
+        probar.refresh()
+        while counter.qsize() > 0:
+            counter.get()
+            probar.update(1)
+            counter.task_done()
+        time.sleep(1)
+
+def monitor2(nodes, inbound, outbound, counter, inpsize, stdscr, errors, gpuflag):
+    gpujobsdone = 0
+    start = time.time()
+    curses.init_pair(1, curses.COLOR_GREEN, -1)
+    # do stuff
+    while True:
+        stdscr.clear()
+        while counter.qsize() > 0:
+            counter.get()
+            gpujobsdone += 1
+            counter.task_done()
+
+        if inpsize.qsize() > 0:
+            stdscr.addstr(0,0,"Downloading..", curses.A_BLINK + curses.color_pair(1))
+        else:
+            stdscr.addstr(0,0,"-----------  ")
+        stdscr.addstr(0,13,f"Incoming pipeline ({inbound.qsize()}/{nodes})")
+
+        if outbound.qsize()>0:
+            stdscr.addstr(1,0,"Uploading..",curses.A_BLINK + curses.color_pair(1))
+        else:
+            stdscr.addstr(1,0,"-----------  ")
+        stdscr.addstr(1,13,f"Outgoing pipeline ({outbound.qsize()}/{nodes})")
+
+        if gpuflag.qsize()>0:
+            stdscr.addstr(2,0,"Processing..", curses.A_BLINK + curses.color_pair(1))
+        else:
+            stdscr.addstr(2,0,"-----------  ")
+        stdscr.addstr(2,13,f"GPU jobs done:    {gpujobsdone}")
+
+        stdscr.addstr(3,0,f"GPU velocity: {round((gpujobsdone/(time.time()-start)), 2)} jobs/s")
+        if errors.qsize() > 0:
+            msg = errors.get()
+            errors.task_done()
+        stdscr.addstr(5,0,f"messages: {msg}                                                                      ")
+
+        stdscr.refresh()
+        time.sleep(1)
+        #stdscr.getkey()
 
 if __name__ == "__main__":
 
@@ -276,10 +333,13 @@ if __name__ == "__main__":
     nodes = sys.argv[1]
     location = None
     skip = None
+    local = False
     if len(sys.argv) > 2:
         location = sys.argv[2]
     if len(sys.argv) > 3:
         skip = sys.argv[3]
+    if len(sys.argv) > 4:
+        local = sys.argv[4]
     workers = []
 
     if skip is None:
@@ -319,52 +379,34 @@ if __name__ == "__main__":
                 if reg_compile.match(dir):
                     shutil.rmtree(dir)
 
-        # crude term monitor with 3 custom bars.. todo: move to curses module
-        probar = tqdm(total=int(nodes), desc="Executed GPU jobs", position=2, bar_format='{desc}: {n_fmt} ({rate_fmt})                    ')
-        incbar = tqdm(total=int(nodes), desc="Inbound pipeline", position=1, bar_format='{desc}: {n_fmt}/{total_fmt} ({percentage:0.0f}%)                    ')
-        outbar = tqdm(total=int(nodes), desc="Outbound pipeline", position=0, bar_format='{desc}: {n_fmt}/{total_fmt} ({percentage:0.0f}%)                    ')
+        
 
         #initialize 3 joinable queues to transfer messages between multiprocess processes
         inbound = JoinableQueue()
         outbound = JoinableQueue()
         counter = JoinableQueue()
         inpsize = JoinableQueue() # use this to communicate number of jobs downloading now
+        gpuflag = JoinableQueue() # use this to flag that gpu is processing
+        errors = JoinableQueue() # use this to capture errors and warnings and route them to curses display
 
         # launch separate processes with specialized workers
-        inb = Process(target=incoming_worker, args=[workers, inbound, inpsize], daemon=True).start()
+        inb = Process(target=incoming_worker, args=[workers, inbound, inpsize, errors], daemon=True).start()
         time.sleep(5)
-        otb = Process(target=outgoing_worker, args=[outbound], daemon=True).start()
+        otb = Process(target=outgoing_worker, args=[outbound, errors, local], daemon=True).start()
         time.sleep(5)
-        gpu1 = Process(target=gpu_worker, args=[inbound, outbound, counter], daemon=True).start()
-        gpu2 = Process(target=gpu_worker, args=[inbound, outbound, counter], daemon=True).start()
-        gpu3 = Process(target=gpu_worker, args=[inbound, outbound, counter], daemon=True).start()
+        #P = Pool(processes=3)
+        #gpu = P.map(gpu_worker, [inbound, outbound, counter])
+        gpu1 = Process(target=gpu_worker, args=[inbound, outbound, counter, errors, gpuflag], daemon=True).start()
+        gpu2 = Process(target=gpu_worker, args=[inbound, outbound, counter, errors, gpuflag], daemon=True).start()
+        gpu3 = Process(target=gpu_worker, args=[inbound, outbound, counter, errors, gpuflag], daemon=True).start()
 
-        # keep main process for monitoring
-        while True:
-            incbar.n = inbound.qsize()
-            outbar.n = outbound.qsize()
-            if inpsize.qsize() > 0:
-                incbar.desc = Fore.GREEN + incbar.desc.strip(Fore.RED).strip(Fore.GREEN).strip(Fore.RESET) + Fore.RESET
-            else:
-                incbar.desc = Fore.RED + incbar.desc.strip(Fore.RED).strip(Fore.GREEN).strip(Fore.RESET) + Fore.RESET
-            if inbound.qsize()>0:
-                probar.desc = Fore.GREEN + probar.desc.strip(Fore.RED).strip(Fore.GREEN).strip(Fore.RESET) + Fore.RESET
-            else:
-                probar.desc = Fore.RED + probar.desc.strip(Fore.RED).strip(Fore.GREEN).strip(Fore.RESET) + Fore.RESET
-            if outbound.qsize()>0:
-                outbar.desc = Fore.GREEN + outbar.desc.strip(Fore.RED).strip(Fore.GREEN).strip(Fore.RESET) + Fore.RESET
-            else:
-                outbar.desc = Fore.RED + outbar.desc.strip(Fore.RED).strip(Fore.GREEN).strip(Fore.RESET) + Fore.RESET
-            incbar.refresh()
-            outbar.refresh()
-            probar.refresh()
-            while counter.qsize() > 0:
-                counter.get()
-                probar.update(1)
-                counter.task_done()
-            time.sleep(1)
+        stdscr = curses.initscr()
+        sys.stdout.close()
+        #monitor(nodes, inbound, outbound, counter)
+        curses.wrapper(monitor2(nodes, inbound, outbound, counter, inpsize, stdscr, errors, gpuflag))
 
     except KeyboardInterrupt:
+        curses.endwin()
         print(f"[GPU] Abort! Deleting cloud infrastructure...")
 
         letters = string.ascii_lowercase
@@ -373,15 +415,6 @@ if __name__ == "__main__":
         pclient = ParallelSSHClient(workers, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False )
         pclient.scp_recv('/home/crawl/crawl.log', suffix + '_crawl.log')
 
-        '''
-        for ip in workers:
-            subprocess.call(
-                ["scp", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "crawl@" +
-                    ip + ":" + "crawl.log", ip + "_" + suffix + ".log"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-        '''
         trio.run(infrastructure.down)
         print(f"[infrastructure] Cloud infrastructure was shutdown")
         sys.exit()
