@@ -143,7 +143,7 @@ def gpu_worker(inbound: JoinableQueue, outbound: JoinableQueue, counter: Joinabl
             dlparse_df["PATH"] = "./" + \
                 ip.replace(".", "-") + "/" + dlparse_df["PATH"]
 
-            final_images = clip_filter.filter(dlparse_df, out_fname, output_folder)
+            final_images = clip_filter.filter(dlparse_df, out_fname, output_folder, errors)
             errors.put(f"last filtered {final_images} images")
 
             outbound.put(ip)
@@ -152,7 +152,7 @@ def gpu_worker(inbound: JoinableQueue, outbound: JoinableQueue, counter: Joinabl
             gpuflag.get()
             gpuflag.task_done()
 
-def monitor(nodes, inbound, outbound, counter):
+def monitor(nodes, inbound, outbound, counter, inpsize):
     # crude term monitor with 3 custom bars.. todo: move to curses module
     probar = tqdm(total=int(nodes), desc="Executed GPU jobs", position=2, bar_format='{desc}: {n_fmt} ({rate_fmt})                    ')
     incbar = tqdm(total=int(nodes), desc="Inbound pipeline", position=1, bar_format='{desc}: {n_fmt}/{total_fmt} ({percentage:0.0f}%)                    ')
@@ -297,24 +297,16 @@ if __name__ == "__main__":
         time.sleep(5)
         otb = Process(target=outgoing_worker, args=[outbound, errors, local], daemon=True).start()
         time.sleep(5)
+
+        monitor = Process(target=monitor, args=[nodes, inbound, outbound, counter, inpsize]).start()
+        #curses.wrapper(monitor2(nodes, inbound, outbound, counter, inpsize, stdscr, errors, gpuflag))        
         
-        #gpu_worker(inbound, outbound, counter, errors, gpuflag)
-
-        gpu1 = Process(target=gpu_worker, args=[inbound, outbound, counter, errors, gpuflag]).start()
-        #gpu2 = Process(target=gpu_worker, args=[inbound, outbound, counter, errors, gpuflag]).start()
-        #gpu3 = Process(target=gpu_worker, args=[inbound, outbound, counter, errors, gpuflag]).start()
-
-        #stdscr = curses.initscr()
-        #sys.stdout.close()
-        monitor(nodes, inbound, outbound, counter)
-        #curses.wrapper(monitor2(nodes, inbound, outbound, counter, inpsize, stdscr, errors, gpuflag))
-        while True:
-            time.sleep(5)
+        gpu_worker(inbound, outbound, counter, errors, gpuflag)
 
     except KeyboardInterrupt:
-        curses.nocbreak()
-        curses.echo()
-        curses.endwin()
+        #curses.nocbreak()
+        #curses.echo()
+        #curses.endwin()
 
         print(f"[GPU] Abort! Deleting cloud infrastructure...")
 

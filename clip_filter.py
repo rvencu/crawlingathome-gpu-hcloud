@@ -1,12 +1,12 @@
+from multiprocessing.queues import JoinableQueue
 import pickle
 from multiprocessing import cpu_count
 import clip
+import time
 import torch
 from PIL import Image
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-torch.multiprocessing.set_start_method('spawn') # good solution !!!!
-
 class CLIPDataset(torch.utils.data.Dataset):
     def __init__(self, dataframe, preprocess):
         self.dataframe = dataframe
@@ -46,7 +46,7 @@ class CLIP:
         ret_similarity = []
         batch_size = 128 if device == "cuda" else 8
         dataset = CLIPDataset(df, self.preprocess)
-        dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=cpu_count()-2, pin_memory=True)
+        dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=int(2*cpu_count()/3), pin_memory=True)
         for tensors, tokens in dataloader:
             image_features, similarities = self.similarity_imgalt(tensors, tokens)
             ret_image_features.extend(image_features)
@@ -140,21 +140,23 @@ def df_tfrecords(df, output_fname):
             tfrecord_writer.write(example.SerializeToString())
 
 
-def filter(df, out_fname, output_folder="./save/"):
-    print ("filtering")
+def filter(df, out_fname, output_folder, errors: JoinableQueue):
+    start = time.time()
     img_embeddings = df_clipfilter(df)
     df.to_csv(f"{output_folder}{out_fname}.csv", index=False, sep="|")
-    print ("embedding")
+    errors.put(f"CLIP ran in {round(time.time()-start,2)}")
+    start = time.time()
     img_embeds_sampleid = {}
     for i, img_embed_it in enumerate(img_embeddings):
         dfid_index = df.at[i, "SAMPLE_ID"]
         img_embeds_sampleid[str(dfid_index)] = img_embed_it
     with open(f"{output_folder}image_embedding_dict-{out_fname}.pkl", "wb") as f:
         pickle.dump(img_embeds_sampleid, f)
-    print ("tfrecords")
+    errors.put(f"Embeddings ran in {round(time.time()-start,2)}")
+    start = time.time()
     df_tfrecords(
         df,
         f"{output_folder}crawling_at_home_{out_fname}__00000-of-00001.tfrecord",
     )
-
+    errors.put(f"Tfrecords ran in {round(time.time()-start,2)}")
     return len(df)
