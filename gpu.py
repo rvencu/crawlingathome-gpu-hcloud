@@ -184,13 +184,11 @@ def outgoing_worker(queue: JoinableQueue, errors: JoinableQueue, local=False):
                 # send GPU results
                 shutil.make_archive(base + "/gpujobdone", "zip", base, "save")
 
-                #print (f"result ready for ip {ip}")
+                cmd = aclient.scp_send(base + "/gpujobdone.zip", "gpujobdone.zip")
                 if local:
                     os.system(f"mv {base}/gpujobdone.zip results/{time.time()}.zip")
                     aclient.execute("touch gpulocal")
                 else:    
-                    cmd = aclient.scp_send(base + "/gpujobdone.zip", "gpujobdone.zip")
-                    time.sleep(2)
                     os.remove(base + "/gpujobdone.zip")
                     aclient.execute("touch gpusemaphore")
 

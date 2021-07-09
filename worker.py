@@ -487,14 +487,14 @@ if __name__ == "__main__":
             print()
             print(f"receiving results from GPU")
 
-            if not gpulocal:
-                # GPU results received
-                with zipfile.ZipFile("gpujobdone.zip", 'r') as zip_ref:
-                    zip_ref.extractall(".")
-                os.remove("gpujobdone.zip")
-                os.remove("gpusemaphore")
+            # GPU results received
+            with zipfile.ZipFile("gpujobdone.zip", 'r') as zip_ref:
+                zip_ref.extractall(".")
+            os.remove("gpujobdone.zip")
+            if gpulocal:
+                os.remove("gpulocal")
             else:
-                os.remove("gpulocal")            
+                os.remove("gpusemaphore")
 
             while True:
                 try:
