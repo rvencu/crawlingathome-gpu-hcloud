@@ -45,7 +45,7 @@ class CLIP:
     def preprocess_images(self, df):
         ret_image_features = []
         ret_similarity = []
-        batch_size = 512 if device == "cuda" else 8
+        batch_size = 256 if device == "cuda" else 8
         dataset = CLIPDataset(df, self.preprocess)
         dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=int(2*cpu_count()/3), pin_memory=True)
         for tensors, tokens in tqdm(dataloader):

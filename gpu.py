@@ -3,6 +3,7 @@ import re
 import sys
 import time
 import trio
+import uuid
 import string
 import random
 import shutil
@@ -88,25 +89,26 @@ def outgoing_worker(queue: JoinableQueue, errors: JoinableQueue, local=False):
                 ip = queue.get()
                 
                 aclient = SSHClient(ip, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False)
-                base = "./" + str(ip.replace(".", "-"))
-                output_folder = base + "/save/"
-                img_output_folder = output_folder + "images/"
-
-                # clean img_output_folder now since we have all results do not want to transfer back all images...
-                try:
-                    shutil.rmtree(img_output_folder)
-                except OSError as e:
-                    print("[GPU] Error deleting images: %s - %s." %
-                        (e.filename, e.strerror))
-
-                # send GPU results
-                shutil.make_archive(base + "/gpujobdone", "zip", base, "save")
-
-                aclient.scp_send(base + "/gpujobdone.zip", "gpujobdone.zip")
+                
                 if local:
                     os.system(f"mv {base}/gpujobdone.zip results/{time.time()}.zip")
                     aclient.execute("touch gpulocal")
                 else:    
+                    base = "./" + str(ip.replace(".", "-"))
+                    output_folder = base + "/save/"
+                    img_output_folder = output_folder + "images/"
+
+                    # clean img_output_folder now since we have all results do not want to transfer back all images...
+                    try:
+                        shutil.rmtree(img_output_folder)
+                    except OSError as e:
+                        print("[GPU] Error deleting images: %s - %s." %
+                            (e.filename, e.strerror))
+
+                    # send GPU results
+                    shutil.make_archive(base + "/gpujobdone", "zip", base, "save")
+
+                    aclient.scp_send(base + "/gpujobdone.zip", "gpujobdone.zip")
                     os.remove(base + "/gpujobdone.zip")
                     aclient.execute("touch gpusemaphore")
 
@@ -122,8 +124,10 @@ def gpu_worker(inbound: JoinableQueue, outbound: JoinableQueue, counter: Joinabl
     print (f"gpu worker started")
     while True:
         if inbound.qsize() > concat - 1:
+            gpuflag.put(1)
             ips = []
             dframes = []
+            shards = []
             concat_parse = pd.DataFrame()
             for i in range(concat):
                 ip = inbound.get()
@@ -137,6 +141,7 @@ def gpu_worker(inbound: JoinableQueue, outbound: JoinableQueue, counter: Joinabl
                 # get name of csv file
                 out_path = all_csv_files[0]
                 out_fname = Path(out_path).stem.strip("_unfiltered").strip("_parsed").strip(".")
+                shards.append(out_fname)
 
                 # recreate parsed dataset and run CLIP filtering
                 dlparse_df = pd.read_csv(output_folder + out_fname + ".csv", sep="|")
@@ -149,10 +154,13 @@ def gpu_worker(inbound: JoinableQueue, outbound: JoinableQueue, counter: Joinabl
                 
             
             concat_parse = pd.concat(dframes, ignore_index=True)
-            concat_fname = str(time.time())
+            concat_fname = uuid.uuid4().hex
 
-            gpuflag.put(10)
             print(f"gpu processing job for {len(ips)} jobs")
+
+            with open("./save/" + concat_fname + ".txt", "wt") as f:
+                for item in shards:
+                    f.write(item + "\n")
             
             print (f"before deduplication {concat_parse.shape[0]}")
             concat_parse.drop_duplicates(subset=["URL","TEXT"], keep='last', inplace=True)
@@ -164,7 +172,7 @@ def gpu_worker(inbound: JoinableQueue, outbound: JoinableQueue, counter: Joinabl
             print(f"last filtered {final_images} images in {round(time.time()-start,2)} sec")
 
             for ip in ips:
-                #outbound.put(ip)
+                outbound.put(ip)
                 counter.put(1)
             gpuflag.get()
             gpuflag.task_done()
@@ -255,7 +263,7 @@ if __name__ == "__main__":
     location = None
     skip = None
     local = True
-    concat = 2 # how many shards to group for CLIP
+    concat = 16 # how many shards to group for CLIP
     if len(sys.argv) > 2:
         location = sys.argv[2]
     if len(sys.argv) > 3:
@@ -316,7 +324,7 @@ if __name__ == "__main__":
         otb = Process(target=outgoing_worker, args=[outbound, errors, local], daemon=True).start()
         time.sleep(5)
 
-        #monitor = Process(target=monitor, args=[nodes, inbound, outbound, counter, inpsize]).start()
+        monitor = Process(target=monitor, args=[nodes, inbound, outbound, counter, inpsize]).start()
         #curses.wrapper(monitor2(nodes, inbound, outbound, counter, inpsize, stdscr, errors, gpuflag))        
         
         gpu_worker(inbound, outbound, counter, errors, gpuflag, concat)
