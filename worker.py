@@ -496,42 +496,42 @@ if __name__ == "__main__":
             print(f"receiving results from GPU")
 
             # GPU results received
-            with zipfile.ZipFile("gpujobdone.zip", 'r') as zip_ref:
-                zip_ref.extractall(".")
-            os.remove("gpujobdone.zip")
+            
             if gpulocal:
                 os.remove("gpulocal")
             else:
+                with zipfile.ZipFile("gpujobdone.zip", 'r') as zip_ref:
+                    zip_ref.extractall(".")
+                os.remove("gpujobdone.zip")
                 os.remove("gpusemaphore")
 
-            while True:
-                try:
-                    client.log("Uploading results" + lastext)
-                except:
-                    time.sleep(5)
-                    continue
-                break
+                while True:
+                    try:
+                        client.log("Uploading results" + lastext)
+                    except:
+                        time.sleep(5)
+                        continue
+                    break
             
-            # reconstruct the filtered dataset from received csv, save to file and upload to dataset storage
-            filtered_df = pd.read_csv(output_folder + out_fname + ".csv", sep="|")
-            print (f"CLIP filtered {len(filtered_df)} in {round(time.time() - start2)} seconds")
-            print (f"CLIP efficiency {len(dlparse_df)/(time.time() - start2)} img/sec")
+                # reconstruct the filtered dataset from received csv, save to file and upload to dataset storage
+                filtered_df = pd.read_csv(output_folder + out_fname + ".csv", sep="|")
+                print (f"CLIP filtered {len(filtered_df)} in {round(time.time() - start2)} seconds")
+                print (f"CLIP efficiency {len(dlparse_df)/(time.time() - start2)} img/sec")
 
-            if not gpulocal:
                 upload_gdrive(f"{output_folder}image_embedding_dict-{out_fname}.pkl")
                 upload_gdrive(f"{output_folder}crawling_at_home_{out_fname}__00000-of-00001.tfrecord")
                 upload_gdrive(output_folder + out_fname + ".csv")
                 upload_gdrive(output_folder + out_fname + "_unfiltered.csv", True)
                 upload_gdrive(output_folder + out_fname + "_parsed.csv", True)
 
-            # update job stats to be displayed on next run on leaderboard
-            lastcount = len(filtered_df)
+                # update job stats to be displayed on next run on leaderboard
+                lastcount = len(filtered_df)
             last = round(time.time() - start0)
-            lasteff = round( (filtered_df.shape[0] * 100) / (time.time() - start0)) / 100
+            #lasteff = round( (filtered_df.shape[0] * 100) / (time.time() - start0)) / 100
 
             # we use job efficiency as KPI, i.e. the number of final pairs divided by total time taken by the entire job
             print(f"job completed in {last} seconds")
-            print(f"job efficiency {lasteff} pairs/sec")
+            #print(f"job efficiency {lasteff} pairs/sec")
 
             while True:
                 try:
