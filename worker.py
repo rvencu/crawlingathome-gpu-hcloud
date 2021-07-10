@@ -356,7 +356,7 @@ if __name__ == "__main__":
     # normally it reads while client.jobCount() > 0
     while True: # since we are so early into the project...
         try:
-            lastext = f". Last job eff: {lasteff}"
+            lastext = f". Last job duration: {last}"
 
             start = time.time()
             start0 = start
