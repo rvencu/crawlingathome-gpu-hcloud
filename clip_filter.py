@@ -148,9 +148,14 @@ def df_tfrecords(df, output_fname):
 
 
 def filter(df, out_fname, output_folder, errors: JoinableQueue):
+    results = []
     #start0 = start = time.time()
     img_embeddings, dff = df_clipfilter(df)
     dff.to_csv(f"{output_folder}{out_fname}.csv", index=False, sep="|")
+
+    #count results for each worker from resulting dff
+    dff["shard"] = dff.apply(lambda row: str(row.PATH).split("/")[1].replace("-","."), axis=1)
+    results = dff["shard"].value_counts()
     #print(f"CLIP ran in {round(time.time()-start,2)}")
     #start = time.time()
     img_embeds_sampleid = {}
@@ -167,4 +172,4 @@ def filter(df, out_fname, output_folder, errors: JoinableQueue):
     )
     #print(f"Tfrecords ran in {round(time.time()-start,2)}")
     #print(f"Job ran in {round(time.time()-start0,2)}")
-    return len(dff)
+    return len(dff), results

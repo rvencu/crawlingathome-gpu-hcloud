@@ -86,13 +86,13 @@ def outgoing_worker(queue: JoinableQueue, errors: JoinableQueue, local):
     while True:
         try:
             while queue.qsize() > 0:
-                ip = queue.get()
+                ip, filtered = queue.get()
                 
                 aclient = SSHClient(ip, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False)
                 
                 if local:
                     #os.system(f"mv {base}/gpujobdone.zip results/{time.time()}.zip")
-                    aclient.execute("touch /home/crawl/gpulocal")
+                    aclient.execute(f"echo {filtered} > /home/crawl/gpulocal")
                 else:    
                     base = "./" + str(ip.replace(".", "-"))
                     output_folder = base + "/save/"
@@ -123,6 +123,11 @@ def outgoing_worker(queue: JoinableQueue, errors: JoinableQueue, local):
 def gpu_worker(inbound: JoinableQueue, outbound: JoinableQueue, counter: JoinableQueue, errors: JoinableQueue, gpuflag: JoinableQueue, concat):
     print (f"gpu worker started")
     while True:
+        if not os.path.exists("./save/"):
+            os.makedirs("./save/")
+        if not os.path.exists("./stats/"):
+            os.makedirs("./stats/")
+
         if inbound.qsize() > concat - 1:
             gpuflag.put(1)
             ips = []
@@ -142,6 +147,7 @@ def gpu_worker(inbound: JoinableQueue, outbound: JoinableQueue, counter: Joinabl
                 out_path = all_csv_files[0]
                 out_fname = Path(out_path).stem.strip("_unfiltered").strip("_parsed").strip(".")
                 shards.append(out_fname)
+                os.system(f"mv {output_folder + out_fname}_parsed.csv ./stats/")
 
                 # recreate parsed dataset and run CLIP filtering
                 dlparse_df = pd.read_csv(output_folder + out_fname + ".csv", sep="|")
@@ -159,24 +165,22 @@ def gpu_worker(inbound: JoinableQueue, outbound: JoinableQueue, counter: Joinabl
 
             concat_fname = uuid.uuid4().hex
 
-            #print(f"gpu processing job for {len(ips)} jobs")
-
             with open("./save/" + concat_fname + ".txt", "wt") as f:
                 for item in shards:
                     f.write(item + "\n")
             
             #print (f"before deduplication {concat_parse.shape[0]}")
-            concat_parse.to_csv("./save/" + concat_fname + "_duplicated.csv", index=False, sep="|")
+            concat_parse.to_csv("./stats/" + concat_fname + "_duplicated.csv", index=False, sep="|")
             concat_parse.drop_duplicates(subset=["URL","TEXT"], keep='last', inplace=True)
             concat_parse.reset_index(inplace=True, drop=True)
-            concat_parse.to_csv("./save/" + concat_fname + "_unfiltered.csv", index=False, sep="|")
+            concat_parse.to_csv("./stats/" + concat_fname + "_unfiltered.csv", index=False, sep="|")
             #print (f"after deduplication {concat_parse.shape[0]}")
             start = time.time()
-            final_images = clip_filter.filter(concat_parse, concat_fname, "./save/", errors)
+            final_images, results = clip_filter.filter(concat_parse, concat_fname, "./save/", errors)
             print(f"last filtered {final_images} images in {round(time.time()-start,2)} sec")
 
             for ip in ips:
-                outbound.put(ip)
+                outbound.put((ip, results.get(ip)))
                 counter.put(1)
             
             gpuflag.get()
