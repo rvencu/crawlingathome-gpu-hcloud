@@ -76,9 +76,12 @@ def df_clipfilter(df):
     img_embedding, similarities = clip_filter.preprocess_images(df)
     tmp_embed = []
     print ("similarity is done")
+    df["dropped"] = False
+
     for i, img_embed in enumerate(tqdm(img_embedding)):
         if similarities[i] < sim_threshold:
-            df.drop(i, inplace=True)
+            #df.drop(i, inplace=True)
+            df.loc[df.index[i], 'dropped'] = True
             continue
 
         # get most similar categories
@@ -94,14 +97,18 @@ def df_clipfilter(df):
 
         underage_prob = clip_filter.prob(img_embed, clip_filter.underaged_categories)
         if underage_prob[0] < 4 or underage_prob[1] < 4 or any(x in df.at[i, "TEXT"] for x in underaged_text):
-            df.drop(i, inplace=True)
+            #df.drop(i, inplace=True)
+            df.loc[df.index[i], 'dropped'] = True
             continue
 
         animal_prob = clip_filter.prob(img_embed, clip_filter.animal_categories)
         if animal_prob[0] > 20:
-            df.drop(i, inplace=True)
+            #df.drop(i, inplace=True)
+            df.loc[df.index[i], 'dropped'] = True
             continue
         tmp_embed.append(img_embed)
+        
+    df = df[df["dropped"] == True]
     print ("why reset index to df here?")
     df.reset_index(drop=True, inplace=True)
     return tmp_embed
