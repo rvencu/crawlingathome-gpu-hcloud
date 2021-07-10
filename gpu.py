@@ -81,7 +81,7 @@ def incoming_worker(workers, queue: JoinableQueue, inpsize: JoinableQueue, error
         except Exception as e:
             print(f"some inbound problem occured: {e}")
 
-def outgoing_worker(queue: JoinableQueue, errors: JoinableQueue, local=False):
+def outgoing_worker(queue: JoinableQueue, errors: JoinableQueue, local):
     print (f"outbound worker started")
     while True:
         try:
@@ -92,7 +92,7 @@ def outgoing_worker(queue: JoinableQueue, errors: JoinableQueue, local=False):
                 
                 if local:
                     #os.system(f"mv {base}/gpujobdone.zip results/{time.time()}.zip")
-                    aclient.execute("touch gpulocal")
+                    aclient.execute("touch /home/crawl/gpulocal")
                 else:    
                     base = "./" + str(ip.replace(".", "-"))
                     output_folder = base + "/save/"
@@ -120,7 +120,7 @@ def outgoing_worker(queue: JoinableQueue, errors: JoinableQueue, local=False):
         except Exception as e:
             print(f"some outbound problem occured: {e}")
 
-def gpu_worker(inbound: JoinableQueue, outbound: JoinableQueue, counter: JoinableQueue, errors: JoinableQueue, gpuflag: JoinableQueue, concat=1):
+def gpu_worker(inbound: JoinableQueue, outbound: JoinableQueue, counter: JoinableQueue, errors: JoinableQueue, gpuflag: JoinableQueue, concat):
     print (f"gpu worker started")
     while True:
         if inbound.qsize() > concat - 1:
@@ -148,25 +148,29 @@ def gpu_worker(inbound: JoinableQueue, outbound: JoinableQueue, counter: Joinabl
                 dlparse_df["PATH"] = "./" + \
                     ip.replace(".", "-") + "/" + dlparse_df["PATH"]
 
+                if i==0:
+                    concat_parse = dlparse_df
+                else:
+                    concat_parse = concat_parse.append(dlparse_df, ignore_index=True)
+
                 dframes.append(dlparse_df)
                 inbound.task_done()
                 #final_images = clip_filter.filter(concat_parse, out_fname, output_folder, errors)
-                
-            
-            concat_parse = pd.concat(dframes, ignore_index=True)
+
             concat_fname = uuid.uuid4().hex
 
-            print(f"gpu processing job for {len(ips)} jobs")
+            #print(f"gpu processing job for {len(ips)} jobs")
 
             with open("./save/" + concat_fname + ".txt", "wt") as f:
                 for item in shards:
                     f.write(item + "\n")
             
-            print (f"before deduplication {concat_parse.shape[0]}")
+            #print (f"before deduplication {concat_parse.shape[0]}")
+            concat_parse.to_csv("./save/" + concat_fname + "_duplicated.csv", index=False, sep="|")
             concat_parse.drop_duplicates(subset=["URL","TEXT"], keep='last', inplace=True)
             concat_parse.reset_index(inplace=True, drop=True)
             concat_parse.to_csv("./save/" + concat_fname + "_unfiltered.csv", index=False, sep="|")
-            print (f"after deduplication {concat_parse.shape[0]}")
+            #print (f"after deduplication {concat_parse.shape[0]}")
             start = time.time()
             final_images = clip_filter.filter(concat_parse, concat_fname, "./save/", errors)
             print(f"last filtered {final_images} images in {round(time.time()-start,2)} sec")
@@ -174,6 +178,7 @@ def gpu_worker(inbound: JoinableQueue, outbound: JoinableQueue, counter: Joinabl
             for ip in ips:
                 outbound.put(ip)
                 counter.put(1)
+            
             gpuflag.get()
             gpuflag.task_done()
 

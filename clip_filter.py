@@ -148,23 +148,23 @@ def df_tfrecords(df, output_fname):
 
 
 def filter(df, out_fname, output_folder, errors: JoinableQueue):
-    start0 = start = time.time()
-    img_embeddings, df = df_clipfilter(df)
-    df.to_csv(f"{output_folder}{out_fname}.csv", index=False, sep="|")
+    #start0 = start = time.time()
+    img_embeddings, dff = df_clipfilter(df)
+    dff.to_csv(f"{output_folder}{out_fname}.csv", index=False, sep="|")
     #print(f"CLIP ran in {round(time.time()-start,2)}")
-    start = time.time()
+    #start = time.time()
     img_embeds_sampleid = {}
     for i, img_embed_it in enumerate(img_embeddings):
-        dfid_index = df.at[i, "SAMPLE_ID"]
+        dfid_index = dff.at[i, "SAMPLE_ID"]
         img_embeds_sampleid[str(dfid_index)] = img_embed_it
     with open(f"{output_folder}image_embedding_dict-{out_fname}.pkl", "wb") as f:
         pickle.dump(img_embeds_sampleid, f)
     #print(f"Embeddings ran in {round(time.time()-start,2)}")
-    start = time.time()
+    #start = time.time()
     df_tfrecords(
-        df,
+        dff,
         f"{output_folder}crawling_at_home_{out_fname}__00000-of-00001.tfrecord",
     )
     #print(f"Tfrecords ran in {round(time.time()-start,2)}")
     #print(f"Job ran in {round(time.time()-start0,2)}")
-    return len(df)
+    return len(dff)
