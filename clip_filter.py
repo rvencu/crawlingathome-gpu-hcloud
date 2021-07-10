@@ -45,7 +45,7 @@ class CLIP:
     def preprocess_images(self, df):
         ret_image_features = []
         ret_similarity = []
-        batch_size = 256 if device == "cuda" else 8
+        batch_size = 512 if device == "cuda" else 8
         dataset = CLIPDataset(df, self.preprocess)
         dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=int(2*cpu_count()/3), pin_memory=True)
         for tensors, tokens in tqdm(dataloader):
@@ -75,7 +75,8 @@ def df_clipfilter(df):
 
     img_embedding, similarities = clip_filter.preprocess_images(df)
     tmp_embed = []
-    for i, img_embed in enumerate(img_embedding):
+    print ("similarity is done")
+    for i, img_embed in enumerate(tqdm(img_embedding)):
         if similarities[i] < sim_threshold:
             df.drop(i, inplace=True)
             continue
@@ -101,6 +102,7 @@ def df_clipfilter(df):
             df.drop(i, inplace=True)
             continue
         tmp_embed.append(img_embed)
+    print ("why reset index to df here?")
     df.reset_index(drop=True, inplace=True)
     return tmp_embed
 
@@ -142,10 +144,10 @@ def df_tfrecords(df, output_fname):
 
 
 def filter(df, out_fname, output_folder, errors: JoinableQueue):
-    start = time.time()
+    start0 = start = time.time()
     img_embeddings = df_clipfilter(df)
     df.to_csv(f"{output_folder}{out_fname}.csv", index=False, sep="|")
-    errors.put(f"CLIP ran in {round(time.time()-start,2)}")
+    print(f"CLIP ran in {round(time.time()-start,2)}")
     start = time.time()
     img_embeds_sampleid = {}
     for i, img_embed_it in enumerate(img_embeddings):
@@ -153,11 +155,12 @@ def filter(df, out_fname, output_folder, errors: JoinableQueue):
         img_embeds_sampleid[str(dfid_index)] = img_embed_it
     with open(f"{output_folder}image_embedding_dict-{out_fname}.pkl", "wb") as f:
         pickle.dump(img_embeds_sampleid, f)
-    errors.put(f"Embeddings ran in {round(time.time()-start,2)}")
+    print(f"Embeddings ran in {round(time.time()-start,2)}")
     start = time.time()
     df_tfrecords(
         df,
         f"{output_folder}crawling_at_home_{out_fname}__00000-of-00001.tfrecord",
     )
-    errors.put(f"Tfrecords ran in {round(time.time()-start,2)}")
+    print(f"Tfrecords ran in {round(time.time()-start,2)}")
+    print(f"Job ran in {round(time.time()-start0,2)}")
     return len(df)

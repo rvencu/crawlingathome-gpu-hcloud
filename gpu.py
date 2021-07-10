@@ -255,7 +255,7 @@ if __name__ == "__main__":
     location = None
     skip = None
     local = True
-    concat = 10 # how many shards to group for CLIP
+    concat = 2 # how many shards to group for CLIP
     if len(sys.argv) > 2:
         location = sys.argv[2]
     if len(sys.argv) > 3:
