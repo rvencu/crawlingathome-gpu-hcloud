@@ -6,12 +6,14 @@ import trio
 import ujson
 import shutil
 import random
+import hashlib
 import zipfile
 import pandas as pd
 from glob import glob
 from uuid import uuid1
 from io import BytesIO
 from requests import get
+from bloom_filter2 import BloomFilter
 from urllib.parse import urljoin, urlparse
 sys.path.append('./crawlingathome-worker/')
 from PIL import Image, ImageFile, UnidentifiedImageError 
@@ -71,10 +73,13 @@ def parse_wat(content, start, line_count):
     with open("crawlingathome-gpu-hcloud/blocklists/failed-domains.txt","r") as f:
         failed = set(f.read().splitlines())
     blocked |= failed # merge the 2 sets and use this to reduce the number of attempted links, reduce crawling time.
+    '''
     duplicates = set()
     with open("crawlingathome-gpu-hcloud/blocklists/5Mduplicates.txt","rt") as f:
         duplicates = set(f.read().splitlines())
     print (f"duplicates of size {len(duplicates)}")
+    '''
+    bloom = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("crawlingathome-gpu-hcloud/blocklists/bloom.bin",-1))
 
     deduped = 0
     valid_data = []
@@ -123,8 +128,9 @@ def parse_wat(content, start, line_count):
                 if not url.startswith("http"):
                     url = urljoin(base_url, url)
                 # reject if pair is a duplicate
-                concat = str(hash(url + alt_text))
-                if concat in duplicates:
+                #concat = str(hash(url + alt_text))
+                concat = hashlib.md5(url + alt_text).hexdigest()
+                if concat in bloom: #duplicates:
                     deduped += 1
                     continue
                 valid_data.append((url, alt_text, license))
