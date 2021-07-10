@@ -91,7 +91,7 @@ def outgoing_worker(queue: JoinableQueue, errors: JoinableQueue, local=False):
                 aclient = SSHClient(ip, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False)
                 
                 if local:
-                    os.system(f"mv {base}/gpujobdone.zip results/{time.time()}.zip")
+                    #os.system(f"mv {base}/gpujobdone.zip results/{time.time()}.zip")
                     aclient.execute("touch gpulocal")
                 else:    
                     base = "./" + str(ip.replace(".", "-"))

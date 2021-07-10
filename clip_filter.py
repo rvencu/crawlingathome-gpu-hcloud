@@ -75,13 +75,11 @@ def df_clipfilter(df):
 
     img_embedding, similarities = clip_filter.preprocess_images(df)
     tmp_embed = []
-    print ("similarity is done")
-    df["dropped"] = False
 
     for i, img_embed in enumerate(tqdm(img_embedding)):
         if similarities[i] < sim_threshold:
             #df.drop(i, inplace=True)
-            df.loc[df.index[i], 'dropped'] = True
+            df.at[i, 'dropped'] = True
             continue
 
         # get most similar categories
@@ -98,18 +96,18 @@ def df_clipfilter(df):
         underage_prob = clip_filter.prob(img_embed, clip_filter.underaged_categories)
         if underage_prob[0] < 4 or underage_prob[1] < 4 or any(x in df.at[i, "TEXT"] for x in underaged_text):
             #df.drop(i, inplace=True)
-            df.loc[df.index[i], 'dropped'] = True
+            df.at[i, 'dropped'] = True
             continue
 
         animal_prob = clip_filter.prob(img_embed, clip_filter.animal_categories)
         if animal_prob[0] > 20:
             #df.drop(i, inplace=True)
-            df.loc[df.index[i], 'dropped'] = True
+            df.at[i, 'dropped'] = True
             continue
         tmp_embed.append(img_embed)
+        df.at[i, 'dropped'] = False
         
-    df = df[df["dropped"] == True]
-    print ("why reset index to df here?")
+    df = df[df["dropped"] == False]
     df.reset_index(drop=True, inplace=True)
     return tmp_embed
 
@@ -154,7 +152,7 @@ def filter(df, out_fname, output_folder, errors: JoinableQueue):
     start0 = start = time.time()
     img_embeddings = df_clipfilter(df)
     df.to_csv(f"{output_folder}{out_fname}.csv", index=False, sep="|")
-    print(f"CLIP ran in {round(time.time()-start,2)}")
+    #print(f"CLIP ran in {round(time.time()-start,2)}")
     start = time.time()
     img_embeds_sampleid = {}
     for i, img_embed_it in enumerate(img_embeddings):
@@ -162,12 +160,12 @@ def filter(df, out_fname, output_folder, errors: JoinableQueue):
         img_embeds_sampleid[str(dfid_index)] = img_embed_it
     with open(f"{output_folder}image_embedding_dict-{out_fname}.pkl", "wb") as f:
         pickle.dump(img_embeds_sampleid, f)
-    print(f"Embeddings ran in {round(time.time()-start,2)}")
+    #print(f"Embeddings ran in {round(time.time()-start,2)}")
     start = time.time()
     df_tfrecords(
         df,
         f"{output_folder}crawling_at_home_{out_fname}__00000-of-00001.tfrecord",
     )
-    print(f"Tfrecords ran in {round(time.time()-start,2)}")
-    print(f"Job ran in {round(time.time()-start0,2)}")
+    #print(f"Tfrecords ran in {round(time.time()-start,2)}")
+    #print(f"Job ran in {round(time.time()-start0,2)}")
     return len(df)
