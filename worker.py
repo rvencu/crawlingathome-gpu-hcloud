@@ -46,7 +46,7 @@ def remove_bad_chars(text):
     return "".join(c for c in text if c.isprintable())
 
 
-def parse_wat(content, start, line_count):
+def parse_wat(content, start, line_count, blocked, bloom):
     """
     This function checks the wat file content and attempts to extract valid candidates of image urls and alt texts
 
@@ -66,20 +66,7 @@ def parse_wat(content, start, line_count):
     # failed-domains.txt contains failed domains, i.e. domains with image links and suitable alt texts that actually
     # do not produce any image. domains that mayb dissapeared, or are good at blocking scrapers. List is also learned from
     # past crawling effort
-    blocked = set()
-    with open("crawlingathome-gpu-hcloud/blocklists/blocklist-domain.txt","r") as f:
-        blocked = set(f.read().splitlines())
-    failed = set()
-    with open("crawlingathome-gpu-hcloud/blocklists/failed-domains.txt","r") as f:
-        failed = set(f.read().splitlines())
-    blocked |= failed # merge the 2 sets and use this to reduce the number of attempted links, reduce crawling time.
-    '''
-    duplicates = set()
-    with open("crawlingathome-gpu-hcloud/blocklists/5Mduplicates.txt","rt") as f:
-        duplicates = set(f.read().splitlines())
-    print (f"duplicates of size {len(duplicates)}")
-    '''
-    bloom = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("crawlingathome-gpu-hcloud/blocklists/bloom.bin",-1))
+    
 
     deduped = 0
     valid_data = []
@@ -414,6 +401,21 @@ if __name__ == "__main__":
             start = time.time()
             print (f"[crawling@home] shard id {out_fname}") # in case test fails, we need to remove bad data
 
+            blocked = set()
+            with open("crawlingathome-gpu-hcloud/blocklists/blocklist-domain.txt","r") as f:
+                blocked = set(f.read().splitlines())
+            failed = set()
+            with open("crawlingathome-gpu-hcloud/blocklists/failed-domains.txt","r") as f:
+                failed = set(f.read().splitlines())
+            blocked |= failed # merge the 2 sets and use this to reduce the number of attempted links, reduce crawling time.
+            '''
+            duplicates = set()
+            with open("crawlingathome-gpu-hcloud/blocklists/5Mduplicates.txt","rt") as f:
+                duplicates = set(f.read().splitlines())
+            print (f"duplicates of size {len(duplicates)}")
+            '''
+            bloom = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("crawlingathome-gpu-hcloud/blocklists/bloom.bin",-1))
+
             while True:
                 try:
                     client.log("Processing shard" + lastext)
@@ -424,7 +426,7 @@ if __name__ == "__main__":
 
             # parse valid links from wat file
             with open("shard.wat", "r") as infile:
-                parsed_data, deduped = parse_wat(infile, start_index, lines)
+                parsed_data, deduped = parse_wat(infile, start_index, lines, blocked, bloom)
             print(time.time()-start)
             start = time.time()
             print ("parsed wat")
