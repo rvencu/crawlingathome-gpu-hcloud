@@ -1,10 +1,10 @@
-from multiprocessing.queues import JoinableQueue
-import pickle
-from multiprocessing import cpu_count
 import clip
 import time
 import torch
+import pickle
 from PIL import Image
+from multiprocessing import cpu_count
+from multiprocessing.queues import JoinableQueue
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 class CLIPDataset(torch.utils.data.Dataset):
@@ -44,7 +44,7 @@ class CLIP:
     def preprocess_images(self, df):
         ret_image_features = []
         ret_similarity = []
-        batch_size = 128 if device == "cuda" else 8
+        batch_size = 256 if device == "cuda" else 8
         dataset = CLIPDataset(df, self.preprocess)
         dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=int(2*cpu_count()/3), pin_memory=True)
         for tensors, tokens in dataloader:
@@ -74,9 +74,11 @@ def df_clipfilter(df):
 
     img_embedding, similarities = clip_filter.preprocess_images(df)
     tmp_embed = []
+
     for i, img_embed in enumerate(img_embedding):
         if similarities[i] < sim_threshold:
-            df.drop(i, inplace=True)
+            #df.drop(i, inplace=True)
+            df.at[i, 'dropped'] = True
             continue
 
         # get most similar categories
@@ -92,16 +94,21 @@ def df_clipfilter(df):
 
         underage_prob = clip_filter.prob(img_embed, clip_filter.underaged_categories)
         if underage_prob[0] < 4 or underage_prob[1] < 4 or any(x in df.at[i, "TEXT"] for x in underaged_text):
-            df.drop(i, inplace=True)
+            #df.drop(i, inplace=True)
+            df.at[i, 'dropped'] = True
             continue
 
         animal_prob = clip_filter.prob(img_embed, clip_filter.animal_categories)
         if animal_prob[0] > 20:
-            df.drop(i, inplace=True)
+            #df.drop(i, inplace=True)
+            df.at[i, 'dropped'] = True
             continue
         tmp_embed.append(img_embed)
+        df.at[i, 'dropped'] = False
+        
+    df = df[df["dropped"] != True]
     df.reset_index(drop=True, inplace=True)
-    return tmp_embed
+    return tmp_embed, df
 
 
 def df_tfrecords(df, output_fname):
@@ -141,22 +148,28 @@ def df_tfrecords(df, output_fname):
 
 
 def filter(df, out_fname, output_folder, errors: JoinableQueue):
-    start = time.time()
-    img_embeddings = df_clipfilter(df)
-    df.to_csv(f"{output_folder}{out_fname}.csv", index=False, sep="|")
-    errors.put(f"CLIP ran in {round(time.time()-start,2)}")
-    start = time.time()
+    results = []
+    #start0 = start = time.time()
+    img_embeddings, dff = df_clipfilter(df)
+    dff.to_csv(f"{output_folder}{out_fname}.csv", index=False, sep="|")
+
+    #count results for each worker from resulting dff
+    dff["shard"] = dff.apply(lambda row: str(row.PATH).split("/")[1].replace("-","."), axis=1)
+    results = dff["shard"].value_counts()
+    #print(f"CLIP ran in {round(time.time()-start,2)}")
+    #start = time.time()
     img_embeds_sampleid = {}
     for i, img_embed_it in enumerate(img_embeddings):
-        dfid_index = df.at[i, "SAMPLE_ID"]
+        dfid_index = dff.at[i, "SAMPLE_ID"]
         img_embeds_sampleid[str(dfid_index)] = img_embed_it
     with open(f"{output_folder}image_embedding_dict-{out_fname}.pkl", "wb") as f:
         pickle.dump(img_embeds_sampleid, f)
-    errors.put(f"Embeddings ran in {round(time.time()-start,2)}")
-    start = time.time()
+    #print(f"Embeddings ran in {round(time.time()-start,2)}")
+    #start = time.time()
     df_tfrecords(
-        df,
+        dff,
         f"{output_folder}crawling_at_home_{out_fname}__00000-of-00001.tfrecord",
     )
-    errors.put(f"Tfrecords ran in {round(time.time()-start,2)}")
-    return len(df)
+    #print(f"Tfrecords ran in {round(time.time()-start,2)}")
+    #print(f"Job ran in {round(time.time()-start0,2)}")
+    return len(dff), results

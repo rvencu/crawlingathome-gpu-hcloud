@@ -227,6 +227,14 @@ def last_status(host,path):
     '''
     return read.stdout
 
+def reset_workers():
+    workers = []
+    with open("workers.txt", "r") as f:
+        for line in f.readlines():
+            workers.append(line.strip("\n"))
+    pclient = ParallelSSHClient(workers, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False )
+    output = pclient.run_command('source worker-reset.sh', sudo=True)
+    pclient.join(output)
 
 if __name__ == "__main__":
     command = sys.argv[1]
@@ -253,3 +261,6 @@ if __name__ == "__main__":
     elif command == "down":
         trio.run(down)
         print (f"[swarm] Cloud swarm was shutdown")
+    elif command == "reset":
+        reset_workers()
+        print(f"[swarm] All workers were reset")

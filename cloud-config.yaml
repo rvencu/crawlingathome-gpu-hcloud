@@ -26,6 +26,22 @@ write_files:
     CAH_NICKNAME="<<your_nickname>>"
     PYTHONHASHSEED=0
   append: true
+- path: /home/crawl/worker-reset.sh
+  permissions: '0744'
+  content: |
+    #!/bin/bash
+    # Updates and resets the worker via SSH command
+    rm -rf /home/crawl/gpujob.zip
+    rm -rf /home/crawl/gpujobdone.zip
+    rm -rf /home/crawl/semaphore
+    rm -rf /home/crawl/gpusemaphore
+    rm -rf /home/crawl/gpuabort
+    rm -rf /home/crawl/gpulocal
+    cd crawlingathome-gpu-hcloud
+    rm worker.py
+    wget https://raw.githubusercontent.com/rvencu/crawlingathome-gpu-hcloud/main/worker.py
+    chown crawl:adm -R /home/crawl/
+    systemctl restart crawl
 runcmd:
  - [ ls, -l, / ]
  - [ sh, -xc, "echo $(date) ': hello crawl!'" ]
