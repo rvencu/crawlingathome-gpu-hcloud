@@ -129,7 +129,7 @@ def parse_wat(content, start, line_count):
                     url = urljoin(base_url, url)
                 # reject if pair is a duplicate
                 #concat = str(hash(url + alt_text))
-                concat = hashlib.md5(url + alt_text).hexdigest()
+                concat = hashlib.md5((url + alt_text).encode("utf-8")).hexdigest()
                 if concat in bloom: #duplicates:
                     deduped += 1
                     continue
