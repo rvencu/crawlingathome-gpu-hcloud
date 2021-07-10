@@ -498,6 +498,8 @@ if __name__ == "__main__":
             # GPU results received
             
             if gpulocal:
+                with open("gpulocal","rt") as f:
+                    filtered = f.read().strip()
                 os.remove("gpulocal")
             else:
                 with zipfile.ZipFile("gpujobdone.zip", 'r') as zip_ref:
@@ -525,7 +527,7 @@ if __name__ == "__main__":
                 upload_gdrive(output_folder + out_fname + "_parsed.csv", True)
 
                 # update job stats to be displayed on next run on leaderboard
-                lastcount = len(filtered_df)
+                filtered = len(filtered_df)
             last = round(time.time() - start0)
             #lasteff = round( (filtered_df.shape[0] * 100) / (time.time() - start0)) / 100
 
@@ -535,7 +537,7 @@ if __name__ == "__main__":
 
             while True:
                 try:
-                    client._markjobasdone(len(filtered_df))
+                    client._markjobasdone(filtered)
                 except:
                     time.sleep(5)
                     continue
