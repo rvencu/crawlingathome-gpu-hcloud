@@ -236,6 +236,21 @@ def reset_workers():
     output = pclient.run_command('systemctl restart crawl', sudo=True)
     pclient.join(output)
 
+def update_workers():
+    workers = []
+    with open("workers.txt", "r") as f:
+        for line in f.readlines():
+            workers.append(line.strip("\n"))
+    pclient = ParallelSSHClient(workers, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False )
+    output = pclient.run_command('cd crawlingathome-gpu-hcloud')
+    pclient.join(output)
+    output = pclient.run_command('rm worker.py')
+    pclient.join(output)
+    output = pclient.run_command('wget https://raw.githubusercontent.com/rvencu/crawlingathome-gpu-hcloud/main/worker.py')
+    pclient.join(output)
+    output = pclient.run_command('systemctl restart crawl', sudo=True)
+    pclient.join(output)
+
 
 if __name__ == "__main__":
     command = sys.argv[1]
@@ -265,3 +280,6 @@ if __name__ == "__main__":
     elif command == "reset":
         reset_workers()
         print(f"[swarm] All workers were reset")
+    elif command == "update":
+        update_workers()
+        print(f"[swarm] All workers were updated at the current script")
