@@ -106,9 +106,9 @@ def df_clipfilter(df):
         tmp_embed.append(img_embed)
         df.at[i, 'dropped'] = False
         
-    df = df[df["dropped"] == False]
+    df = df[df["dropped"] != True]
     df.reset_index(drop=True, inplace=True)
-    return tmp_embed
+    return tmp_embed, df
 
 
 def df_tfrecords(df, output_fname):
@@ -149,7 +149,7 @@ def df_tfrecords(df, output_fname):
 
 def filter(df, out_fname, output_folder, errors: JoinableQueue):
     start0 = start = time.time()
-    img_embeddings = df_clipfilter(df)
+    img_embeddings, df = df_clipfilter(df)
     df.to_csv(f"{output_folder}{out_fname}.csv", index=False, sep="|")
     #print(f"CLIP ran in {round(time.time()-start,2)}")
     start = time.time()
