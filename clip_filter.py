@@ -1,11 +1,10 @@
-from multiprocessing.queues import JoinableQueue
-import pickle
-from multiprocessing import cpu_count
 import clip
 import time
 import torch
+import pickle
 from PIL import Image
-from tqdm import tqdm
+from multiprocessing import cpu_count
+from multiprocessing.queues import JoinableQueue
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 class CLIPDataset(torch.utils.data.Dataset):
@@ -48,7 +47,7 @@ class CLIP:
         batch_size = 256 if device == "cuda" else 8
         dataset = CLIPDataset(df, self.preprocess)
         dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=int(2*cpu_count()/3), pin_memory=True)
-        for tensors, tokens in tqdm(dataloader):
+        for tensors, tokens in dataloader:
             image_features, similarities = self.similarity_imgalt(tensors, tokens)
             ret_image_features.extend(image_features)
             ret_similarity.extend(similarities)
@@ -76,7 +75,7 @@ def df_clipfilter(df):
     img_embedding, similarities = clip_filter.preprocess_images(df)
     tmp_embed = []
 
-    for i, img_embed in enumerate(tqdm(img_embedding)):
+    for i, img_embed in enumerate(img_embedding):
         if similarities[i] < sim_threshold:
             #df.drop(i, inplace=True)
             df.at[i, 'dropped'] = True
