@@ -5,6 +5,7 @@ import clip
 import time
 import torch
 from PIL import Image
+from tqdm import tqdm
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 class CLIPDataset(torch.utils.data.Dataset):
@@ -44,10 +45,10 @@ class CLIP:
     def preprocess_images(self, df):
         ret_image_features = []
         ret_similarity = []
-        batch_size = 128 if device == "cuda" else 8
+        batch_size = 256 if device == "cuda" else 8
         dataset = CLIPDataset(df, self.preprocess)
         dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=int(2*cpu_count()/3), pin_memory=True)
-        for tensors, tokens in dataloader:
+        for tensors, tokens in tqdm(dataloader):
             image_features, similarities = self.similarity_imgalt(tensors, tokens)
             ret_image_features.extend(image_features)
             ret_similarity.extend(similarities)

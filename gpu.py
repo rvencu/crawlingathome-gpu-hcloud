@@ -118,14 +118,15 @@ def outgoing_worker(queue: JoinableQueue, errors: JoinableQueue, local=False):
         except Exception as e:
             print(f"some outbound problem occured: {e}")
 
-def gpu_worker(inbound: JoinableQueue, outbound: JoinableQueue, counter: JoinableQueue, errors: JoinableQueue, gpuflag: JoinableQueue, test=False):
+def gpu_worker(inbound: JoinableQueue, outbound: JoinableQueue, counter: JoinableQueue, errors: JoinableQueue, gpuflag: JoinableQueue, concat=1):
     print (f"gpu worker started")
     while True:
-        if inbound.qsize() > 10:
+        if inbound.qsize() > concat - 1:
             ips = []
-            concat_parse = None
-            for i in range(10):
-                ip = inbound.get_nowait()
+            dframes = []
+            concat_parse = pd.DataFrame()
+            for i in range(concat):
+                ip = inbound.get()
                 output_folder = "./" + ip.replace(".", "-") + "/save/"
                 ips.append(ip)
 
@@ -141,29 +142,30 @@ def gpu_worker(inbound: JoinableQueue, outbound: JoinableQueue, counter: Joinabl
                 dlparse_df = pd.read_csv(output_folder + out_fname + ".csv", sep="|")
                 dlparse_df["PATH"] = "./" + \
                     ip.replace(".", "-") + "/" + dlparse_df["PATH"]
+
+                dframes.append(dlparse_df)
+                inbound.task_done()
+                #final_images = clip_filter.filter(concat_parse, out_fname, output_folder, errors)
                 
-                if i==0:
-                    concat_parse = dlparse_df
-                else:
-                    concat_parse = pd.concat([concat_parse,dlparse_df])
             
-            batch_fname = str(time.time())
+            concat_parse = pd.concat(dframes, ignore_index=True)
+            concat_fname = str(time.time())
 
             gpuflag.put(10)
-            errors.put(f"gpu processing job for {ips}")
+            print(f"gpu processing job for {len(ips)} jobs")
             
             print (f"before deduplication {concat_parse.shape[0]}")
             concat_parse.drop_duplicates(subset=["URL","TEXT"], keep='last', inplace=True)
-            concat_parse.to_csv(batch_fname + "_unfiltered.csv", index=False, sep="|")
+            concat_parse.reset_index(inplace=True, drop=True)
+            concat_parse.to_csv("./save/" + concat_fname + "_unfiltered.csv", index=False, sep="|")
             print (f"after deduplication {concat_parse.shape[0]}")
-
-            final_images = clip_filter.filter(concat_parse, batch_fname, ".", errors)
-            errors.put(f"last filtered {final_images} images")
+            start = time.time()
+            final_images = clip_filter.filter(concat_parse, concat_fname, "./save/", errors)
+            print(f"last filtered {final_images} images in {round(time.time()-start,2)} sec")
 
             for ip in ips:
-                outbound.put(ip)
-                #inbound.task_done()
-            counter.put(10)
+                #outbound.put(ip)
+                counter.put(1)
             gpuflag.get()
             gpuflag.task_done()
 
@@ -253,6 +255,7 @@ if __name__ == "__main__":
     location = None
     skip = None
     local = True
+    concat = 10 # how many shards to group for CLIP
     if len(sys.argv) > 2:
         location = sys.argv[2]
     if len(sys.argv) > 3:
@@ -313,10 +316,10 @@ if __name__ == "__main__":
         otb = Process(target=outgoing_worker, args=[outbound, errors, local], daemon=True).start()
         time.sleep(5)
 
-        monitor = Process(target=monitor, args=[nodes, inbound, outbound, counter, inpsize]).start()
+        #monitor = Process(target=monitor, args=[nodes, inbound, outbound, counter, inpsize]).start()
         #curses.wrapper(monitor2(nodes, inbound, outbound, counter, inpsize, stdscr, errors, gpuflag))        
         
-        gpu_worker(inbound, outbound, counter, errors, gpuflag)
+        gpu_worker(inbound, outbound, counter, errors, gpuflag, concat)
 
     except KeyboardInterrupt:
         #curses.nocbreak()
