@@ -154,7 +154,7 @@ def filter(df, out_fname, output_folder, errors: JoinableQueue):
     dff.to_csv(f"{output_folder}{out_fname}.csv", index=False, sep="|")
 
     #count results for each worker from resulting dff
-    dff["shard"] = dff.apply(lambda row: str(row.PATH).split("/")[1].replace("-","."), axis=1)
+    dff["shard"] = dff.apply(lambda row: str(row.PATH).split("/")[2].replace("-","."), axis=1)
     results = dff["shard"].value_counts()
     #print(f"CLIP ran in {round(time.time()-start,2)}")
     #start = time.time()

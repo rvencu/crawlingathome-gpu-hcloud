@@ -129,6 +129,8 @@ def gpu_worker(inbound: JoinableQueue, outbound: JoinableQueue, counter: Joinabl
             os.makedirs("./stats/")
 
         if inbound.qsize() > concat - 1:
+            concat_fname = uuid.uuid4().hex # use this name also for the temp folder to collect job files
+            os.makedirs("./"+concat_fname)
             gpuflag.put(1)
             ips = []
             dframes = []
@@ -136,7 +138,10 @@ def gpu_worker(inbound: JoinableQueue, outbound: JoinableQueue, counter: Joinabl
             concat_parse = pd.DataFrame()
             for i in range(concat):
                 ip = inbound.get()
-                output_folder = "./" + ip.replace(".", "-") + "/save/"
+                #move the files asap so the worker can continue to send files in its incoming folder
+                output_folder = "./" + concat_fname + "/" + ip.replace(".", "-") + "/save/"
+                os.makedirs("./" + concat_fname + "/" + ip.replace(".", "-") + "/save/")
+                os.system(f"mv -f ./{ip.replace('.', '-')}/* ./{concat_fname}/{ip.replace('.', '-')}/")
                 ips.append(ip)
 
                 all_csv_files = []
@@ -151,8 +156,7 @@ def gpu_worker(inbound: JoinableQueue, outbound: JoinableQueue, counter: Joinabl
 
                 # recreate parsed dataset and run CLIP filtering
                 dlparse_df = pd.read_csv(output_folder + out_fname + ".csv", sep="|")
-                dlparse_df["PATH"] = "./" + \
-                    ip.replace(".", "-") + "/" + dlparse_df["PATH"]
+                dlparse_df["PATH"] = "./" + concat_fname + "/" + ip.replace(".", "-") + "/" + dlparse_df["PATH"]
 
                 if i==0:
                     concat_parse = dlparse_df
@@ -160,10 +164,7 @@ def gpu_worker(inbound: JoinableQueue, outbound: JoinableQueue, counter: Joinabl
                     concat_parse = concat_parse.append(dlparse_df, ignore_index=True)
 
                 dframes.append(dlparse_df)
-                inbound.task_done()
-                #final_images = clip_filter.filter(concat_parse, out_fname, output_folder, errors)
-
-            concat_fname = uuid.uuid4().hex
+                inbound.task_done()          
 
             with open("./save/" + concat_fname + ".txt", "wt") as f:
                 for item in shards:
@@ -182,6 +183,8 @@ def gpu_worker(inbound: JoinableQueue, outbound: JoinableQueue, counter: Joinabl
             for ip in ips:
                 outbound.put((ip, results.get(ip)))
                 counter.put(1)
+
+            shutil.rmtree(concat_fname)
             
             gpuflag.get()
             gpuflag.task_done()

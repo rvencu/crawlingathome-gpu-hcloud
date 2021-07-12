@@ -363,7 +363,7 @@ if __name__ == "__main__":
 
             # clear working folders for a new job
             if os.path.exists(output_folder):
-                shutil.rmtree(output_folder, ignore_errors=True) # fix for ramdisk already existing at location
+                shutil.rmtree(output_folder, ignore_errors=True)
             if os.path.exists(".tmp"):
                 shutil.rmtree(".tmp")
 
