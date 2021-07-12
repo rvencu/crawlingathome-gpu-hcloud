@@ -3,11 +3,11 @@ import os
 import sys
 import time
 import trio
+import uuid
 import ujson
 import shutil
 import random
 import hashlib
-import zipfile
 import pandas as pd
 from glob import glob
 from uuid import uuid1
@@ -22,24 +22,6 @@ import asks
 asks.init("trio")
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True  # https://stackoverflow.com/a/47958486
-
-
-def zipfolder(filename, target_dir):
-    """
-    Function to unzip files received from GPU node
-
-    input: filename to unzip, target_dir location where to unzip the content
-
-    output: does not return an output
-
-    """
-
-    zipobj = zipfile.ZipFile(filename, 'w', zipfile.ZIP_DEFLATED)
-    rootlen = len(target_dir) + 1
-    for base, dirs, files in os.walk(target_dir):
-        for file in files:
-            fn = os.path.join(base, file)
-            zipobj.write(fn, fn[rootlen:])
 
 def remove_bad_chars(text):
     # cleanup text so language can be detected
@@ -237,64 +219,6 @@ def dl_wat(valid_data, first_sample_id):
         processed_samples,
         columns=["SAMPLE_ID", "PATH", "URL", "TEXT", "HEIGHT", "WIDTH", "LICENSE"],
     )
-
-def upload_gdrive(output_filename, unfiltered=False):
-    """
-    This function automates data upload to common repository (gdrive)
-    
-    input: filname to upload, unfiltered False for basic location, True for alternate location (files not supposed to be part of the dataset, for internal use)
-    
-    output: None
-    """
-    
-    import requests
-
-    client_id = (
-        "648172777761-onv1nc5f93nhlhf63flsq6onrmjphpfo.apps.googleusercontent.com"
-    )
-    client_secret = "HZ4Zw-_jVJ-3mwicz1NM5W5x"
-    refresh_token = "1//04N2Kysz1LObLCgYIARAAGAQSNwF-L9IrntHNWi2_nEVu2QX5fmlW0Ea0qA-ToBJLSdatDATYxiKcNFI8eZQ_fYN53gjF7b8MGmA"
-
-    def refresh_gdrive_token():
-        params = {
-            "grant_type": "refresh_token",
-            "client_id": client_id,
-            "client_secret": client_secret,
-            "refresh_token": refresh_token,
-        }
-
-        authorization_url = "https://www.googleapis.com/oauth2/v4/token"
-
-        r = requests.post(authorization_url, data=params)
-
-        if r.ok:
-            return r.json()["access_token"]
-        else:
-            return None
-
-    access_t = refresh_gdrive_token()
-    headers = {"Authorization": "Bearer " + access_t}
-    
-    para = {
-        "name": output_filename.split("/")[-1],
-        "parents": ["1CIgcIR7nX2xNBPB577jwEqbbwxAJR_nt"],
-    }
-    if unfiltered:
-        para = {
-        "name": output_filename.split("/")[-1],
-        "parents": ["1j1CVjxRNgxTwx5dVKz_rbrIKKdniL3WC"],
-    }    
-
-    files = {
-        "data": ("metadata", ujson.dumps(para), "application/json; charset=UTF-8"),
-        "file": ("application/zip", open(output_filename, "rb")),
-    }
-    requests.post(
-        "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart",
-        headers=headers,
-        files=files,
-    )
-
 class FileData:
     """
     Helper class to easily find wat file size, mid position, etc
@@ -340,7 +264,7 @@ if __name__ == "__main__":
     while True:
         try:
             client = cah.init(
-                url=CRAWLINGATHOME_SERVER_URL, nickname=YOUR_NICKNAME_FOR_THE_LEADERBOARD
+                url=CRAWLINGATHOME_SERVER_URL, nickname=YOUR_NICKNAME_FOR_THE_LEADERBOARD, type="CPU"
             )
             break
         except:
@@ -348,13 +272,10 @@ if __name__ == "__main__":
 
     # initialize stats variables for previous job
     last = 0
-    lasteff = 0
-    lastcount = 0
-    lastlinks = 0
 
     # this makes a loop to download new jobs while the script is running
     # normally it reads while client.jobCount() > 0
-    while True: # since we are so early into the project...
+    while client.jobCount() > 0 and client.isAlive():
         try:
             lastext = f". Last job duration: {last}"
 
@@ -408,12 +329,7 @@ if __name__ == "__main__":
             with open("crawlingathome-gpu-hcloud/blocklists/failed-domains.txt","r") as f:
                 failed = set(f.read().splitlines())
             blocked |= failed # merge the 2 sets and use this to reduce the number of attempted links, reduce crawling time.
-            '''
-            duplicates = set()
-            with open("crawlingathome-gpu-hcloud/blocklists/5Mduplicates.txt","rt") as f:
-                duplicates = set(f.read().splitlines())
-            print (f"duplicates of size {len(duplicates)}")
-            '''
+
             bloom = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("crawlingathome-gpu-hcloud/blocklists/bloom.bin",-1))
 
             while True:
@@ -427,9 +343,8 @@ if __name__ == "__main__":
             # parse valid links from wat file
             with open("shard.wat", "r") as infile:
                 parsed_data, deduped = parse_wat(infile, start_index, lines, blocked, bloom)
-            print(time.time()-start)
+            print (f"parsed wat in {round(time.time()-start,2)}")
             start = time.time()
-            print ("parsed wat")
 
             # convert to dataframe and save to disk (for statistics and generating blocking lists)
             parsed_df = pd.DataFrame(parsed_data, columns=["URL","TEXT","LICENSE"])
@@ -439,9 +354,8 @@ if __name__ == "__main__":
             random.shuffle(parsed_data) 
             
             lastlinks = len(parsed_data)
-            print(time.time()-start)
+            print (f"this job has {lastlinks} links and deduped {deduped} links in {round(time.time()-start,2)}")
             start = time.time()
-            print (f"this job has {lastlinks} links and deduped {deduped} links")
 
             while True:
                 try:
@@ -455,91 +369,25 @@ if __name__ == "__main__":
             dlparse_df = dl_wat( parsed_data, first_sample_id)
             dlparse_df.to_csv(output_folder + out_fname + ".csv", index=False, sep="|")
             dlparse_df.to_csv(output_folder + out_fname + "_unfiltered.csv", index=False, sep="|")
-            print (f"downloaded {len(dlparse_df)} in {round(time.time() - start)} seconds")
+            print (f"downloaded {len(dlparse_df)} in {round(time.time() - start, 2)}")
             print (f"download efficiency {len(dlparse_df)/(time.time() - start)} img/sec")
             print (f"crawl efficiency {lastlinks/(time.time() - start)} links/sec")
 
-            start2 = time.time()
-            
-            # at this point we need to perform CLIP filtering, then save embeddings and tfrecords of filtered images
-            # since inference is best done with GPU, this particular worker is zipping the csv and all downloaded images
-            # and sends them to the GPU node
-            shutil.make_archive("gpujob", "zip", ".", output_folder)
-            # when zip is ready, create semaphore file to signal job data is ready
-            with open('semaphore', 'w') as f:
-                pass
+            # at this point we finishes the CPU node job, need to make the data available for GPU worker
+            prefix = uuid.uuid4().hex
+            os.mkdir(prefix)
 
-            while True:
-                try:
-                    client.log("@GPU: dropping NSFW keywords" + lastext)
-                except:
-                    time.sleep(5)
-                    continue
-                break
-
-            # wait for GPU results
-            print (f"waiting for GPU node to complete job")
-            status = False
-            abort = False
-            gpulocal = False
-            while not (status | abort | gpulocal):
-                print(".", end = "", flush=True)
-                time.sleep(10)
-                status = os.path.exists("gpusemaphore")
-                abort = os.path.exists("gpuabort")
-                gpulocal = os.path.exists("gpulocal")
-
-            if abort:
-                os.remove("gpuabort")
-                continue
-            print()
-            print(f"receiving results from GPU")
-
-            # GPU results received
-            
-            if gpulocal:
-                with open("gpulocal","rt") as f:
-                    filtered = f.read().strip()
-                os.remove("gpulocal")
-            else:
-                with zipfile.ZipFile("gpujobdone.zip", 'r') as zip_ref:
-                    zip_ref.extractall(".")
-                os.remove("gpujobdone.zip")
-                os.remove("gpusemaphore")
-
-                while True:
-                    try:
-                        client.log("Uploading results" + lastext)
-                    except:
-                        time.sleep(5)
-                        continue
-                    break
-            
-                # reconstruct the filtered dataset from received csv, save to file and upload to dataset storage
-                filtered_df = pd.read_csv(output_folder + out_fname + ".csv", sep="|")
-                print (f"CLIP filtered {len(filtered_df)} in {round(time.time() - start2)} seconds")
-                print (f"CLIP efficiency {len(dlparse_df)/(time.time() - start2)} img/sec")
-
-                upload_gdrive(f"{output_folder}image_embedding_dict-{out_fname}.pkl")
-                upload_gdrive(f"{output_folder}crawling_at_home_{out_fname}__00000-of-00001.tfrecord")
-                upload_gdrive(output_folder + out_fname + ".csv")
-                upload_gdrive(output_folder + out_fname + "_unfiltered.csv", True)
-                upload_gdrive(output_folder + out_fname + "_parsed.csv", True)
-
-                # update job stats to be displayed on next run on leaderboard
-                filtered = len(filtered_df)
+            shutil.make_archive("gpujob", "zip", ".", prefix)
+             
             last = round(time.time() - start0)
-            #lasteff = round( (filtered_df.shape[0] * 100) / (time.time() - start0)) / 100
 
-            # we use job efficiency as KPI, i.e. the number of final pairs divided by total time taken by the entire job
             print(f"job completed in {last} seconds")
-            #print(f"job efficiency {lasteff} pairs/sec")
 
             while True:
                 try:
-                    client._markjobasdone(filtered)
+                    client.completeJob(f"{myip}:/home/crawl/{prefix}/gpujob.zip")
                 except:
-                    time.sleep(5)
+                    time.sleep(15)
                     continue
                 break
             

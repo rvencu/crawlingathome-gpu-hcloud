@@ -22,35 +22,30 @@ from multiprocessing import JoinableQueue, Process
 from pssh.clients import ParallelSSHClient, SSHClient
 
 
-def incoming_worker(workers, queue: JoinableQueue, inpsize: JoinableQueue, errors: JoinableQueue):
+def incoming_worker(queue: JoinableQueue, inpsize: JoinableQueue, errors: JoinableQueue):
     print (f"inbound worker started")
-    
-    pclient = ParallelSSHClient(workers, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False )
-    while True:
-        try:
-            ready = []
-            output = pclient.run_command('test -f /home/crawl/semaphore')
-            pclient.join(output)
-            for host_output in output:
-                hostname = host_output.host
-                exit_code = host_output.exit_code
-                if exit_code == 0:
-                    ready.append(hostname)
-            errors.put(f"Ready workers for download: {len(ready)}")
 
-            if len(ready) > 0:
-                inpsize.put(len(ready))
-                _start = time.time()
-                dclient = ParallelSSHClient(ready, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False)
+    while True:
+        client = cah.init(
+                url=CRAWLINGATHOME_SERVER_URL, nickname=YOUR_NICKNAME_FOR_THE_LEADERBOARD, type="GPU"
+            )
+        while client.jobCount() > 16 and client.isAlive():
+            try:
+                ready = client.newJob(16) # list of all job payload locations in format ip:filepath
+                inpsize.put(1)
+                workers = [x.split(":")[0] for x in ready]
+                copy_args = [{'local_file': 'gpujob.zip_' + workers[i],
+                    'remote_file': ready[i].split(":")[1],
+                    } for i in enumerate(ready)]
+                
+                dclient = ParallelSSHClient(workers, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False)
                 try:
-                    cmds = dclient.copy_remote_file('/home/crawl/gpujob.zip', 'gpujob.zip')
-                    joinall (cmds, raise_error=False)
+                    cmds = dclient.copy_remote_file('%(remote_file)s', '%(local_file)s', copy_args=copy_args)
+                    joinall (cmds, raise_error=True)
                 except Exception as e:
                     print(e)
-                errors.put(f"all jobs downloaded in {round(time.time()-_start, 2)} seconds")
 
-                dclient.run_command('rm -rf /home/crawl/gpujob.zip')
-                dclient.run_command('rm -rf /home/crawl/semaphore')
+                dclient.run_command('%s', host_args=(",".join(["rm -rf " + x.split(":")[1] for x in ready])))
 
                 for file in glob('gpujob.zip_*'):
                     name, ip = file.split("_")
@@ -65,54 +60,36 @@ def incoming_worker(workers, queue: JoinableQueue, inpsize: JoinableQueue, error
                     try:
                         with zipfile.ZipFile(file, 'r') as zip_ref:
                             zip_ref.extractall(ip.replace(".", "-")+"/")
-                        queue.put(ip)
                     except:
-                        aclient = SSHClient(ip, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False)
-                        aclient.execute('touch /home/crawl/gpuabort')
-                        aclient.disconnect()
-
+                        pass
                     os.remove(file)
 
+                queue.put((client.dump(), workers))
                 inpsize.get()
                 inpsize.task_done() # empty impsize queue to signal no work to be done
-                
-            else:
-                time.sleep(15)
-        except Exception as e:
-            print(f"some inbound problem occured: {e}")
+                    
+            except Exception as e:
+                print(f"some inbound problem occured: {e}")
+        else:
+            time.sleep(30)
 
-def outgoing_worker(queue: JoinableQueue, errors: JoinableQueue, local):
+def outgoing_worker(queue: JoinableQueue, errors: JoinableQueue):
     print (f"outbound worker started")
     while True:
         try:
             while queue.qsize() > 0:
-                ip, filtered = queue.get()
+                dump, jobname = queue.get()
+
+                client = cah.load(**dump)
+                if client.isAlive():
+                    # here insert logic to upload result
+                    #
+                    #
+                    client.completeJob()
                 
-                aclient = SSHClient(ip, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False)
-                
-                if local:
-                    #os.system(f"mv {base}/gpujobdone.zip results/{time.time()}.zip")
-                    aclient.execute(f"echo {filtered} > /home/crawl/gpulocal")
-                else:    
-                    base = "./" + str(ip.replace(".", "-"))
-                    output_folder = base + "/save/"
-                    img_output_folder = output_folder + "images/"
+                # remove the payload
+                # os.remove("")
 
-                    # clean img_output_folder now since we have all results do not want to transfer back all images...
-                    try:
-                        shutil.rmtree(img_output_folder)
-                    except OSError as e:
-                        print("[GPU] Error deleting images: %s - %s." %
-                            (e.filename, e.strerror))
-
-                    # send GPU results
-                    shutil.make_archive(base + "/gpujobdone", "zip", base, "save")
-
-                    aclient.scp_send(base + "/gpujobdone.zip", "gpujobdone.zip")
-                    os.remove(base + "/gpujobdone.zip")
-                    aclient.execute("touch gpusemaphore")
-
-                aclient.disconnect()
                 queue.task_done()
 
             else:
@@ -128,20 +105,20 @@ def gpu_worker(inbound: JoinableQueue, outbound: JoinableQueue, counter: Joinabl
         if not os.path.exists("./stats/"):
             os.makedirs("./stats/")
 
-        if inbound.qsize() > concat - 1:
-            concat_fname = uuid.uuid4().hex # use this name also for the temp folder to collect job files
-            os.makedirs("./"+concat_fname)
+        if inbound.qsize() > 0:
+            jobname = uuid.uuid4().hex # use this name also for the temp folder to collect job files
+            dump, workers = inbound.get()
+            os.makedirs("./"+ jobname)
             gpuflag.put(1)
             ips = []
             dframes = []
             shards = []
-            concat_parse = pd.DataFrame()
-            for i in range(concat):
-                ip = inbound.get()
+            concat_parse = None
+            for ip in workers:
                 #move the files asap so the worker can continue to send files in its incoming folder
-                output_folder = "./" + concat_fname + "/" + ip.replace(".", "-") + "/save/"
-                os.makedirs("./" + concat_fname + "/" + ip.replace(".", "-") + "/save/")
-                os.system(f"mv -f ./{ip.replace('.', '-')}/* ./{concat_fname}/{ip.replace('.', '-')}/")
+                output_folder = "./" + jobname + "/" + ip.replace(".", "-") + "/save/"
+                os.makedirs("./" + jobname + "/" + ip.replace(".", "-") + "/save/")
+                os.system(f"mv -f ./{ip.replace('.', '-')}/* ./{jobname}/{ip.replace('.', '-')}/")
                 ips.append(ip)
 
                 all_csv_files = []
@@ -156,35 +133,34 @@ def gpu_worker(inbound: JoinableQueue, outbound: JoinableQueue, counter: Joinabl
 
                 # recreate parsed dataset and run CLIP filtering
                 dlparse_df = pd.read_csv(output_folder + out_fname + ".csv", sep="|")
-                dlparse_df["PATH"] = "./" + concat_fname + "/" + ip.replace(".", "-") + "/" + dlparse_df["PATH"]
+                dlparse_df["PATH"] = "./" + jobname + "/" + ip.replace(".", "-") + "/" + dlparse_df["PATH"]
 
-                if i==0:
+                if concat_parse is None:
                     concat_parse = dlparse_df
                 else:
                     concat_parse = concat_parse.append(dlparse_df, ignore_index=True)
 
                 dframes.append(dlparse_df)
-                inbound.task_done()          
-
-            with open("./save/" + concat_fname + ".txt", "wt") as f:
+            
+            inbound.task_done()
+            with open("./save/" + jobname + ".txt", "wt") as f:
                 for item in shards:
                     f.write(item + "\n")
             
             #print (f"before deduplication {concat_parse.shape[0]}")
-            concat_parse.to_csv("./stats/" + concat_fname + "_duplicated.csv", index=False, sep="|")
+            concat_parse.to_csv("./stats/" + jobname + "_duplicated.csv", index=False, sep="|")
             concat_parse.drop_duplicates(subset=["URL","TEXT"], keep='last', inplace=True)
             concat_parse.reset_index(inplace=True, drop=True)
-            concat_parse.to_csv("./stats/" + concat_fname + "_unfiltered.csv", index=False, sep="|")
+            concat_parse.to_csv("./stats/" + jobname + "_unfiltered.csv", index=False, sep="|")
             #print (f"after deduplication {concat_parse.shape[0]}")
             start = time.time()
-            final_images, results = clip_filter.filter(concat_parse, concat_fname, "./save/", errors)
+            final_images, results = clip_filter.filter(concat_parse, jobname, "./save/", errors)
             print(f"last filtered {final_images} images in {round(time.time()-start,2)} sec")
 
-            for ip in ips:
-                outbound.put((ip, results.get(ip)))
-                counter.put(1)
+            outbound.put((dump, jobname))
+            counter.put(1)
 
-            shutil.rmtree(concat_fname)
+            shutil.rmtree(jobname)
             
             gpuflag.get()
             gpuflag.task_done()
@@ -268,6 +244,8 @@ if __name__ == "__main__":
         YOUR_NICKNAME_FOR_THE_LEADERBOARD = "anonymous"
     CRAWLINGATHOME_SERVER_URL = "http://cah.io.community/"
 
+    import crawlingathome_client as cah
+
     print(
         f"[GPU] starting session under `{YOUR_NICKNAME_FOR_THE_LEADERBOARD}` nickname")
 
@@ -333,7 +311,7 @@ if __name__ == "__main__":
         # launch separate processes with specialized workers
         inb = Process(target=incoming_worker, args=[workers, inbound, inpsize, errors], daemon=True).start()
         time.sleep(5)
-        otb = Process(target=outgoing_worker, args=[outbound, errors, local], daemon=True).start()
+        otb = Process(target=outgoing_worker, args=[outbound, errors], daemon=True).start()
         time.sleep(5)
 
         monitor = Process(target=monitor, args=[nodes, inbound, outbound, counter, inpsize]).start()
