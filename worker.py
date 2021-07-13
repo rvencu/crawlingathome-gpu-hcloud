@@ -382,24 +382,16 @@ if __name__ == "__main__":
 
             # at this point we finishes the CPU node job, need to make the data available for GPU worker
             prefix = uuid.uuid4().hex
-            os.makedirs(f"{prefix}/images/")
-            os.system(f"mv * {prefix}/")
-            os.system(f"mv images/* {prefix}/images/")
+            os.makedir(prefix)
+            os.system(f"mv save/* {prefix}/")
             result = upload(f"{prefix}/*",client.type)
-            
-            #shutil.make_archive("gpujob", "zip", ".", prefix)
-             
+            if result == 0:
+                client.completeJob(prefix)
+
+            #shutil.rmtree(prefix)
             last = round(time.time() - start0)
 
             print(f"job completed in {last} seconds")
-
-            while True:
-                try:
-                    client.completeJob(prefix)
-                except:
-                    time.sleep(15)
-                    continue
-                break
             
         except Exception as e:
             print (e)
