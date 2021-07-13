@@ -222,9 +222,10 @@ def dl_wat(valid_data, first_sample_id):
     )
 
 def upload(source: str, clientType: str):
+    print(f"client type is {clientType}")
     target = "gpujobs" if clientType == "CPU" else "CAH"
-    include = "--include 'images/'" if clientType == "CPU" else ""
-    return os.system(f"rsync {source} {include} archiveteam@88.198.2.17::{target}")
+    options = "-rzh" if clientType == "CPU" else "-zh"
+    return os.system(f"rsync {options} {source} archiveteam@88.198.2.17::{target}")
 
 class FileData:
     """
@@ -382,9 +383,9 @@ if __name__ == "__main__":
 
             # at this point we finishes the CPU node job, need to make the data available for GPU worker
             prefix = uuid.uuid4().hex
-            os.makedir(prefix)
+            os.mkdir(prefix)
             os.system(f"mv save/* {prefix}/")
-            result = upload(f"{prefix}/*",client.type)
+            result = upload(prefix, client.type)
             if result == 0:
                 client.completeJob(prefix)
 
