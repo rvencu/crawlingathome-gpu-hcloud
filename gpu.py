@@ -22,7 +22,14 @@ from multiprocessing import JoinableQueue, Process
 from pssh.clients import ParallelSSHClient, SSHClient
 
 '''
+Initialization
+    The GPU can initialize a cloud swarm on Hetzner Cloud (CX11 type). The number of nodes must be specified at launch
+
+    `python3 gpu.py 32 fsn1` where 32 is number of nodes (use 0 for no swarm), while fsn1 is the name of preffered datacenter
+
 GPU workflow:
+    GPU workflow is divided in 4 processes to provide enough parallelism and ensure maximal GPU utilization
+
 1. Incoming worker
     Incoming worker polls CAH server for available GPU jobs. We want to bring in a number of `concat` shards, 
     combine them and process them at once for efficiency
@@ -35,7 +42,19 @@ GPU workflow:
     f) transfer client dump and jobname to GPU worker
 2. GPU worker
     GPU worker keeps GPU cuda cores as busy as possible. the workflow consists in
-    a) 
+    a) open job
+    b) make a list of shards in the job
+    c) create and concatenate pandas dataframes for each shard
+    d) run CLIP filtering on the resulted data
+    e) save the result in ./save folder and cleanup the job folder
+    f) transfer client dump and jobname to outgoing worker
+3. Outgoing worker
+    this worker simply moved the result data to the staging server via rsync
+    a) open job
+    b) make transfer and mark job done
+    c) clean up
+4. Monitor
+    The monitor displays the status of the workers as well as performance metrics about the jobs performed
 '''
 
 def incoming_worker(queue: JoinableQueue, inpsize: JoinableQueue, errors: JoinableQueue, concat: int):
@@ -121,8 +140,8 @@ def outgoing_worker(queue: JoinableQueue, errors: JoinableQueue):
         try:
             while queue.qsize() > 0:
                 dump, jobname = queue.get()
-
                 client = cah.load(**dump)
+
                 if client.isAlive():
                     response = os.system(f"rsync -zh --remove-source-files save/{jobname}/* archiveteam@88.198.2.17::CAH")
                     if response == 0:
