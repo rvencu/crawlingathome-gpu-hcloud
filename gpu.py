@@ -21,50 +21,45 @@ sys.path.append('./crawlingathome-worker/')
 from multiprocessing import JoinableQueue, Process
 from pssh.clients import ParallelSSHClient, SSHClient
 
+'''
+GPU workflow:
+1. Incoming worker
+    Incoming worker polls CAH server for available GPU jobs. We want to bring in a number of `concat` shards, 
+    combine them and process them at once for efficiency
+    a) CAH client initialization and make up a name for the job (we can utilize client display name if we want to)
+        also make a folder with the job name
+    b) test if server have more than `concat` jobs available
+    c) bring the number of requested jobs, their payload is a string in uuid hex format
+    d) rsync from staging server all into the jobname folder. job file names are unique so we merge them all into the same location
+    e) move the stats files out of the way to ./stats folder
+    f) transfer client dump and jobname to GPU worker
+2. GPU worker
+    GPU worker keeps GPU cuda cores as busy as possible. the workflow consists in
+    a) 
+'''
 
-def incoming_worker(queue: JoinableQueue, inpsize: JoinableQueue, errors: JoinableQueue):
+def incoming_worker(queue: JoinableQueue, inpsize: JoinableQueue, errors: JoinableQueue, concat: int):
     print (f"inbound worker started")
-
     while True:
         client = cah.init(
                 url=CRAWLINGATHOME_SERVER_URL, nickname=YOUR_NICKNAME_FOR_THE_LEADERBOARD, type="GPU"
             )
-        while client.jobCount() > 16 and client.isAlive():
+        jobname = uuid.uuid4().hex # use this name also for the temp folder to collect job files
+        os.makedirs("./"+ jobname)
+        while client.jobCount() > concat and client.isAlive():
             try:
-                ready = client.newJob(16) # list of all job payload locations in format ip:filepath
+                ready = client.newJob(16) # list of all job payload locations in format uuid
                 inpsize.put(1)
-                workers = [x.split(":")[0] for x in ready]
-                copy_args = [{'local_file': 'gpujob.zip_' + workers[i],
-                    'remote_file': ready[i].split(":")[1],
-                    } for i in enumerate(ready)]
                 
-                dclient = ParallelSSHClient(workers, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False)
-                try:
-                    cmds = dclient.copy_remote_file('%(remote_file)s', '%(local_file)s', copy_args=copy_args)
-                    joinall (cmds, raise_error=True)
-                except Exception as e:
-                    print(e)
+                for job in ready:
+                    # download all jobs content into jobname folder
+                    response = os.system(f"rsync --remove-source-files -rzh archiveteam@88.198.2.17::gpujobs/{job}/* {jobname}")
+                    if response != 0:
+                        client.invalidURL(job)
+                os.system(f"mv {jobname}/*_parsed.csv stats/")
+                os.system(f"mv {jobname}/*_unfiltered.csv stats/")
 
-                dclient.run_command('%s', host_args=(",".join(["rm -rf " + x.split(":")[1] for x in ready])))
-
-                for file in glob('gpujob.zip_*'):
-                    name, ip = file.split("_")
-                    output_folder = "./" + ip.replace(".", "-") + "/save/"
-                    img_output_folder = output_folder + "images/"
-                    if os.path.exists(output_folder):
-                        shutil.rmtree(output_folder)
-
-                    os.makedirs(output_folder)
-                    os.makedirs(img_output_folder)
-
-                    try:
-                        with zipfile.ZipFile(file, 'r') as zip_ref:
-                            zip_ref.extractall(ip.replace(".", "-")+"/")
-                    except:
-                        pass
-                    os.remove(file)
-
-                queue.put((client.dump(), workers))
+                queue.put((client.dump(), jobname))
                 inpsize.get()
                 inpsize.task_done() # empty impsize queue to signal no work to be done
                     
@@ -73,74 +68,28 @@ def incoming_worker(queue: JoinableQueue, inpsize: JoinableQueue, errors: Joinab
         else:
             time.sleep(30)
 
-def outgoing_worker(queue: JoinableQueue, errors: JoinableQueue):
-    print (f"outbound worker started")
-    while True:
-        try:
-            while queue.qsize() > 0:
-                dump, jobname = queue.get()
 
-                client = cah.load(**dump)
-                if client.isAlive():
-                    # here insert logic to upload result
-                    #
-                    #
-                    client.completeJob()
-                
-                # remove the payload
-                # os.remove("")
-
-                queue.task_done()
-
-            else:
-                time.sleep(5)
-        except Exception as e:
-            print(f"some outbound problem occured: {e}")
-
-def gpu_worker(inbound: JoinableQueue, outbound: JoinableQueue, counter: JoinableQueue, errors: JoinableQueue, gpuflag: JoinableQueue, concat):
+def gpu_worker(inbound: JoinableQueue, outbound: JoinableQueue, counter: JoinableQueue, errors: JoinableQueue, gpuflag: JoinableQueue):
     print (f"gpu worker started")
     while True:
-        if not os.path.exists("./save/"):
-            os.makedirs("./save/")
-        if not os.path.exists("./stats/"):
-            os.makedirs("./stats/")
-
+        
         if inbound.qsize() > 0:
-            jobname = uuid.uuid4().hex # use this name also for the temp folder to collect job files
-            dump, workers = inbound.get()
-            os.makedirs("./"+ jobname)
+            dump, jobname = inbound.get()            
             gpuflag.put(1)
-            ips = []
-            dframes = []
+
             shards = []
             concat_parse = None
-            for ip in workers:
-                #move the files asap so the worker can continue to send files in its incoming folder
-                output_folder = "./" + jobname + "/" + ip.replace(".", "-") + "/save/"
-                os.makedirs("./" + jobname + "/" + ip.replace(".", "-") + "/save/")
-                os.system(f"mv -f ./{ip.replace('.', '-')}/* ./{jobname}/{ip.replace('.', '-')}/")
-                ips.append(ip)
 
-                all_csv_files = []
-                for path, subdir, files in os.walk(output_folder):
-                    for file in glob(os.path.join(path, "*.csv")):
-                        all_csv_files.append(file)
-                # get name of csv file
-                out_path = all_csv_files[0]
-                out_fname = Path(out_path).stem.strip("_unfiltered").strip("_parsed").strip(".")
-                shards.append(out_fname)
-                os.system(f"mv {output_folder + out_fname}_parsed.csv ./stats/")
-
-                # recreate parsed dataset and run CLIP filtering
-                dlparse_df = pd.read_csv(output_folder + out_fname + ".csv", sep="|")
-                dlparse_df["PATH"] = "./" + jobname + "/" + ip.replace(".", "-") + "/" + dlparse_df["PATH"]
-
+            for path, subdir, files in os.walk(jobname):
+                for file in glob(os.path.join(path, "*.csv")):
+                    shards.append(Path(jobname).stem.strip("_unfiltered").strip("_parsed").strip("."))
+            for item in shards:
+                dlparse_df = pd.read_csv(item + ".csv", sep="|")
+                dlparse_df["PATH"] = "./" + jobname + "/" + dlparse_df["PATH"]
                 if concat_parse is None:
                     concat_parse = dlparse_df
                 else:
                     concat_parse = concat_parse.append(dlparse_df, ignore_index=True)
-
-                dframes.append(dlparse_df)
             
             inbound.task_done()
             with open("./save/" + jobname + ".txt", "wt") as f:
@@ -164,6 +113,27 @@ def gpu_worker(inbound: JoinableQueue, outbound: JoinableQueue, counter: Joinabl
             
             gpuflag.get()
             gpuflag.task_done()
+
+
+def outgoing_worker(queue: JoinableQueue, errors: JoinableQueue):
+    print (f"outbound worker started")
+    while True:
+        try:
+            while queue.qsize() > 0:
+                dump, jobname = queue.get()
+
+                client = cah.load(**dump)
+                if client.isAlive():
+                    response = os.system(f"rsync -zh --remove-source-files save/{jobname}/* archiveteam@88.198.2.17::CAH")
+                    if response == 0:
+                        client.completeJob()
+                
+                queue.task_done()
+
+            else:
+                time.sleep(5)
+        except Exception as e:
+            print(f"some outbound problem occured: {e}")
 
 def monitor(nodes, inbound, outbound, counter, inpsize):
     # crude term monitor with 3 custom bars.. todo: move to curses module
@@ -259,6 +229,11 @@ if __name__ == "__main__":
     if len(sys.argv) > 3:
         skip = sys.argv[3]
 
+    if not os.path.exists("./stats/"):
+        os.makedirs("./stats/")
+    if not os.path.exists("./save/"):
+        os.makedirs("./save/")
+
     workers = []
 
     if skip is None:
@@ -309,7 +284,7 @@ if __name__ == "__main__":
         errors = JoinableQueue() # use this to capture errors and warnings and route them to curses display
 
         # launch separate processes with specialized workers
-        inb = Process(target=incoming_worker, args=[workers, inbound, inpsize, errors], daemon=True).start()
+        inb = Process(target=incoming_worker, args=[inbound, inpsize, errors, concat], daemon=True).start()
         time.sleep(5)
         otb = Process(target=outgoing_worker, args=[outbound, errors], daemon=True).start()
         time.sleep(5)
@@ -317,7 +292,7 @@ if __name__ == "__main__":
         monitor = Process(target=monitor, args=[nodes, inbound, outbound, counter, inpsize]).start()
         #curses.wrapper(monitor2(nodes, inbound, outbound, counter, inpsize, stdscr, errors, gpuflag))        
         
-        gpu_worker(inbound, outbound, counter, errors, gpuflag, concat)
+        gpu_worker(inbound, outbound, counter, errors, gpuflag)
 
     except KeyboardInterrupt:
         #curses.nocbreak()

@@ -225,7 +225,7 @@ def upload(source: str, clientType: str):
     print(f"client type is {clientType}")
     target = "gpujobs" if clientType == "CPU" else "CAH"
     options = "-rzh" if clientType == "CPU" else "-zh"
-    return os.system(f"rsync {options} -- {source} archiveteam@88.198.2.17::{target}")
+    return os.system(f"rsync {options} {source} archiveteam@88.198.2.17::{target}")
 
 class FileData:
     """
