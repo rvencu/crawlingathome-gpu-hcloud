@@ -13,6 +13,7 @@ from glob import glob
 from uuid import uuid1
 from io import BytesIO
 from requests import get
+import crawlingathome_client as cah
 from bloom_filter2 import BloomFilter
 from urllib.parse import urljoin, urlparse
 sys.path.append('./crawlingathome-worker/')
@@ -219,6 +220,12 @@ def dl_wat(valid_data, first_sample_id):
         processed_samples,
         columns=["SAMPLE_ID", "PATH", "URL", "TEXT", "HEIGHT", "WIDTH", "LICENSE"],
     )
+
+def upload(source: str, clientType: str):
+    target = "gpujobs" if clientType == "CPU" else "CAH"
+    include = "--include 'images/'" if clientType == "CPU" else ""
+    return os.system(f"rsync {source} {include} archiveteam@88.198.2.17::{target}")
+
 class FileData:
     """
     Helper class to easily find wat file size, mid position, etc
@@ -257,7 +264,7 @@ if __name__ == "__main__":
 
     print (f"starting session under `{YOUR_NICKNAME_FOR_THE_LEADERBOARD}` nickname")
 
-    import crawlingathome_client as cah
+    
 
     # connect to C@H server and initialize client
     client = None
@@ -375,9 +382,12 @@ if __name__ == "__main__":
 
             # at this point we finishes the CPU node job, need to make the data available for GPU worker
             prefix = uuid.uuid4().hex
-            os.mkdir(prefix)
-
-            shutil.make_archive("gpujob", "zip", ".", prefix)
+            os.makedirs(f"{prefix}/images/")
+            os.system(f"mv * {prefix}/")
+            os.system(f"mv images/* {prefix}/images/")
+            result = upload(f"{prefix}/*",client.type)
+            
+            #shutil.make_archive("gpujob", "zip", ".", prefix)
              
             last = round(time.time() - start0)
 
@@ -385,7 +395,7 @@ if __name__ == "__main__":
 
             while True:
                 try:
-                    client.completeJob(f"{myip}:/home/crawl/{prefix}/gpujob.zip")
+                    client.completeJob(prefix)
                 except:
                     time.sleep(15)
                     continue
