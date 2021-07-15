@@ -112,7 +112,6 @@ def gpu_worker(inbound: JoinableQueue, outbound: JoinableQueue, counter: Joinabl
             gpuflag.put(1)
             shards = []
             group_id = uuid.uuid4().hex
-            os.mkdir("./"+ group_id) # place group processing results here
             print (f"got new {groupsize} jobs to group in id {group_id}")
             group_parse = None
             for _ in range(groupsize):
@@ -155,7 +154,7 @@ def gpu_worker(inbound: JoinableQueue, outbound: JoinableQueue, counter: Joinabl
             print(f"last filtered {final_images} images in {round(time.time()-start,2)} sec")
 
             print (f"upload group results to rsync target")
-            response = os.system(f"rsync -zh --remove-source-files save/{group_id}/* archiveteam@88.198.2.17::CAH") # to do get target from client
+            response = os.system(f"rsync -zh --remove-source-files save/*{group_id}* archiveteam@88.198.2.17::CAH") # to do get target from client
             if response == 0:
                 print (f"sending all jobs to be marked as completed")
                 for job, item in shards:
@@ -165,7 +164,6 @@ def gpu_worker(inbound: JoinableQueue, outbound: JoinableQueue, counter: Joinabl
                 for job, item in shards:
                     outbound.put((job, 0)) # if upload crashes, then do NOT mark completeJob()
             print (f"cleaning up group folders")
-            #shutil.rmtree("./save/"+ group_id)
             
             gpuflag.get()
             gpuflag.task_done()
