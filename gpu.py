@@ -64,7 +64,7 @@ def incoming_worker(queue: JoinableQueue, inpsize: JoinableQueue, errors: Joinab
                 url=CRAWLINGATHOME_SERVER_URL, nickname=YOUR_NICKNAME_FOR_THE_LEADERBOARD, type="GPU"
             )
         jobname = uuid.uuid4().hex # use this name also for the temp folder to collect job files
-        os.makedirs("./"+ jobname)
+        os.mkdir("./"+ jobname)
         while client.jobCount() > concat and client.isAlive():
             try:
                 ready = client.newJob(16) # list of all job payload locations in format uuid
