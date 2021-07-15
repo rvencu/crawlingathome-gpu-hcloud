@@ -238,26 +238,34 @@ def reset_workers():
 
 if __name__ == "__main__":
     command = sys.argv[1]
+    location = ""
     if len(sys.argv) > 2:
         nodes = int(sys.argv[2])
     else:
         nodes = 1
     if len(sys.argv) > 3:
-        server_type = int(sys.argv[2])
-    else:
-        server_type="cx11"
+        location = sys.argv[3]
     
     if command == "up":
         try:
-            start_time = time.time()
-            workers = trio.run(up, nodes, server_type)
+            start = time.time()
+            # generate cloud workers
+            workers = trio.run(up, nodes, location)
+            with open("workers.txt", "w") as f:
+                for ip in workers:
+                    f.write(ip + "\n")
             trio.run(wait_for_infrastructure, workers)
-            end_time = time.time()
-            print()
-            print(f"[swarm] {len(workers)} nodes swarm is up and initialized in {round(end_time - start_time)}s")
+            print(
+                f"[swarm] {len(workers)} nodes cloud swarm is up and was initialized in {round(time.time() - start)}s")
         except KeyboardInterrupt:
-            print(f"[swarm] Abort! Deleting cloud swarm")
+            print(f"[swarm] Abort! Deleting cloud swarm...")
             trio.run(down)
+            print(f"[swarm] Cloud swarm was shutdown")
+            sys.exit()
+        except Exception as e:
+            print(f"[swarm] Error, could not bring up swarm... please consider shutting down all workers via `python3 infrastructure.py down`")
+            print(e)
+            sys.exit()
     elif command == "down":
         trio.run(down)
         print (f"[swarm] Cloud swarm was shutdown")
