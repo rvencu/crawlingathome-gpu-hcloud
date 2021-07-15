@@ -2,31 +2,20 @@ import os
 import re
 import sys
 import time
-import trio
 import uuid
-import string
-import random
 import shutil
 import curses
 import threading
 import clip_filter
 import pandas as pd
-import infrastructure
 from glob import glob
 from tqdm import tqdm
 from pathlib import Path
 from colorama import Fore
-from gevent import joinall
 sys.path.append('./crawlingathome-worker/')
 from multiprocessing import JoinableQueue, Process
-from pssh.clients import ParallelSSHClient, SSHClient
 
 '''
-Initialization
-    The GPU can initialize a cloud swarm on Hetzner Cloud (CX11 type). The number of nodes must be specified at launch
-
-    `python3 gpu.py 32 fsn1` where 32 is number of nodes (use 0 for no swarm), while fsn1 is the name of preffered datacenter
-
 GPU workflow:
     GPU workflow is divided in 3 processes to provide enough parallelism and ensure maximal GPU utilization
 
@@ -52,70 +41,71 @@ GPU workflow:
     The monitor displays the status of the workers as well as performance metrics about the jobs performed
 '''
 
-def gpu_cah_interface(incomingqueue: JoinableQueue, outgoingqueue: JoinableQueue, YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL):
+def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: JoinableQueue, YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL):
     # initiate and reinitiate a GPU type client if needed
-    print (f"              |___ inbound worker started")
+    print (f"   |___ inbound worker started")
     while True:
         client = cah.init(
             url=CRAWLINGATHOME_SERVER_URL, nickname=YOUR_NICKNAME_FOR_THE_LEADERBOARD, type="GPU"
         )
         while client.jobCount() > 0 and client.isAlive():
             # each thread gets a new job, passes it to GPU then waits for completion
-            job = client.newJob()
+            client.newJob()
+            job = client.shard
             os.mkdir("./"+ job)
-            response = os.system(f"rsync --remove-source-files -rzh archiveteam@88.198.2.17::gpujobs/{job}/* {job}")
+            response = os.system(f"rsync -rzh archiveteam@88.198.2.17::gpujobs/{job}/* {job}") # no not delete just yet the source files
             if response != 0:
                 client.invalidURL(job)
-                print (f"invalid job detected: {job}")
+                print (f"[io] invalid job detected: {job}")
                 continue
             else:
                 os.system(f"mv {job}/*_parsed.csv stats/")
                 os.system(f"mv {job}/*_unfiltered.csv stats/")
-                print (f"job sent to GPU: {job}")
-                incomingqueue.put(job)
+                print (f"[io] job sent to GPU: {job}")
+                incomingqueue.put((i, job))
             
             # wait until job gets processes
             while True:
-                print (f"waiting to complete job: {job}")
-                outjob, pairs = outgoingqueue[-1] # I hope I can read the queue without popping out the value here
-                if outjob == job:
-                    print (f"received results for: {job}")
+                if outgoingqueue.qsize() > 0:
                     outjob, pairs = outgoingqueue.get() # I am poping out from queue only if my current job is finished
+                    print (f"[io] received results for: {job}={outjob}")
                     outgoingqueue.task_done()
                     if pairs > 0:
-                        print (f"mark job as complete: {job}")
-                        client.completeJob(pairs)
+                        print (f"[io] mark job as complete: {job}")
+                        client.completeJob(int(pairs))
                     shutil.rmtree("./"+ job)
                     break # we can let the worker request a new job
+                else:
+                    time.sleep(1)
         else:
-            print (f"no jobs or client forgotten")
-            time.sleep(60)
+            print (f"[io] no jobs or client forgotten")
+            time.sleep(10)
             continue
 
-def io_worker(incomingqueue: JoinableQueue, outgoingqueue: JoinableQueue, groupsize: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL):
+def io_worker(incomingqueue: JoinableQueue, outgoingqueue: list, groupsize: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL):
     # separate process to initialize threaded workers
-    print (f"inbound workers:")
+    print (f"[io] inbound workers:")
     try:
         # just launch how many threads we need to group jobs into single output
-        for _ in range(groupsize):
-            threading.Thread(target=gpu_cah_interface, args=(incomingqueue, outgoingqueue, YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL)).start()
+        for i in range(2 * groupsize):
+            threading.Thread(target=gpu_cah_interface, args=(i, incomingqueue, outgoingqueue[i], YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL)).start()
     except Exception as e:
-        print(f"some inbound problem occured: {e}")
+        print(f"[io] some inbound problem occured: {e}")
 
 
-def gpu_worker(inbound: JoinableQueue, outbound: JoinableQueue, counter: JoinableQueue, gpuflag: JoinableQueue, groupsize: int):
-    print (f"gpu worker started")
+def gpu_worker(incomingqueue: JoinableQueue, outgoingqueue: list, counter: JoinableQueue, gpuflag: JoinableQueue, groupsize: int):
+    print (f"[gpu] worker started")
     # watch for the incoming queue, when it is big enough we can trigger processing    
     while True:
-        print (f"testing incoming queue size")
-        if inbound.qsize() >= groupsize:
+        print (f"[gpu] testing incoming queue size")
+        if incomingqueue.qsize() >= groupsize:
             gpuflag.put(1)
             shards = []
             group_id = uuid.uuid4().hex
-            print (f"got new {groupsize} jobs to group in id {group_id}")
+            print (f"[gpu] got new {groupsize} jobs to group in id {group_id}")
             group_parse = None
             for _ in range(groupsize):
-                job = inbound.get()
+                i, job = incomingqueue.get()
 
                 all_csv_files = []
                 for path, subdir, files in os.walk(job):
@@ -123,24 +113,24 @@ def gpu_worker(inbound: JoinableQueue, outbound: JoinableQueue, counter: Joinabl
                         all_csv_files.append(file)
                 # get name of csv file
                 out_path = all_csv_files[0]
-                shards.append((job, Path(out_path).stem.strip("_unfiltered").strip("_parsed").strip(".")))
+                shards.append((i, job, Path(out_path).stem.strip("_unfiltered").strip("_parsed").strip(".")))
 
-                inbound.task_done()
-            print (f"adjusting images paths")
+                incomingqueue.task_done()
+            print (f"[gpu] adjusted image paths")
 
-            for job, item in shards:
-                dlparse_df = pd.read_csv(item + ".csv", sep="|")
-                dlparse_df["PATH"] = "./" + job + "/" + dlparse_df["PATH"]
+            for i, job, item in shards:
+                dlparse_df = pd.read_csv(job + "/" + item + ".csv", sep="|")
+                dlparse_df["PATH"] = dlparse_df.apply(lambda x: "./" + job + "/" + x["PATH"].strip("save/"), axis=1)
                 if group_parse is None:
                     group_parse = dlparse_df
                 else:
                     group_parse = group_parse.append(dlparse_df, ignore_index=True)
                 
             with open("./save/" + group_id + ".txt", "wt") as f:
-                for job, item in shards:
+                for i, job, item in shards:
                     f.write(item + "\n")
             
-            print (f"saving stats")
+            print (f"[gpu] saving stats")
 
             group_parse.to_csv("./stats/" + group_id + "_groupduped.csv", index=False, sep="|") # I am using these to find out domains to filter from scraping
             group_parse.drop_duplicates(subset=["URL","TEXT"], keep='last', inplace=True)
@@ -148,25 +138,27 @@ def gpu_worker(inbound: JoinableQueue, outbound: JoinableQueue, counter: Joinabl
 
             group_parse.to_csv("./stats/" + group_id + "_groupdeduped.csv", index=False, sep="|") # I am using these to find out domains to filter from scraping
 
-            print (f"sending group to CLIP filter")
+            print (f"[gpu] sending group to CLIP filter")
             start = time.time()
             final_images, results = clip_filter.filter(group_parse, group_id, "./save/")
             print(f"last filtered {final_images} images in {round(time.time()-start,2)} sec")
 
-            print (f"upload group results to rsync target")
+            print (f"[gpu] upload group results to rsync target")
             response = os.system(f"rsync -zh --remove-source-files save/*{group_id}* archiveteam@88.198.2.17::CAH") # to do get target from client
             if response == 0:
-                print (f"sending all jobs to be marked as completed")
-                for job, item in shards:
-                    outbound.put((job, results.get(job)))
+                print (f"[gpu] sending all jobs to be marked as completed")
+                for i, job, item in shards:
+                    outgoingqueue[i].put((job, results.get(job)))
                     counter.put(1)
             else:
-                for job, item in shards:
-                    outbound.put((job, 0)) # if upload crashes, then do NOT mark completeJob()
-            print (f"cleaning up group folders")
+                for i, job, item in shards:
+                    outgoingqueue[i].put((job, 0)) # if upload crashes, then do NOT mark completeJob()
+            print (f"[gpu] cleaning up group folders")
             
             gpuflag.get()
             gpuflag.task_done()
+        else:
+            time.sleep(10)
 
 
 def monitor(nodes, inbound, outbound, counter, inpsize):
@@ -177,7 +169,7 @@ def monitor(nodes, inbound, outbound, counter, inpsize):
     # keep main process for monitoring
     while True:
         incbar.n = inbound.qsize()
-        outbar.n = outbound.qsize()
+        outbar.n = sum (i.qsize() for i in outbound)
         if inpsize.qsize() > 0:
             incbar.desc = Fore.GREEN + incbar.desc.strip(Fore.RED).strip(Fore.GREEN).strip(Fore.RESET) + Fore.RESET
         else:
@@ -253,48 +245,12 @@ if __name__ == "__main__":
     print(
         f"[GPU] starting session under `{YOUR_NICKNAME_FOR_THE_LEADERBOARD}` nickname")
 
-    nodes = sys.argv[1]
-    location = None
-    skip = None
-    local = True
     groupsize = 16 # how many shards to group for CLIP
-    if len(sys.argv) > 2:
-        location = sys.argv[2]
-    if len(sys.argv) > 3:
-        skip = sys.argv[3]
 
     if not os.path.exists("./stats/"):
         os.makedirs("./stats/")
     if not os.path.exists("./save/"):
         os.makedirs("./save/")
-
-    workers = []
-
-    if skip is None:
-        try:
-            start = time.time()
-            # generate cloud workers
-            workers = trio.run(infrastructure.up, nodes, location)
-            with open("workers.txt", "w") as f:
-                for ip in workers:
-                    f.write(ip + "\n")
-
-            trio.run(infrastructure.wait_for_infrastructure, workers)
-            print(
-                f"[swarm] {len(workers)} nodes cloud swarm is up and was initialized in {round(time.time() - start)}s")
-        except KeyboardInterrupt:
-            print(f"[swarm] Abort! Deleting cloud swarm...")
-            trio.run(infrastructure.down)
-            print(f"[swarm] Cloud swarm was shutdown")
-            sys.exit()
-        except Exception as e:
-            print(f"[swarm] Error, could not bring up swarm... please consider shutting down all workers via `python3 infrastructure.py down`")
-            print(e)
-            sys.exit()
-    else:
-        with open("workers.txt", "r") as f:
-            for line in f.readlines():
-                workers.append(line.strip("\n"))
 
     try:
 
@@ -309,9 +265,12 @@ if __name__ == "__main__":
                     shutil.rmtree(dir)
 
         
-        #initialize 3 joinable queues to transfer messages between multiprocess processes
+        #initialize joinable queues to transfer messages between multiprocess processes
+        # Outbound queues, we need one for each io worker
+        outbound = []
+        for _ in range(2 * groupsize): # we need 2x IO workers to keep GPU permanently busy
+             outbound.append(JoinableQueue())
         inbound = JoinableQueue()
-        outbound = JoinableQueue()
         counter = JoinableQueue()
         inpsize = JoinableQueue() # use this to communicate number of jobs downloading now
         gpuflag = JoinableQueue() # use this to flag that gpu is processing
@@ -320,26 +279,17 @@ if __name__ == "__main__":
         # launch separate processes with specialized workers
         io = Process(target=io_worker, args=[inbound, outbound, groupsize, YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL], daemon=True).start()
 
-        monitor = Process(target=monitor, args=[nodes, inbound, outbound, counter, inpsize]).start()
+        #monitor = Process(target=monitor, args=[groupsize, inbound, outbound, counter, inpsize]).start()
         #curses.wrapper(monitor2(nodes, inbound, outbound, counter, inpsize, stdscr, errors, gpuflag))        
         
         gpu_worker(inbound, outbound, counter, gpuflag, groupsize)
 
     except KeyboardInterrupt:
+        print ("Keyboard interrupt")
         #curses.nocbreak()
         #curses.echo()
         #curses.endwin()
 
-        print(f"[GPU] Abort! Deleting cloud infrastructure...")
-
-        letters = string.ascii_lowercase
-        suffix = ''.join(random.choice(letters) for i in range(3))
-
-        pclient = ParallelSSHClient(workers, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False )
-        pclient.scp_recv('/home/crawl/crawl.log', suffix + '_crawl.log')
-
-        trio.run(infrastructure.down)
-        print(f"[infrastructure] Cloud infrastructure was shutdown")
         sys.exit()
     except Exception as e:
         print (f"general exception: {e}")
