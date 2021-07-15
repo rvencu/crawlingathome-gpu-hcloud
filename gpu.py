@@ -51,7 +51,11 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
         while client.isAlive():
             while client.jobCount() > 0: 
                 # each thread gets a new job, passes it to GPU then waits for completion
-                client.newJob()
+                try:
+                    client.newJob()
+                except:
+                    time.sleep(10)
+                    continue
                 job = client.shard
                 os.mkdir("./"+ job)
                 response = os.system(f"rsync -rzh archiveteam@88.198.2.17::gpujobs/{job}/* {job}") # no not delete just yet the source files
