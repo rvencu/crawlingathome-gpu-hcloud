@@ -48,39 +48,42 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
         client = cah.init(
             url=CRAWLINGATHOME_SERVER_URL, nickname=YOUR_NICKNAME_FOR_THE_LEADERBOARD, type="GPU"
         )
-        while client.jobCount() > 0 and client.isAlive():
-            # each thread gets a new job, passes it to GPU then waits for completion
-            client.newJob()
-            job = client.shard
-            os.mkdir("./"+ job)
-            response = os.system(f"rsync -rzh archiveteam@88.198.2.17::gpujobs/{job}/* {job}") # no not delete just yet the source files
-            if response != 0:
-                client.invalidURL(job)
-                print (f"[io] invalid job detected: {job}")
-                continue
-            else:
-                os.system(f"mv {job}/*_parsed.csv stats/")
-                os.system(f"mv {job}/*_unfiltered.csv stats/")
-                print (f"[io] job sent to GPU: {job}")
-                incomingqueue.put((i, job))
-            
-            # wait until job gets processes
-            while True:
-                if outgoingqueue.qsize() > 0:
-                    outjob, pairs = outgoingqueue.get() # I am poping out from queue only if my current job is finished
-                    print (f"[io] received results for: {job}={outjob}")
-                    outgoingqueue.task_done()
-                    if pairs > 0:
-                        print (f"[io] mark job as complete: {job}")
-                        client.completeJob(int(pairs))
-                    shutil.rmtree("./"+ job)
-                    break # we can let the worker request a new job
+        while client.isAlive():
+            while client.jobCount() > 0: 
+                # each thread gets a new job, passes it to GPU then waits for completion
+                client.newJob()
+                job = client.shard
+                os.mkdir("./"+ job)
+                response = os.system(f"rsync -rzh archiveteam@88.198.2.17::gpujobs/{job}/* {job}") # no not delete just yet the source files
+                if response != 0:
+                    client.invalidURL(job)
+                    print (f"[io] invalid job detected: {job}")
+                    continue
                 else:
-                    time.sleep(1)
+                    os.system(f"mv {job}/*_parsed.csv stats/")
+                    os.system(f"mv {job}/*_unfiltered.csv stats/")
+                    print (f"[io] job sent to GPU: {job}")
+                    incomingqueue.put((i, job))
+                
+                # wait until job gets processes
+                while True:
+                    if outgoingqueue.qsize() > 0:
+                        outjob, pairs = outgoingqueue.get() # I am poping out from queue only if my current job is finished
+                        print (f"[io] received results for: {job}={outjob}")
+                        outgoingqueue.task_done()
+                        if pairs > 0:
+                            print (f"[io] mark job as complete: {job}")
+                            client.completeJob(int(pairs))
+                        shutil.rmtree("./"+ job)
+                        break # we can let the worker request a new job
+                    else:
+                        time.sleep(1)
+            else:
+                print (f"[io] no jobs")
+                time.sleep(10)
         else:
-            print (f"[io] no jobs or client forgotten")
+            print (f"[io] client forgotten")
             time.sleep(10)
-            continue
 
 def io_worker(incomingqueue: JoinableQueue, outgoingqueue: list, groupsize: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL):
     # separate process to initialize threaded workers
