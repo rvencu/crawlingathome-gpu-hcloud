@@ -60,7 +60,7 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                 os.mkdir("./"+ job)
                 response = os.system(f"rsync -rzh archiveteam@88.198.2.17::gpujobs/{job}/* {job}") # no not delete just yet the source files
                 if response != 0:
-                    client.invalidURL(job)
+                    client.invalidURL()
                     print (f"[io] invalid job detected: {job}")
                     continue
                 else:
