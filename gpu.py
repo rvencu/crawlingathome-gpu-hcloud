@@ -28,32 +28,27 @@ Initialization
     `python3 gpu.py 32 fsn1` where 32 is number of nodes (use 0 for no swarm), while fsn1 is the name of preffered datacenter
 
 GPU workflow:
-    GPU workflow is divided in 4 processes to provide enough parallelism and ensure maximal GPU utilization
+    GPU workflow is divided in 3 processes to provide enough parallelism and ensure maximal GPU utilization
 
-1. Incoming worker
+1. IO worker
     Incoming worker polls CAH server for available GPU jobs. We want to bring in a number of `group` shards, 
     combine them and process them at once for efficiency
-    a) CAH client initialization and make up a name for the job (we can utilize client display name if we want to)
+    a) CAH client initialization and get name for the job
         also make a folder with the job name
-    b) test if server have more than `group` jobs available
-    c) bring the number of requested jobs, their payload is a string in uuid hex format
-    d) rsync from staging server all into the jobname folder. job file names are unique so we merge them all into the same location
+    d) rsync from staging server all into the jobname folder
     e) move the stats files out of the way to ./stats folder
-    f) transfer client dump and jobname to GPU worker
+    f) transfer jobname to GPU worker then start waiting for response
+    a) when response is received mark job done if number of final pairs is > 0
+    c) clean up
 2. GPU worker
     GPU worker keeps GPU cuda cores as busy as possible. the workflow consists in
-    a) open job
-    b) make a list of shards in the job
-    c) create and groupenate pandas dataframes for each shard
+    a) wait for the incoming queue to accumulate groupsize jobs then make a groupname and a folder with same name to hold result files
+    b) make a list of shards in the groupjob
+    c) create and group pandas dataframes for each shard
     d) run CLIP filtering on the resulted data
     e) save the result in ./save folder and cleanup the job folder
-    f) transfer client dump and jobname to outgoing worker
-3. Outgoing worker
-    this worker simply moved the result data to the staging server via rsync
-    a) open job
-    b) make transfer and mark job done
-    c) clean up
-4. Monitor
+    f) transfer completed jobname back to IO worker
+3. Monitor
     The monitor displays the status of the workers as well as performance metrics about the jobs performed
 '''
 
@@ -71,23 +66,29 @@ def gpu_cah_interface(incomingqueue: JoinableQueue, outgoingqueue: JoinableQueue
             response = os.system(f"rsync --remove-source-files -rzh archiveteam@88.198.2.17::gpujobs/{job}/* {job}")
             if response != 0:
                 client.invalidURL(job)
+                print (f"invalid job detected: {job}")
                 continue
             else:
                 os.system(f"mv {job}/*_parsed.csv stats/")
                 os.system(f"mv {job}/*_unfiltered.csv stats/")
+                print (f"job sent to GPU: {job}")
                 incomingqueue.put(job)
             
             # wait until job gets processes
             while True:
+                print (f"waiting to complete job: {job}")
                 outjob, pairs = outgoingqueue[-1] # I hope I can read the queue without popping out the value here
                 if outjob == job:
+                    print (f"received results for: {job}")
                     outjob, pairs = outgoingqueue.get() # I am poping out from queue only if my current job is finished
                     outgoingqueue.task_done()
                     if pairs > 0:
+                        print (f"mark job as complete: {job}")
                         client.completeJob(pairs)
                     shutil.rmtree("./"+ job)
                     break # we can let the worker request a new job
         else:
+            print (f"no jobs or client forgotten")
             time.sleep(60)
             continue
 
@@ -106,18 +107,27 @@ def gpu_worker(inbound: JoinableQueue, outbound: JoinableQueue, counter: Joinabl
     print (f"gpu worker started")
     # watch for the incoming queue, when it is big enough we can trigger processing    
     while True:
+        print (f"testing incoming queue size")
         if inbound.qsize() >= groupsize:
             gpuflag.put(1)
             shards = []
             group_id = uuid.uuid4().hex
             os.mkdir("./"+ group_id) # place group processing results here
+            print (f"got new {groupsize} jobs to group in id {group_id}")
             group_parse = None
             for _ in range(groupsize):
                 job = inbound.get()
+
+                all_csv_files = []
                 for path, subdir, files in os.walk(job):
                     for file in glob(os.path.join(path, "*.csv")):
-                        shards.append((job, Path(file).stem.strip("_unfiltered").strip("_parsed").strip(".")))
+                        all_csv_files.append(file)
+                # get name of csv file
+                out_path = all_csv_files[0]
+                shards.append((job, Path(out_path).stem.strip("_unfiltered").strip("_parsed").strip(".")))
+
                 inbound.task_done()
+            print (f"adjusting images paths")
 
             for job, item in shards:
                 dlparse_df = pd.read_csv(item + ".csv", sep="|")
@@ -131,25 +141,31 @@ def gpu_worker(inbound: JoinableQueue, outbound: JoinableQueue, counter: Joinabl
                 for job, item in shards:
                     f.write(item + "\n")
             
+            print (f"saving stats")
+
             group_parse.to_csv("./stats/" + group_id + "_groupduped.csv", index=False, sep="|") # I am using these to find out domains to filter from scraping
             group_parse.drop_duplicates(subset=["URL","TEXT"], keep='last', inplace=True)
             group_parse.reset_index(inplace=True, drop=True)
 
             group_parse.to_csv("./stats/" + group_id + "_groupdeduped.csv", index=False, sep="|") # I am using these to find out domains to filter from scraping
 
+            print (f"sending group to CLIP filter")
             start = time.time()
             final_images, results = clip_filter.filter(group_parse, group_id, "./save/")
             print(f"last filtered {final_images} images in {round(time.time()-start,2)} sec")
 
+            print (f"upload group results to rsync target")
             response = os.system(f"rsync -zh --remove-source-files save/{group_id}/* archiveteam@88.198.2.17::CAH") # to do get target from client
             if response == 0:
+                print (f"sending all jobs to be marked as completed")
                 for job, item in shards:
                     outbound.put((job, results.get(job)))
                     counter.put(1)
             else:
                 for job, item in shards:
                     outbound.put((job, 0)) # if upload crashes, then do NOT mark completeJob()
-            shutil.rmtree("./"+ group_id)
+            print (f"cleaning up group folders")
+            #shutil.rmtree("./save/"+ group_id)
             
             gpuflag.get()
             gpuflag.task_done()
