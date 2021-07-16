@@ -1,5 +1,5 @@
 import clip
-import time
+import hashlib
 import torch
 import pickle
 from PIL import Image
@@ -170,6 +170,10 @@ def filter(df, out_fname, output_folder):
         dff,
         f"{output_folder}crawling_at_home_{out_fname}__00000-of-00001.tfrecord",
     )
-    #print(f"Tfrecords ran in {round(time.time()-start,2)}")
-    #print(f"Job ran in {round(time.time()-start0,2)}")
+    # save hashes
+    dff["hash"] = dff.apply(lambda row: hashlib.md5((str(row.URL)+str(row.TEXT)).encode("utf-8")).hexdigest(), axis=1)
+    with open(f"{output_folder}hashes-{out_fname}.hsh", "wt") as f:
+        for item in dff["hash"]:
+            f.write(item + "\n")
+
     return len(dff), results
