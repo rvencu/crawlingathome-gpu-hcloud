@@ -300,6 +300,11 @@ if __name__ == "__main__":
             for dir in dirnames:
                 if reg_compile.match(dir):
                     shutil.rmtree(dir)
+        re_uuid = re.compile(r'[0-9a-f]{32}', re.I)
+        for root, dirnames, filenames in os.walk("."):
+            for dir in dirnames:
+                if re_uuid.match(dir):
+                    shutil.rmtree(dir)
 
         
         #initialize joinable queues to transfer messages between multiprocess processes
