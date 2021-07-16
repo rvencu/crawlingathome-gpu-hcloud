@@ -58,6 +58,9 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                     time.sleep(10)
                     continue
                 job = client.shard
+                # found repeating shards, need to clear old files before continuing
+                if os.path.exists("./"+ job):
+                    shutil.rmtree("./"+ job, ignore_errors=True)
                 os.mkdir("./"+ job)
                 response = os.system(f"rsync -rzh archiveteam@88.198.2.17::gpujobs/{job}/* {job}") # no not delete just yet the source files
                 if response != 0:
@@ -74,12 +77,13 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                 while True:
                     if outgoingqueue.qsize() > 0:
                         outjob, pairs = outgoingqueue.get() # I am poping out from queue only if my current job is finished
-                        print (f"[io] received results for: {job}={outjob}")
-                        outgoingqueue.task_done()
                         if pairs > 0:
                             print (f"[io] mark job as complete: {job}")
+                            # cleanup temp storage now
+
                             client.completeJob(int(pairs))
                         shutil.rmtree("./"+ job)
+                        outgoingqueue.task_done()
                         break # we can let the worker request a new job
                     else:
                         time.sleep(1)
@@ -100,8 +104,25 @@ def io_worker(incomingqueue: JoinableQueue, outgoingqueue: list, groupsize: int,
     except Exception as e:
         print(f"[io] some inbound problem occured: {e}")
 
+def upload_worker(uploadqueue: JoinableQueue, counter: JoinableQueue, outgoingqueue: list):
+    print(f"upload worker started")
+    while True:
+        if uploadqueue.qsize() > 0:
+            group_id, upload_address, shards, results = uploadqueue.get()
+            response = os.system(f"rsync -zh save/*{group_id}* {upload_address}") # to do get target from client
+            if response == 0:
+                print (f"[io2] sending all jobs to be marked as completed")
+                for i, job, item in shards:
+                    outgoingqueue[i].put((job, results.get(job)))
+                    counter.put(1)
+            else:
+                for i, job, item in shards:
+                    outgoingqueue[i].put((job, 0)) # if upload crashes, then do NOT mark completeJob()
+            uploadqueue.task_done()
+        else:
+            time.sleep(10)
 
-def gpu_worker(incomingqueue: JoinableQueue, outgoingqueue: list, counter: JoinableQueue, gpuflag: JoinableQueue, groupsize: int):
+def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag: JoinableQueue, groupsize: int):
     print (f"[gpu] worker started")
     # watch for the incoming queue, when it is big enough we can trigger processing    
     while True:
@@ -157,7 +178,9 @@ def gpu_worker(incomingqueue: JoinableQueue, outgoingqueue: list, counter: Joina
             # find most required upload address among the grouped shards
             upload_address = mode(addresses)
             print (f"most requested upload address is {upload_address}")
-            response = os.system(f"rsync -zh --remove-source-files save/*{group_id}* {upload_address}") # to do get target from client
+            uploadqueue.put((group_id, upload_address, shards, results))
+            '''
+            response = os.system(f"rsync -zh save/*{group_id}* {upload_address}") # to do get target from client
             if response == 0:
                 print (f"[gpu] sending all jobs to be marked as completed")
                 for i, job, item in shards:
@@ -166,7 +189,8 @@ def gpu_worker(incomingqueue: JoinableQueue, outgoingqueue: list, counter: Joina
             else:
                 for i, job, item in shards:
                     outgoingqueue[i].put((job, 0)) # if upload crashes, then do NOT mark completeJob()
-            print (f"[gpu] cleaning up group folders")
+            '''
+            #print (f"[gpu] cleaning up group folders")
             
             gpuflag.get()
             gpuflag.task_done()
@@ -284,6 +308,7 @@ if __name__ == "__main__":
         for _ in range(2 * groupsize): # we need 2x IO workers to keep GPU permanently busy
              outbound.append(JoinableQueue())
         inbound = JoinableQueue()
+        uploadqueue = JoinableQueue()
         counter = JoinableQueue()
         inpsize = JoinableQueue() # use this to communicate number of jobs downloading now
         gpuflag = JoinableQueue() # use this to flag that gpu is processing
@@ -291,11 +316,12 @@ if __name__ == "__main__":
 
         # launch separate processes with specialized workers
         io = Process(target=io_worker, args=[inbound, outbound, groupsize, YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL], daemon=True).start()
+        upd = Process(target=upload_worker, args=[uploadqueue, counter, outbound], daemon=True).start()
 
         #monitor = Process(target=monitor, args=[groupsize, inbound, outbound, counter, inpsize]).start()
         #curses.wrapper(monitor2(nodes, inbound, outbound, counter, inpsize, stdscr, errors, gpuflag))        
         
-        gpu_worker(inbound, outbound, counter, gpuflag, groupsize)
+        gpu_worker(inbound, uploadqueue, gpuflag, groupsize)
 
     except KeyboardInterrupt:
         print ("Keyboard interrupt")
