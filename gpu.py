@@ -68,11 +68,15 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                     print (f"[io] invalid job detected: {job}")
                     continue
                 else:
-                    try:
-                        os.system(f"mv {job}/*_parsed.csv stats/")
-                        os.system(f"mv {job}/*_unfiltered.csv stats/")
-                    finally:
-                        print (f"[io] job sent to GPU: {job}")
+                    if len(glob(f"{job}/*.csv")) == 0:
+                        client.invalidURL()
+                        print (f"[io] invalid job detected: {job}")
+                        continue
+                    for file in glob(f"{job}/*_parsed.csv"):
+                        os.system(f"mv {file} stats/")
+                    for file in glob(f"{job}/*_unfiltered.csv"):
+                        os.system(f"mv {file} stats/")
+                    print (f"[io] job sent to GPU: {job}")
                     incomingqueue.put((i, job, client.upload_address))
                 
                 # wait until job gets processes
