@@ -12,6 +12,7 @@ from glob import glob
 from tqdm import tqdm
 from pathlib import Path
 from colorama import Fore
+from statistics import mode
 sys.path.append('./crawlingathome-worker/')
 from multiprocessing import JoinableQueue, Process
 
@@ -58,7 +59,7 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                     continue
                 job = client.shard
                 os.mkdir("./"+ job)
-                response = os.system(f"rsync -rzh archiveteam@88.198.2.17::gpujobs/{job}/* {job}") # no not delete just yet the source files
+                response = os.system(f"rsync -rzh --remove-source-files archiveteam@88.198.2.17::gpujobs/{job}/* {job}") # no not delete just yet the source files
                 if response != 0:
                     client.invalidURL()
                     print (f"[io] invalid job detected: {job}")
@@ -67,7 +68,7 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                     os.system(f"mv {job}/*_parsed.csv stats/")
                     os.system(f"mv {job}/*_unfiltered.csv stats/")
                     print (f"[io] job sent to GPU: {job}")
-                    incomingqueue.put((i, job))
+                    incomingqueue.put((i, job, client.upload_address))
                 
                 # wait until job gets processes
                 while True:
@@ -108,11 +109,12 @@ def gpu_worker(incomingqueue: JoinableQueue, outgoingqueue: list, counter: Joina
         if incomingqueue.qsize() >= groupsize:
             gpuflag.put(1)
             shards = []
+            addresses = []
             group_id = uuid.uuid4().hex
             print (f"[gpu] got new {groupsize} jobs to group in id {group_id}")
             group_parse = None
             for _ in range(groupsize):
-                i, job = incomingqueue.get()
+                i, job, address = incomingqueue.get()
 
                 all_csv_files = []
                 for path, subdir, files in os.walk(job):
@@ -121,6 +123,7 @@ def gpu_worker(incomingqueue: JoinableQueue, outgoingqueue: list, counter: Joina
                 # get name of csv file
                 out_path = all_csv_files[0]
                 shards.append((i, job, Path(out_path).stem.strip("_unfiltered").strip("_parsed").strip(".")))
+                addresses.append(address)
 
                 incomingqueue.task_done()
             print (f"[gpu] adjusted image paths")
@@ -151,7 +154,10 @@ def gpu_worker(incomingqueue: JoinableQueue, outgoingqueue: list, counter: Joina
             print(f"last filtered {final_images} images in {round(time.time()-start,2)} sec")
 
             print (f"[gpu] upload group results to rsync target")
-            response = os.system(f"rsync -zh --remove-source-files save/*{group_id}* archiveteam@88.198.2.17::CAH") # to do get target from client
+            # find most required upload address among the grouped shards
+            upload_address = mode(addresses)
+            print (f"most requested upload address is {upload_address}")
+            response = os.system(f"rsync -zh --remove-source-files save/*{group_id}* {upload_address}") # to do get target from client
             if response == 0:
                 print (f"[gpu] sending all jobs to be marked as completed")
                 for i, job, item in shards:

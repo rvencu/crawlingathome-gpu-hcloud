@@ -221,11 +221,11 @@ def dl_wat(valid_data, first_sample_id):
         columns=["SAMPLE_ID", "PATH", "URL", "TEXT", "HEIGHT", "WIDTH", "LICENSE"],
     )
 
-def upload(source: str, clientType: str):
+def upload(source: str, clientType: str, target: str):
     print(f"client type is {clientType}")
-    target = "gpujobs" if clientType == "CPU" else "CAH"
+    #target = "gpujobs" if clientType == "CPU" else "CAH"
     options = "-rzh" if clientType == "CPU" else "-zh"
-    return os.system(f"rsync {options} {source} archiveteam@88.198.2.17::{target}")
+    return os.system(f"rsync {options} {source} {target}")
 
 class FileData:
     """
@@ -385,7 +385,7 @@ if __name__ == "__main__":
             prefix = uuid.uuid4().hex
             os.mkdir(prefix)
             os.system(f"mv save/* {prefix}/")
-            result = upload(prefix, client.type)
+            result = upload(prefix, client.type, client.upload_address)
             if result == 0:
                 client.completeJob(prefix)
 
