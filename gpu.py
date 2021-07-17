@@ -95,10 +95,10 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                         time.sleep(1)
             else:
                 print (f"[io] no jobs")
-                time.sleep(10)
+                time.sleep(60)
         else:
             print (f"[io] client forgotten")
-            time.sleep(10)
+            time.sleep(60)
 
 def io_worker(incomingqueue: JoinableQueue, outgoingqueue: list, groupsize: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL):
     # separate process to initialize threaded workers
