@@ -154,7 +154,7 @@ def filter(df, out_fname, output_folder):
     dff.to_csv(f"{output_folder}{out_fname}.csv", index=False, sep="|")
 
     #count results for each worker from resulting dff
-    dff["shard"] = dff.apply(lambda row: str(row.PATH).split("/")[1], axis=1)
+    dff.loc[:,"shard"] = dff.PATH.apply(lambda x: x.split("/")[1])
     results = dff["shard"].value_counts()
     #print(f"CLIP ran in {round(time.time()-start,2)}")
     #start = time.time()
@@ -171,7 +171,7 @@ def filter(df, out_fname, output_folder):
         f"{output_folder}crawling_at_home_{out_fname}__00000-of-00001.tfrecord",
     )
     # save hashes
-    dff["hash"] = dff.apply(lambda row: hashlib.md5((str(row.URL)+str(row.TEXT)).encode("utf-8")).hexdigest(), axis=1)
+    dff.loc[:,"hash"] = dff.apply(lambda row: hashlib.md5((str(row.URL)+str(row.TEXT)).encode("utf-8")).hexdigest(), axis=1)
     with open(f"{output_folder}hashes-{out_fname}.hsh", "wt") as f:
         for item in dff["hash"]:
             f.write(item + "\n")
