@@ -90,8 +90,10 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                         if pairs > 0:
                             #print (f"[io {i}] mark job as complete: {job}")
                             # cleanup temp storage now
-
-                            client.completeJob(int(pairs))
+                            try:
+                                client.completeJob(int(pairs))
+                            except:
+                                pass
                         shutil.rmtree("./"+ job)
                         outgoingqueue.task_done()
                         break # we can let the worker request a new job
