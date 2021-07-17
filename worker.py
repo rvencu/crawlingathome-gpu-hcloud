@@ -387,7 +387,7 @@ if __name__ == "__main__":
             os.system(f"mv save/* {prefix}/")
             result = upload(prefix, client.type, f"archiveteam@88.198.2.17::gpujobs")
             if result == 0:
-                client.completeJob(prefix)
+                client.completeJob(f"rsync {prefix}")
 
             shutil.rmtree(prefix)
             last = round(time.time() - start0)

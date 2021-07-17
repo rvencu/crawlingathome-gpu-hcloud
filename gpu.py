@@ -64,22 +64,18 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                 if os.path.exists("./"+ job):
                     shutil.rmtree("./"+ job, ignore_errors=True)
                 os.mkdir("./"+ job)
-                response = os.system(f"rsync -rzh archiveteam@88.198.2.17::gpujobs/{job}/* {job}") # no not delete just yet the source files
-                if response != 0:
+                client.downloadShard()
+
+                if len(glob(f"{job}/*.csv")) == 0:
                     client.invalidURL()
                     print (f"[io {i}] invalid job detected: {job}")
                     continue
-                else:
-                    if len(glob(f"{job}/*.csv")) == 0:
-                        client.invalidURL()
-                        print (f"[io {i}] invalid job detected: {job}")
-                        continue
-                    for file in glob(f"{job}/*_parsed.csv"):
-                        os.system(f"mv {file} stats/")
-                    for file in glob(f"{job}/*_unfiltered.csv"):
-                        os.system(f"mv {file} stats/")
-                    #print (f"[io] job sent to GPU: {job}")
-                    incomingqueue.put((i, job, client.upload_address))
+                for file in glob(f"{job}/*_parsed.csv"):
+                    os.system(f"mv {file} stats/")
+                for file in glob(f"{job}/*_unfiltered.csv"):
+                    os.system(f"mv {file} stats/")
+                #print (f"[io] job sent to GPU: {job}")
+                incomingqueue.put((i, job, client.upload_address))
                 
                 # wait until job gets processes
                 while True:
