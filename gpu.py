@@ -10,9 +10,11 @@ import clip_filter
 import pandas as pd
 from glob import glob
 from tqdm import tqdm
+#from mega import Mega
 from pathlib import Path
 from colorama import Fore
 from statistics import mode
+import crawlingathome_client as cah
 sys.path.append('./crawlingathome-worker/')
 from multiprocessing import JoinableQueue, Process
 
@@ -65,18 +67,18 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                 response = os.system(f"rsync -rzh archiveteam@88.198.2.17::gpujobs/{job}/* {job}") # no not delete just yet the source files
                 if response != 0:
                     client.invalidURL()
-                    print (f"[io] invalid job detected: {job}")
+                    print (f"[io {i}] invalid job detected: {job}")
                     continue
                 else:
                     if len(glob(f"{job}/*.csv")) == 0:
                         client.invalidURL()
-                        print (f"[io] invalid job detected: {job}")
+                        print (f"[io {i}] invalid job detected: {job}")
                         continue
                     for file in glob(f"{job}/*_parsed.csv"):
                         os.system(f"mv {file} stats/")
                     for file in glob(f"{job}/*_unfiltered.csv"):
                         os.system(f"mv {file} stats/")
-                    print (f"[io] job sent to GPU: {job}")
+                    #print (f"[io] job sent to GPU: {job}")
                     incomingqueue.put((i, job, client.upload_address))
                 
                 # wait until job gets processes
@@ -84,7 +86,7 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                     if outgoingqueue.qsize() > 0:
                         outjob, pairs = outgoingqueue.get() # I am poping out from queue only if my current job is finished
                         if pairs > 0:
-                            print (f"[io] mark job as complete: {job}")
+                            #print (f"[io {i}] mark job as complete: {job}")
                             # cleanup temp storage now
 
                             client.completeJob(int(pairs))
@@ -94,10 +96,10 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                     else:
                         time.sleep(1)
             else:
-                print (f"[io] no jobs")
+                print (f"[io {i}] no jobs")
                 time.sleep(60)
         else:
-            print (f"[io] client forgotten")
+            print (f"[io {i}] client forgotten")
             time.sleep(60)
 
 def io_worker(incomingqueue: JoinableQueue, outgoingqueue: list, groupsize: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL):
@@ -112,18 +114,23 @@ def io_worker(incomingqueue: JoinableQueue, outgoingqueue: list, groupsize: int,
 
 def upload_worker(uploadqueue: JoinableQueue, counter: JoinableQueue, outgoingqueue: list):
     print(f"upload worker started")
+    #mega = Mega()
+    #m = mega.login(email, password)
+
     while True:
         if uploadqueue.qsize() > 0:
             group_id, upload_address, shards, results = uploadqueue.get()
             response = os.system(f"rsync -zh save/*{group_id}* {upload_address}") # to do get target from client
             if response == 0:
-                print (f"[io2] sending all jobs to be marked as completed")
+                #print (f"[io2] sending all jobs to be marked as completed")
                 for i, job, item in shards:
                     outgoingqueue[i].put((job, results.get(job)))
                     counter.put(1)
             else:
                 for i, job, item in shards:
                     outgoingqueue[i].put((job, 0)) # if upload crashes, then do NOT mark completeJob()
+            #folder = m.find('crawliongathome/tfrecords-2021-q3')
+            #m.upload('myfile.doc', folder[0])
             uploadqueue.task_done()
         else:
             time.sleep(10)
@@ -132,7 +139,7 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
     print (f"[gpu] worker started")
     # watch for the incoming queue, when it is big enough we can trigger processing    
     while True:
-        print (f"[gpu] testing incoming queue size")
+        #print (f"[gpu] testing incoming queue size")
         if incomingqueue.qsize() >= groupsize:
             gpuflag.put(1)
             shards = []
@@ -153,7 +160,7 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
                 addresses.append(address)
 
                 incomingqueue.task_done()
-            print (f"[gpu] adjusted image paths")
+            #print (f"[gpu] adjusted image paths")
 
             for i, job, item in shards:
                 dlparse_df = pd.read_csv(job + "/" + item + ".csv", sep="|")
@@ -167,35 +174,26 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
                 for i, job, item in shards:
                     f.write(item + "\n")
             
-            print (f"[gpu] saving stats")
+            #print (f"[gpu] saving stats")
 
             group_parse.to_csv("./stats/" + group_id + "_groupduped.csv", index=False, sep="|") # I am using these to find out domains to filter from scraping
+            duped = len(group_parse.index)
             group_parse.drop_duplicates(subset=["URL","TEXT"], keep='last', inplace=True)
             group_parse.reset_index(inplace=True, drop=True)
 
             group_parse.to_csv("./stats/" + group_id + "_groupdeduped.csv", index=False, sep="|") # I am using these to find out domains to filter from scraping
 
-            print (f"[gpu] sending group to CLIP filter")
+            #print (f"[gpu] sending group to CLIP filter")
             start = time.time()
             final_images, results = clip_filter.filter(group_parse, group_id, "./save/")
-            print(f"last filtered {final_images} images in {round(time.time()-start,2)} sec")
+            print(f"filtered {final_images} from {len(group_parse.index)} deduped from {duped} in {round(time.time()-start,2)} sec")
 
-            print (f"[gpu] upload group results to rsync target")
+            #print (f"[gpu] upload group results to rsync target")
             # find most required upload address among the grouped shards
             upload_address = mode(addresses)
-            print (f"most requested upload address is {upload_address}")
+            #print (f"most requested upload address is {upload_address}")
             uploadqueue.put((group_id, upload_address, shards, results))
-            '''
-            response = os.system(f"rsync -zh save/*{group_id}* {upload_address}") # to do get target from client
-            if response == 0:
-                print (f"[gpu] sending all jobs to be marked as completed")
-                for i, job, item in shards:
-                    outgoingqueue[i].put((job, results.get(job)))
-                    counter.put(1)
-            else:
-                for i, job, item in shards:
-                    outgoingqueue[i].put((job, 0)) # if upload crashes, then do NOT mark completeJob()
-            '''
+            
             #print (f"[gpu] cleaning up group folders")
             
             gpuflag.get()
@@ -278,12 +276,14 @@ def monitor2(nodes, inbound, outbound, counter, inpsize, stdscr, gpuflag):
 
 if __name__ == "__main__":
 
+
+
     YOUR_NICKNAME_FOR_THE_LEADERBOARD = os.getenv('CAH_NICKNAME')
     if YOUR_NICKNAME_FOR_THE_LEADERBOARD is None:
         YOUR_NICKNAME_FOR_THE_LEADERBOARD = "anonymous"
     CRAWLINGATHOME_SERVER_URL = "http://cah.io.community/"
 
-    import crawlingathome_client as cah
+    
 
     print(
         f"[GPU] starting session under `{YOUR_NICKNAME_FOR_THE_LEADERBOARD}` nickname")

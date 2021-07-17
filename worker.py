@@ -176,7 +176,7 @@ async def request_image(datas, start_sampleid):
         try:
             proces = process_img_content(
                 # tune timeout and connection_timeout to grab more or less files. shorter timeouts will exclude bad performing websites
-                await session.get(url, timeout=3, connection_timeout=10), alt_text, license, sample_id
+                await session.get(url, timeout=5, connection_timeout=15), alt_text, license, sample_id
             )
             if proces is not None:
                 tmp_data.append(proces)
