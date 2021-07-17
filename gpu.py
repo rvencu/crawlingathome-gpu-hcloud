@@ -59,7 +59,12 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                 except:
                     time.sleep(10)
                     continue
-                job = client.shard
+                try:
+                    job = client.shard.split(" ")[1]
+                except:
+                    client.invalidURL()
+                    print (f"[io {i}] invalid job detected: {job}")
+                    continue
                 # found repeating shards, need to clear old files before continuing
                 if os.path.exists("./"+ job):
                     shutil.rmtree("./"+ job, ignore_errors=True)
