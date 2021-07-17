@@ -10,7 +10,7 @@ cp cloud-config.yaml cloud-init
 sudo apt-get update
 sudo apt-get install -y git build-essential python3-dev python3-pip libjpeg-dev zip
 
-git clone "https://github.com/ARKseal/crawlingathome" crawlingathome_client
+git clone "https://github.com/TheoCoombes/crawlingathome" crawlingathome_client
 #conda install pytorch==1.7.1 torchvision==0.8.2 torchaudio==0.7.2 cudatoolkit=11.0 -c pytorch
 pip3 install torch==1.9.0+cu111 torchvision==0.10.0+cu111 torchaudio==0.9.0 -f https://download.pytorch.org/whl/torch_stable.html
 pip3 install git+https://github.com/rvencu/asks
