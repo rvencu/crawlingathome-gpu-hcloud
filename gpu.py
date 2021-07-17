@@ -59,6 +59,7 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                 except:
                     time.sleep(10)
                     continue
+                job = ""
                 try:
                     job = client.shard.split(" ")[1]
                 except:
