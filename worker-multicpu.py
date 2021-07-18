@@ -160,7 +160,7 @@ async def request_image(datas, start_sampleid, img_output_folder):
 
     # change the number of parallel connections based on CPU speed, network capabilities, etc.
     # the number of 192 is optimized for 1 vCPU droplet at Hetzner Cloud (code CX11)
-    session = asks.Session(connections=512)
+    session = asks.Session(connections=1024)
     # try to make the bot website friendly
     session.headers = {
         "User-Agent": "Crawling at Home Project (http://cah.io.community)",
@@ -375,7 +375,7 @@ if __name__ == "__main__":
     bloom = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("crawlingathome-gpu-hcloud/blocklists/bloom.bin",-1))
 
     workers = []
-    for i in range (cpu_count()-1):
+    for i in range (2 * cpu_count() - 1):
         workers.append(Process(target=proc_worker, args= [i, blocked, bloom, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVER_URL], daemon=True))
 
     for worker in workers:
