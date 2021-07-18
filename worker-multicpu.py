@@ -255,15 +255,9 @@ def proc_worker(i: int, blocked, bloom, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAW
     img_output_folder = output_folder + "images/"
 
     # connect to C@H server and initialize client
-    client = None
-    while True:
-        try:
-            client = cah.init(
-                url=CRAWLINGATHOME_SERVER_URL, nickname=YOUR_NICKNAME_FOR_THE_LEADERBOARD, type="CPU"
-            )
-            break
-        except:
-            time.sleep(25)
+    client = cah.init(
+        url=CRAWLINGATHOME_SERVER_URL, nickname=YOUR_NICKNAME_FOR_THE_LEADERBOARD, type="CPU"
+    )
 
     # initialize stats variables for previous job
     last = 0
@@ -285,15 +279,9 @@ def proc_worker(i: int, blocked, bloom, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAW
             os.system(f"cd {output_folder}")
 
             # get new job and download the wat file
-            while True:
-                try:
-                    client.newJob()
-                    client.downloadShard()
-                except:
-                    time.sleep(30)
-                    continue
-                break
-            
+            client.newJob()
+            client.downloadShard()
+
             # retrieve job details and determine what part of the wat file to parse
             first_sample_id = int(client.start_id)
             last_sample_id = int(client.end_id)
@@ -312,15 +300,9 @@ def proc_worker(i: int, blocked, bloom, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAW
             out_fname = f"FIRST_SAMPLE_ID_IN_SHARD_{str(first_sample_id)}_LAST_SAMPLE_ID_IN_SHARD_{str(last_sample_id)}_{shard_of_chunk}"
             print(time.time()-start)
             start = time.time()
-            print (f"[crawling@home] shard id {out_fname}") # in case test fails, we need to remove bad data
+            print (f"[crawling@home {i}] shard id {out_fname}") # in case test fails, we need to remove bad data
 
-            while True:
-                try:
-                    client.log("Processing shard" + lastext)
-                except:
-                    time.sleep(5)
-                    continue
-                break
+            client.log("Processing shard" + lastext)
 
             # parse valid links from wat file
             with open("shard.wat", "r") as infile:
@@ -339,21 +321,15 @@ def proc_worker(i: int, blocked, bloom, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAW
             print (f"this job has {lastlinks} links and deduped {deduped} links in {round(time.time()-start,2)}")
             start = time.time()
 
-            while True:
-                try:
-                    client.log("Downloading images" + lastext)
-                except:
-                    time.sleep(5)
-                    continue
-                break
+            client.log("Downloading images" + lastext)
             
             # attempt to download validated links and save to disk for stats and blocking lists
             dlparse_df = dl_wat( parsed_data, first_sample_id)
             dlparse_df.to_csv(out_fname + ".csv", index=False, sep="|")
             dlparse_df.to_csv(out_fname + "_unfiltered.csv", index=False, sep="|")
-            print (f"downloaded {len(dlparse_df)} in {round(time.time() - start, 2)}")
-            print (f"download efficiency {len(dlparse_df)/(time.time() - start)} img/sec")
-            print (f"crawl efficiency {lastlinks/(time.time() - start)} links/sec")
+            print (f"{i} downloaded {len(dlparse_df)} in {round(time.time() - start, 2)}")
+            print (f"{i} download efficiency {len(dlparse_df)/(time.time() - start)} img/sec")
+            print (f"{i} crawl efficiency {lastlinks/(time.time() - start)} links/sec")
 
             # at this point we finishes the CPU node job, need to make the data available for GPU worker
             prefix = uuid.uuid4().hex
@@ -368,7 +344,7 @@ def proc_worker(i: int, blocked, bloom, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAW
             os.system(f"cd ../../")
             last = round(time.time() - start0)
 
-            print(f"job completed in {last} seconds")
+            print(f"{i} job completed in {last} seconds")
             
         except Exception as e:
             print (e)
