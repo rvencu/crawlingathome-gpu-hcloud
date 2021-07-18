@@ -10,7 +10,6 @@ import ujson
 import shutil
 import random
 import hashlib
-import tractor
 import pandas as pd
 from glob import glob
 from uuid import uuid1
@@ -403,7 +402,7 @@ if __name__ == "__main__":
     CRAWLINGATHOME_SERVER_URL = "http://cah.io.community/"
 
     workers = []
-    for i in range (cores-1):
+    for i in range (cores):
         workers.append( Process(target=mp_worker, args=[i, YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL], daemon=True).start())
 
-    
+    mp_worker(10, YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL)
