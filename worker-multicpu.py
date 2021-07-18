@@ -276,18 +276,17 @@ def proc_worker(i: int, blocked, bloom, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAW
                 shutil.rmtree(output_folder, ignore_errors=True)
 
             os.makedirs(img_output_folder)
-            os.system(f"cd {output_folder}")
 
             # get new job and download the wat file
             client.newJob()
-            client.downloadShard()
+            client.downloadShard(output_folder)
 
             # retrieve job details and determine what part of the wat file to parse
             first_sample_id = int(client.start_id)
             last_sample_id = int(client.end_id)
             shard_of_chunk = client.shard_piece # TODO
 
-            fd = FileData('shard.wat')
+            fd = FileData(output_folder+'shard.wat')
 
             if shard_of_chunk == 0:
                 start_index = fd[0]
@@ -305,9 +304,10 @@ def proc_worker(i: int, blocked, bloom, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAW
             client.log("Processing shard" + lastext)
 
             # parse valid links from wat file
-            with open("shard.wat", "r") as infile:
+            with open(output_folder+"shard.wat", "r") as infile:
                 parsed_data, deduped = parse_wat(infile, start_index, lines, blocked, bloom)
             print (f"parsed wat in {round(time.time()-start,2)}")
+            os.remove(output_folder+"shard.wat")
             start = time.time()
 
             # convert to dataframe and save to disk (for statistics and generating blocking lists)
@@ -333,15 +333,14 @@ def proc_worker(i: int, blocked, bloom, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAW
 
             # at this point we finishes the CPU node job, need to make the data available for GPU worker
             prefix = uuid.uuid4().hex
-            os.mkdir(f"../{prefix}")
-            os.system(f"mv save/* ../{prefix}/")
-            result = upload(f"../{prefix}", client.type, f"archiveteam@88.198.2.17::gpujobs")
+            os.mkdir(f"{prefix}")
+            os.system(f"mv save/* {prefix}/")
+            result = upload(f"{prefix}", client.type, f"archiveteam@88.198.2.17::gpujobs")
             if result == 0:
                 client.completeJob(f"rsync {prefix}")
 
-            shutil.rmtree(f"../{prefix}")
+            shutil.rmtree(f"{prefix}")
             
-            os.system(f"cd ../../")
             last = round(time.time() - start0)
 
             print(f"{i} job completed in {last} seconds")
