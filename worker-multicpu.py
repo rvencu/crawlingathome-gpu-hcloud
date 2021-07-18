@@ -1,5 +1,6 @@
 import gc 
 import os
+import re
 import sys
 import time
 import trio
@@ -322,6 +323,8 @@ def proc_worker(i: int, blocked, bloom, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAW
             
             # attempt to download validated links and save to disk for stats and blocking lists
             dlparse_df = dl_wat( parsed_data, first_sample_id, img_output_folder)
+            dlparse_df["PATH"] = dlparse_df["PATH"].sub(r"^./save/\d{1,2}/(.*)$","save/$1")
+            
             dlparse_df.to_csv(output_folder+out_fname + ".csv", index=False, sep="|")
             dlparse_df.to_csv(output_folder+out_fname + "_unfiltered.csv", index=False, sep="|")
             print (f"{i} downloaded {len(dlparse_df)} in {round(time.time() - start, 2)}")
