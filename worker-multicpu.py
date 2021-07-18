@@ -160,7 +160,7 @@ async def request_image(datas, start_sampleid, img_output_folder):
 
     # change the number of parallel connections based on CPU speed, network capabilities, etc.
     # the number of 192 is optimized for 1 vCPU droplet at Hetzner Cloud (code CX11)
-    session = asks.Session(connections=192)
+    session = asks.Session(connections=512)
     # try to make the bot website friendly
     session.headers = {
         "User-Agent": "Crawling at Home Project (http://cah.io.community)",
@@ -335,13 +335,13 @@ def proc_worker(i: int, blocked, bloom, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAW
             prefix = uuid.uuid4().hex
             os.mkdir(f"{prefix}")
             os.system(f"mv {output_folder}/* {prefix}/")
-            '''
+            
             result = upload(f"{prefix}", client.type, f"archiveteam@88.198.2.17::gpujobs")
             if result == 0:
                 client.completeJob(f"rsync {prefix}")
 
             shutil.rmtree(f"{prefix}")
-            '''
+            
             
             last = round(time.time() - start0)
 
