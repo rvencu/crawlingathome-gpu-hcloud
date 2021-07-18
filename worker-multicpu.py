@@ -160,7 +160,7 @@ async def request_image(datas, start_sampleid, img_output_folder):
 
     # change the number of parallel connections based on CPU speed, network capabilities, etc.
     # the number of 192 is optimized for 1 vCPU droplet at Hetzner Cloud (code CX11)
-    session = asks.Session(connections=1024)
+    session = asks.Session(connections=256)
     # try to make the bot website friendly
     session.headers = {
         "User-Agent": "Crawling at Home Project (http://cah.io.community)",
