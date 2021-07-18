@@ -341,14 +341,11 @@ def proc_worker(i: int, blocked, bloom, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAW
                 client.completeJob(f"rsync {prefix}")
 
             shutil.rmtree(f"{prefix}")
-            
-            
+                        
             last = round(time.time() - start0)
 
             print(f"{i} job completed in {last} seconds")
-
-            break
-            
+           
         except Exception as e:
             print (e)
             print ("Worker crashed")
