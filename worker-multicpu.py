@@ -207,8 +207,6 @@ class FileData:
 
 
 if __name__ == "__main__":
-    # helper function to find worker IP
-    myip = ip = get('https://api.ipify.org').text
 
     # initialize working folders
     output_folder = "./save/"
