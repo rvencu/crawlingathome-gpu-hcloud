@@ -110,7 +110,7 @@ def parse_wat(content, start, line_count, blocked, bloom):
     ], deduped)  # use a dict in order to remove duplicate tuples from list
 
 
-def process_img_content(response, alt_text, license, sample_id):
+def process_img_content(response, alt_text, license, sample_id, img_output_folder):
     """
     Function to process downloaded image. Use use PIL from pillow-simd 
         (faster than open cv that in return is faster than original pillow)
@@ -120,7 +120,6 @@ def process_img_content(response, alt_text, license, sample_id):
     output: list of image parameters or None if image is rejected
     """
 
-    img_output_folder = "save/images/"
     try:
         # reject too small images
         if len(response.content) < 5000:
@@ -146,7 +145,7 @@ def process_img_content(response, alt_text, license, sample_id):
     return [str(sample_id), out_fname, response.url, alt_text, width, height, license]
 
 
-async def request_image(datas, start_sampleid):
+async def request_image(datas, start_sampleid, img_output_folder):
     """
     This function initiates many parallel async connections to try download the images from provided links
     
@@ -177,7 +176,7 @@ async def request_image(datas, start_sampleid):
         try:
             proces = process_img_content(
                 # tune timeout and connection_timeout to grab more or less files. shorter timeouts will exclude bad performing websites
-                await session.get(url, timeout=5, connection_timeout=15), alt_text, license, sample_id
+                await session.get(url, timeout=5, connection_timeout=15), alt_text, license, sample_id, img_output_folder
             )
             if proces is not None:
                 tmp_data.append(proces)
@@ -198,7 +197,7 @@ async def request_image(datas, start_sampleid):
     return
 
 
-def dl_wat(valid_data, first_sample_id):
+def dl_wat(valid_data, first_sample_id, img_output_folder):
     """
     This function initiates download attempt of validated parsed links
     It launches multithreaded tasks by using trio module
@@ -213,7 +212,7 @@ def dl_wat(valid_data, first_sample_id):
     # Download every image available
     processed_samples = []
     #trio.run(request_image, valid_data, first_sample_id, instruments=[TrioProgress(len(valid_data), False)] )
-    trio.run( request_image, valid_data, first_sample_id )
+    trio.run( request_image, valid_data, first_sample_id, img_output_folder )
 
     for tmpf in glob(".tmp/*.json"):
         processed_samples.extend(ujson.load(open(tmpf)))
@@ -312,7 +311,7 @@ def proc_worker(i: int, blocked, bloom, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAW
 
             # convert to dataframe and save to disk (for statistics and generating blocking lists)
             parsed_df = pd.DataFrame(parsed_data, columns=["URL","TEXT","LICENSE"])
-            parsed_df.to_csv(out_fname + "_parsed.csv", index=False, sep="|")
+            parsed_df.to_csv(output_folder+out_fname + "_parsed.csv", index=False, sep="|")
 
             # attempt to spread out clusters of links pointing to the same domain name, improves crawling
             random.shuffle(parsed_data) 
@@ -324,9 +323,9 @@ def proc_worker(i: int, blocked, bloom, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAW
             client.log("Downloading images" + lastext)
             
             # attempt to download validated links and save to disk for stats and blocking lists
-            dlparse_df = dl_wat( parsed_data, first_sample_id)
-            dlparse_df.to_csv(out_fname + ".csv", index=False, sep="|")
-            dlparse_df.to_csv(out_fname + "_unfiltered.csv", index=False, sep="|")
+            dlparse_df = dl_wat( parsed_data, first_sample_id, img_output_folder)
+            dlparse_df.to_csv(output_folder+out_fname + ".csv", index=False, sep="|")
+            dlparse_df.to_csv(output_folder+out_fname + "_unfiltered.csv", index=False, sep="|")
             print (f"{i} downloaded {len(dlparse_df)} in {round(time.time() - start, 2)}")
             print (f"{i} download efficiency {len(dlparse_df)/(time.time() - start)} img/sec")
             print (f"{i} crawl efficiency {lastlinks/(time.time() - start)} links/sec")
@@ -334,7 +333,7 @@ def proc_worker(i: int, blocked, bloom, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAW
             # at this point we finishes the CPU node job, need to make the data available for GPU worker
             prefix = uuid.uuid4().hex
             os.mkdir(f"{prefix}")
-            os.system(f"mv save/* {prefix}/")
+            os.system(f"mv {output_folder}/* {prefix}/")
             result = upload(f"{prefix}", client.type, f"archiveteam@88.198.2.17::gpujobs")
             if result == 0:
                 client.completeJob(f"rsync {prefix}")
@@ -359,6 +358,9 @@ if __name__ == "__main__":
     CRAWLINGATHOME_SERVER_URL = "http://cah.io.community/"
 
     print (f"starting session under `{YOUR_NICKNAME_FOR_THE_LEADERBOARD}` nickname")
+
+    if not os.path.exists(".tmp"):
+        os.mkdir(".tmp")
 
     blocked = set()
     with open("crawlingathome-gpu-hcloud/blocklists/blocklist-domain.txt","r") as f:
