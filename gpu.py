@@ -51,59 +51,63 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
         client = cah.init(
             url=CRAWLINGATHOME_SERVER_URL, nickname=YOUR_NICKNAME_FOR_THE_LEADERBOARD, type="GPU"
         )
-        while client.isAlive():
-            while client.jobCount() > 0: 
-                # each thread gets a new job, passes it to GPU then waits for completion
-                try:
-                    client.newJob()
-                except:
-                    time.sleep(10)
-                    continue
-                job = ""
-                try:
-                    job = client.shard.split(" ")[1]
-                except:
-                    client.invalidURL()
-                    print (f"[io {i}] invalid job detected: {job}")
-                    continue
-                # found repeating shards, need to clear old files before continuing
-                if os.path.exists("./"+ job):
-                    shutil.rmtree("./"+ job, ignore_errors=True)
-                os.mkdir("./"+ job)
-                client.downloadShard()
+        try:
+            while client.isAlive():
+                while client.jobCount() > 0: 
+                    # each thread gets a new job, passes it to GPU then waits for completion
+                    try:
+                        client.newJob()
+                    except:
+                        time.sleep(10)
+                        continue
+                    job = ""
+                    try:
+                        job = client.shard.split(" ")[1]
+                    except:
+                        client.invalidURL()
+                        print (f"[io {i}] invalid job detected: {job}")
+                        continue
+                    # found repeating shards, need to clear old files before continuing
+                    if os.path.exists("./"+ job):
+                        shutil.rmtree("./"+ job, ignore_errors=True)
+                    os.mkdir("./"+ job)
+                    client.downloadShard()
 
-                if len(glob(f"{job}/*.csv")) == 0:
-                    client.invalidURL()
-                    print (f"[io {i}] invalid job detected: {job}")
-                    continue
-                for file in glob(f"{job}/*_parsed.csv"):
-                    os.system(f"mv {file} stats/")
-                for file in glob(f"{job}/*_unfiltered.csv"):
-                    os.system(f"mv {file} stats/")
-                #print (f"[io] job sent to GPU: {job}")
-                incomingqueue.put((i, job, client.upload_address))
-                
-                # wait until job gets processes
-                while True:
-                    if outgoingqueue.qsize() > 0:
-                        outjob, pairs = outgoingqueue.get() # I am poping out from queue only if my current job is finished
-                        if pairs > 0:
-                            #print (f"[io {i}] mark job as complete: {job}")
-                            # cleanup temp storage now
-                            try:
-                                client.completeJob(int(pairs))
-                            except:
-                                pass
-                        shutil.rmtree("./"+ job)
-                        outgoingqueue.task_done()
-                        break # we can let the worker request a new job
-                    else:
-                        time.sleep(1)
+                    if len(glob(f"{job}/*.csv")) == 0:
+                        client.invalidURL()
+                        print (f"[io {i}] invalid job detected: {job}")
+                        continue
+                    for file in glob(f"{job}/*_parsed.csv"):
+                        os.system(f"mv {file} stats/")
+                    for file in glob(f"{job}/*_unfiltered.csv"):
+                        os.system(f"mv {file} stats/")
+                    #print (f"[io] job sent to GPU: {job}")
+                    incomingqueue.put((i, job, client.upload_address))
+                    
+                    # wait until job gets processes
+                    while True:
+                        if outgoingqueue.qsize() > 0:
+                            outjob, pairs = outgoingqueue.get() # I am poping out from queue only if my current job is finished
+                            if pairs > 0:
+                                #print (f"[io {i}] mark job as complete: {job}")
+                                # cleanup temp storage now
+                                try:
+                                    client.completeJob(int(pairs))
+                                except:
+                                    pass
+                            shutil.rmtree("./"+ job)
+                            outgoingqueue.task_done()
+                            break # we can let the worker request a new job
+                        else:
+                            time.sleep(1)
+                else:
+                    print (f"[io {i}] no jobs")
+                    time.sleep(60)
             else:
-                print (f"[io {i}] no jobs")
+                print (f"[io {i}] client forgotten")
                 time.sleep(60)
-        else:
-            print (f"[io {i}] client forgotten")
+        except:
+            print (f"[io {i}] client crasher, respawning...")
             time.sleep(60)
 
 def io_worker(incomingqueue: JoinableQueue, outgoingqueue: list, groupsize: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL):
@@ -111,7 +115,7 @@ def io_worker(incomingqueue: JoinableQueue, outgoingqueue: list, groupsize: int,
     print (f"[io] inbound workers:")
     try:
         # just launch how many threads we need to group jobs into single output
-        for i in range(2 * groupsize):
+        for i in range(2 * groupsize + 5):
             threading.Thread(target=gpu_cah_interface, args=(i, incomingqueue, outgoingqueue[i], YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL)).start()
     except Exception as e:
         print(f"[io] some inbound problem occured: {e}")
