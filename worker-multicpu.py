@@ -1,144 +1,117 @@
+import argparse
 import gc
-import multiprocessing
-from multiprocessing.queues import JoinableQueue 
-import os
-import sys
-import time
-import trio
-import uuid
-import ujson
-import shutil
-import random
 import hashlib
-import pandas as pd
+import multiprocessing as mp
+import os
+import random
+import shutil
+import time
+import traceback
+import warnings
 from glob import glob
-from uuid import uuid1
 from io import BytesIO
-from requests import get
-import crawlingathome_client as cah
-from bloom_filter2 import BloomFilter
 from urllib.parse import urljoin, urlparse
-sys.path.append('./crawlingathome-worker/')
-from multiprocessing import Process, JoinableQueue
-from PIL import Image, ImageFile, UnidentifiedImageError 
+from uuid import uuid1
 
 import asks
-asks.init("trio")
+import ftfy
+import pandas as pd
+import pycld2 as cld2
+import tractor
+import trio
+import ujson
+from bloom_filter2 import BloomFilter
+from PIL import Image, ImageFile, UnidentifiedImageError
+
+asks.init('trio')
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True  # https://stackoverflow.com/a/47958486
 
+
+warnings.filterwarnings("ignore")
+
+
+def chunk_using_generators(lst, n):
+    for i in range(0, len(lst), n):
+        yield lst[i: i + n]
+
+
 def remove_bad_chars(text):
-    # cleanup text so language can be detected
     return "".join(c for c in text if c.isprintable())
 
 
-def parse_wat(content, start, line_count, blocked, bloom):
-    """
-    This function checks the wat file content and attempts to extract valid candidates of image urls and alt texts
-
-    input: content = wat file content; start = start line number; line_count = how many lines to parse
-            usually a wat file is split in 2 halfs or 2 shards. shard 0 starts at the first line and line_count is about 1/2 of wat file lines
-            shard 1 starts at the middle of wat file and ends with the last line of wat
-    
-    output: a list of tuples (url, text, license)
-    """
-
-    import ftfy
-    import pycld2 as cld2
-
-    # blocklist-domains.txt contains a list of domains to block based on previous results of CLIP filtering.
-    # the domains are not likely to pass CLIP for either bad captions or the content is almost always NSFW
-
-    # failed-domains.txt contains failed domains, i.e. domains with image links and suitable alt texts that actually
-    # do not produce any image. domains that mayb dissapeared, or are good at blocking scrapers. List is also learned from
-    # past crawling effort
-    
-
-    deduped = 0
+def parse_wat(content, start, line_count, blocked, bloom_filter):
+    dedupes = 0
     valid_data = []
     content.seek(start)
     for _ in range(line_count):
         line = content.readline()
+
         if "IMG@" not in line:
             continue
+
         line_str = line.strip()
         data = ujson.loads(line_str)
-        # find all links inside the line
+
         linklist = data["Envelope"]["Payload-Metadata"]["HTTP-Response-Metadata"][
             "HTML-Metadata"
         ]["Links"]
-        # get base url
+
         base_url = os.path.dirname(
             data["Envelope"]["WARC-Header-Metadata"]["WARC-Target-URI"]
-        )
+        )  # get base url
+
         license = "?"
         for e in linklist:
             if "url" in e and "creativecommons.org/licenses/" in e["url"]:
                 license = e["url"]
-            # reject links if ALT tag is not present
             if "alt" not in e:
                 continue
             url = e["url"]
-            # reject links of svg, gif or scripted images content
-            if any( x in url for x in [".svg", ".gif", "data:image", "javascript:"] ):
+
+            if any(x in url for x in [".svg", ".gif", "data:image", "javascript:"]):
                 continue
-            # reject links found in blocked list
+
             try:
                 if urlparse(url).netloc in blocked:
                     continue
             except:
-                # cannot even parse the url
                 continue
-            # detect ALT text language, we want to retain only English captions
+
             alt_text = ftfy.fix_text(e["alt"].replace("\n", " ")).strip()
             try:
                 _, _, details = cld2.detect(alt_text)
             except Exception as e:
                 alt_text = remove_bad_chars(alt_text)
                 _, _, details = cld2.detect(alt_text)
-            # keep pair if we made it so far
+
             if details[0][1] == "en":
                 if not url.startswith("http"):
                     url = urljoin(base_url, url)
-                # reject if pair is a duplicate
-                #concat = str(hash(url + alt_text))
-                concat = hashlib.md5((url + alt_text).encode("utf-8")).hexdigest()
-                if concat in bloom: #duplicates:
-                    deduped += 1
+
+                if hashlib.md5((url + alt_text).encode("utf-8")).hexdigest() in bloom_filter:
+                    dedupes += 1
                     continue
+
                 valid_data.append((url, alt_text, license))
-    return ([
+    return [
         t for t in {tuple(i) for i in valid_data}
-    ], deduped)  # use a dict in order to remove duplicate tuples from list
+    ], dedupes  # Remove duplicate tuple from list
 
 
 def process_img_content(response, alt_text, license, sample_id):
-    """
-    Function to process downloaded image. Use use PIL from pillow-simd 
-        (faster than open cv that in return is faster than original pillow)
-    
-    input: web request response, ALT text, license and sample id
-
-    output: list of image parameters or None if image is rejected
-    """
-
     img_output_folder = "save/images/"
+
     try:
-        # reject too small images
         if len(response.content) < 5000:
             return
         img_data = BytesIO(response.content)
         with Image.open(img_data) as im:
             width, height = im.size
-            # reject if too large (might be a DOS decompression bomb)
-            if width * height > 89478484:
-                return
             im_format = im.format
             out_fname = f"{img_output_folder}{str(sample_id)}.{im_format.lower()}"
-            # reject if format is not in this list
-            if im_format not in ["JPEG", "JPG", "PNG", "WEBP"]:
+            if im_format not in ["JPEG", "JPG", "PNG"]:
                 return
-            # convert all images to RGB (necessary for CLIP, also CLIP is doing it again so do we need it here?)
             if im.mode != "RGB":
                 im = im.convert("RGB")
             im.save(out_fname)
@@ -149,51 +122,32 @@ def process_img_content(response, alt_text, license, sample_id):
 
 
 async def request_image(datas, start_sampleid):
-    """
-    This function initiates many parallel async connections to try download the images from provided links
-    
-    input: dataset of validated links, the sample id to start with
-
-    output: list of lists with succesfully downloaded images and their parameters. this list is dumped on disk as json file
-    """
-
     tmp_data = []
-
-    # change the number of parallel connections based on CPU speed, network capabilities, etc.
-    # the number of 192 is optimized for 1 vCPU droplet at Hetzner Cloud (code CX11)
-    session = asks.Session(connections=192)
-    # try to make the bot website friendly
+    session = asks.Session(connections=165)
     session.headers = {
-        "User-Agent": "Crawling at Home Project (http://cah.io.community)",
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/12.1.1 Safari/605.1.15",
         "Accept-Language": "en-US",
         "Accept-Encoding": "gzip, deflate",
-        "Referer": "https://commoncrawl.org",
+        "Referer": "https://www.google.com/",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     }
 
     async def _request(data, sample_id):
         url, alt_text, license = data
-        # the following 2 lines are related to Trio Instrument to capture events from multiple threads
-        # task = trio.lowlevel.current_task()
-        # task.custom_sleep_data = None # custom_sleep_data can transport information from thread to main thread
         try:
             proces = process_img_content(
-                # tune timeout and connection_timeout to grab more or less files. shorter timeouts will exclude bad performing websites
-                await session.get(url, timeout=5, connection_timeout=15), alt_text, license, sample_id
+                await session.get(url, timeout=5), alt_text, license, sample_id
             )
             if proces is not None:
                 tmp_data.append(proces)
-                # task.custom_sleep_data = 1
         except Exception:
             return
 
-    # this section launches many parallel requests
     async with trio.open_nursery() as n:
         for data in datas:
             n.start_soon(_request, data, start_sampleid)
             start_sampleid += 1
 
-    # trio makes sure at this point all async tasks were executed
     with open(f".tmp/{uuid1()}.json", "w") as f:
         ujson.dump(tmp_data, f)
     gc.collect()
@@ -201,207 +155,189 @@ async def request_image(datas, start_sampleid):
 
 
 def dl_wat(valid_data, first_sample_id):
-    """
-    This function initiates download attempt of validated parsed links
-    It launches multithreaded tasks by using trio module
-    
-    input: dataset of validated links, the sample id to start with
-
-    output: dataframe of downloaded images and their parameters
-    """
-
-    import pandas as pd
-    
     # Download every image available
     processed_samples = []
-    #trio.run(request_image, valid_data, first_sample_id, instruments=[TrioProgress(len(valid_data), False)] )
-    trio.run( request_image, valid_data, first_sample_id )
+    n_processes = mp.cpu_count()
+
+    if n_processes == 1:
+        trio.run(request_image, valid_data, first_sample_id)
+    else:
+        async def _runtractor():
+            async with tractor.open_nursery() as n:
+                chunk_size = len(valid_data) // n_processes + 1
+                for i, data in enumerate(chunk_using_generators(valid_data, chunk_size)):
+                    await n.run_in_actor(
+                        request_image, datas=data, start_sampleid=first_sample_id + i * chunk_size
+                    )
+
+        trio.run(_runtractor)
 
     for tmpf in glob(".tmp/*.json"):
         processed_samples.extend(ujson.load(open(tmpf)))
     return pd.DataFrame(
         processed_samples,
-        columns=["SAMPLE_ID", "PATH", "URL", "TEXT", "HEIGHT", "WIDTH", "LICENSE"],
+        columns=["SAMPLE_ID", "PATH", "URL",
+                 "TEXT", "HEIGHT", "WIDTH", "LICENSE"],
     )
 
-def upload(source: str, clientType: str, target: str):
-    print(f"client type is {clientType}")
-    #target = "gpujobs" if clientType == "CPU" else "CAH"
-    options = "-rzh" if clientType == "CPU" else "-zh"
-    return os.system(f"rsync {options} {source} {target}")
+
+def upload(source: str, client_type: str):
+    client_type = client_type.upper()
+    target = 'gpujobs' if client_type == 'CPU' else 'CAH'
+    options = '-rsh' if client_type == 'CPU' else '-zh'
+    return os.system(f'rsync {options} {source} archiveteam@88.198.2.17::{target}')
+
 
 class FileData:
-    """
-    Helper class to easily find wat file size, mid position, etc
-    """
-
     def __init__(self, filename):
         self._filename = filename
         self._line_to_position = [0]
         self._length = 0
 
-        with open(self._filename, 'r') as f:
+        with open(self._filename, "r") as f:
             while f.readline():
                 self._line_to_position.append(f.tell())
                 self._length += 1
-    
+
     def __getitem__(self, line):
         return self._line_to_position[line]
 
     def __len__(self):
         return self._length
 
-def mp_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL):
-    # initialize working folders
-    output_folder = f"./save/{i}/"
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description='Crawling@Home Worker Script'
+    )
+
+    parser.add_argument('--name', '-n', type=str,
+                        default="ARKseal", help='Your name')
+    parser.add_argument('--url', '-u', type=str,
+                        default="http://cah.io.community/", help='The Crawling Server')
+    parser.add_argument('--debug', '-d', action='store_true')
+
+    args = parser.parse_args()
+
+    import crawlingathome_client as cah
+
+    print('[crawling@home] loading clip')
+    from clip_filter import run_inference
+    print('\n[crawling@home] clip loaded\n')
+
+    blocked_links = set()
+    with open("blocklist-domain.txt") as f:
+        blocked_links = set(f.read().splitlines())
+
+    failed_links = set()
+    with open("failed-domains.txt") as f:
+        failed_links = set(f.read().splitlines())
+
+    blocked_links |= failed_links
+    del failed_links
+
+    bloom_filter = BloomFilter(max_elements=10000000,
+                        error_rate=0.01, filename=("bloom.bin", -1))
+
+    client = cah.init(
+        url=args.url, nickname=args.name
+    )
+
+    output_folder = "./save/"
+    csv_output_folder = output_folder
     img_output_folder = output_folder + "images/"
 
-    print (f"starting session {i} under `{YOUR_NICKNAME_FOR_THE_LEADERBOARD}` nickname")
-
-    # connect to C@H server and initialize client
-    client = None
-    while True:
+    while client.jobCount() > 0:
         try:
-            client = cah.init(
-                url=CRAWLINGATHOME_SERVER_URL, nickname=YOUR_NICKNAME_FOR_THE_LEADERBOARD, type="CPU"
-            )
-            break
-        except:
-            time.sleep(30)
-
-    # initialize stats variables for previous job
-    last = 0
-
-    # this makes a loop to download new jobs while the script is running
-    # normally it reads while client.jobCount() > 0
-    while client.jobCount() > 0 and client.isAlive():
-        try:
-            lastext = f". Last job duration: {last}"
+            if not client.isAlive():
+                client = cah.init(
+                    url=args.url, nickname=args.name
+                )
 
             start = time.time()
-            start0 = start
 
-            # clear working folders for a new job
             if os.path.exists(output_folder):
-                shutil.rmtree(output_folder, ignore_errors=True)
+                shutil.rmtree(output_folder)
+            if os.path.exists(".tmp"):
+                shutil.rmtree(".tmp")
 
-            os.makedirs(img_output_folder)
+            os.mkdir(output_folder)
+            os.mkdir(img_output_folder)
+            os.mkdir(".tmp")
 
-            # get new job and download the wat file
-            while True:
-                try:
-                    client.newJob()
-                    client.downloadShard()
-                except:
-                    time.sleep(30)
-                    continue
-                break
-            
-            # retrieve job details and determine what part of the wat file to parse
+            client.newJob()
+            client.downloadShard()
+
             first_sample_id = int(client.start_id)
             last_sample_id = int(client.end_id)
-            shard_of_chunk = client.shard_piece # TODO
+            shard_of_chunk = client.shard_piece
 
-            fd = FileData('shard.wat')
+            out_fname = \
+                f"FIRST_SAMPLE_ID_IN_SHARD_{first_sample_id}_LAST_SAMPLE_ID_IN_SHARD_{last_sample_id}_{shard_of_chunk}"
+            print(
+                f"[crawling@home] shard identification {out_fname}"
+            )  # in case test fails, we need to remove bad data
+            client.log("Processing shard")
+            start_processing = time.time()
+
+            fd = FileData("shard.wat")
 
             if shard_of_chunk == 0:
                 start_index = fd[0]
             if shard_of_chunk == 1:
-                start_index = fd[ int(len(fd)*0.5) ]
+                start_index = fd[int(len(fd) * 0.5)]
 
-            lines = int(len(fd)*0.5)
+            lines = int(len(fd) * 0.5)
 
-            # compute output file names base
-            out_fname = f"FIRST_SAMPLE_ID_IN_SHARD_{str(first_sample_id)}_LAST_SAMPLE_ID_IN_SHARD_{str(last_sample_id)}_{shard_of_chunk}"
-            print(time.time()-start)
-            start = time.time()
-            print (f"[crawling@home] shard id {out_fname}") # in case test fails, we need to remove bad data
-
-            blocked = set()
-            with open("crawlingathome-gpu-hcloud/blocklists/blocklist-domain.txt","r") as f:
-                blocked = set(f.read().splitlines())
-            failed = set()
-            with open("crawlingathome-gpu-hcloud/blocklists/failed-domains.txt","r") as f:
-                failed = set(f.read().splitlines())
-            blocked |= failed # merge the 2 sets and use this to reduce the number of attempted links, reduce crawling time.
-
-            bloom = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("crawlingathome-gpu-hcloud/blocklists/bloom.bin",-1))
-
-            while True:
-                try:
-                    client.log("Processing shard" + lastext)
-                except:
-                    time.sleep(5)
-                    continue
-                break
-
-            # parse valid links from wat file
             with open("shard.wat", "r") as infile:
-                parsed_data, deduped = parse_wat(infile, start_index, lines, blocked, bloom)
-            print (f"parsed wat in {round(time.time()-start,2)}")
-            start = time.time()
+                parsed_data, dedupes = parse_wat(infile, start_index, lines, blocked_links, bloom_filter)
+            random.shuffle(parsed_data)
 
-            # convert to dataframe and save to disk (for statistics and generating blocking lists)
-            parsed_df = pd.DataFrame(parsed_data, columns=["URL","TEXT","LICENSE"])
-            parsed_df.to_csv(output_folder + out_fname + "_parsed.csv", index=False, sep="|")
+            end_processing = time.time()
+            print(f'[crawling@home] processed shard in {end_processing - start_processing}, duplicates found: {dedupes}')
 
-            # attempt to spread out clusters of links pointing to the same domain name, improves crawling
-            random.shuffle(parsed_data) 
-            
-            lastlinks = len(parsed_data)
-            print (f"this job has {lastlinks} links and deduped {deduped} links in {round(time.time()-start,2)}")
-            start = time.time()
+            client.log("Downloading images")
+            dlparse_df = dl_wat(parsed_data, first_sample_id)
+            dlparse_df.to_csv(output_folder + out_fname +
+                              ".csv", index=False, sep="|")
+            print(
+                f"[crawling@home] Downloaded {len(dlparse_df)} in {round(time.time() - start)} seconds")
+            print(
+                f"[crawling@home] Download efficiency {len(dlparse_df) / (time.time() - start)} img/sec")
 
-            while True:
-                try:
-                    client.log("Downloading images" + lastext)
-                except:
-                    time.sleep(5)
-                    continue
+            client.log("Dropping NSFW keywords")
+
+            filtered_df_len = run_inference(
+                dlparse_df, output_folder, out_fname)
+
+            client.log("Uploading Results")
+
+            upload(f'{output_folder}/*{out_fname}*', client.type)
+
+            client.completeJob(filtered_df_len)
+            end = time.time()
+            print(
+                f"[crawling@home] job completed in {round(end - start)} seconds")
+            print(
+                f"[crawling@home] job efficiency {filtered_df_len / (end - start)} pairs/sec")
+
+            if args.debug:
                 break
-            
-            # attempt to download validated links and save to disk for stats and blocking lists
-            dlparse_df = dl_wat( parsed_data, first_sample_id)
-            dlparse_df.to_csv(output_folder + out_fname + ".csv", index=False, sep="|")
-            dlparse_df.to_csv(output_folder + out_fname + "_unfiltered.csv", index=False, sep="|")
-            print (f"downloaded {len(dlparse_df)} in {round(time.time() - start, 2)}")
-            print (f"download efficiency {len(dlparse_df)/(time.time() - start)} img/sec")
-            print (f"crawl efficiency {lastlinks/(time.time() - start)} links/sec")
-
-            # at this point we finishes the CPU node job, need to make the data available for GPU worker
-            prefix = uuid.uuid4().hex
-            os.mkdir(prefix)
-            os.system(f"mv save/* {prefix}/")
-            result = upload(prefix, client.type, f"archiveteam@88.198.2.17::gpujobs")
-            if result == 0:
-                client.completeJob(f"rsync {prefix}")
-
-            shutil.rmtree(prefix)
-            last = round(time.time() - start0)
-
-            print(f"job completed in {last} seconds")
-            
-        except Exception as e:
-            print (e)
-            print ("Worker crashed")
-            time.sleep(30)
-
-
-if __name__ == "__main__":
-
-    # helper function to find worker IP
-    myip = ip = get('https://api.ipify.org').text
-
-    cores = multiprocessing.cpu_count()
-
-    # initialize client variables
-    YOUR_NICKNAME_FOR_THE_LEADERBOARD = os.getenv('CAH_NICKNAME')
-    if YOUR_NICKNAME_FOR_THE_LEADERBOARD is None:
-        YOUR_NICKNAME_FOR_THE_LEADERBOARD = "rvencu"
-    CRAWLINGATHOME_SERVER_URL = "http://cah.io.community/"
-
-    workers = []
-    for i in range (cores):
-        workers.append( Process(target=mp_worker, args=[i, YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL], daemon=True).start())
-
-    mp_worker(10, YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL)
+        except KeyboardInterrupt:
+            print("[crawling@home] stopping crawler")
+            break
+        except Exception as ex:
+            print(f"[crawling@home] ERROR: {ex}")
+            if args.debug:
+                traceback.print_exc()
+                break
+            if client.isAlive():
+                try:
+                    client.log('Error, restarting job')
+                except:
+                    print("[crawling@home] Couldn't log to client:")
+    try:
+        if client.isAlive():
+            client.bye()
+    except:
+        pass
