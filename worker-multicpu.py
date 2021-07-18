@@ -285,8 +285,7 @@ def mp_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_U
             if os.path.exists(output_folder):
                 shutil.rmtree(output_folder, ignore_errors=True)
 
-            os.mkdir(output_folder)
-            os.mkdir(img_output_folder)
+            os.makedirs(img_output_folder)
 
             # get new job and download the wat file
             while True:
