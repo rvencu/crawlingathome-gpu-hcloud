@@ -373,6 +373,9 @@ if __name__ == "__main__":
 
     workers = []
     for i in range (cpu_count()-1):
-        workers.append(Process(target=proc_worker, args= [i, blocked, bloom, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVER_URL], daemon=True).start())
+        workers.append(Process(target=proc_worker, args= [i, blocked, bloom, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVER_URL], daemon=True))
 
+    for worker in workers:
+        worker.start()
+        time.sleep(10)
     proc_worker(10, blocked, bloom, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVER_URL)
