@@ -323,7 +323,7 @@ def proc_worker(i: int, blocked, bloom, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAW
             
             # attempt to download validated links and save to disk for stats and blocking lists
             dlparse_df = dl_wat( parsed_data, first_sample_id, img_output_folder)
-            dlparse_df["PATH"] = re.sub(r"^./save/\d{1,2}/(.*)$", r"save/\1", dlparse_df["PATH"])
+            dlparse_df["PATH"] = dlparse_df.PATH.apply(lambda x: re.sub(r"^./save/\d{1,2}/(.*)$", r"save/\1", x))
 
             dlparse_df.to_csv(output_folder+out_fname + ".csv", index=False, sep="|")
             dlparse_df.to_csv(output_folder+out_fname + "_unfiltered.csv", index=False, sep="|")
