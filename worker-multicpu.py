@@ -12,7 +12,7 @@ from glob import glob
 from io import BytesIO
 from urllib.parse import urljoin, urlparse
 import uuid
-
+import crawlingathome_client as cah
 import asks
 import ftfy
 import pandas as pd
