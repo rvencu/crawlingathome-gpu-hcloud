@@ -8,6 +8,8 @@ import ujson
 import shutil
 import random
 import hashlib
+import ftfy
+import pycld2 as cld2
 import pandas as pd
 from glob import glob
 from uuid import uuid1
@@ -41,8 +43,7 @@ def parse_wat(content, start, line_count, blocked, bloom):
     output: a list of tuples (url, text, license)
     """
 
-    import ftfy
-    import pycld2 as cld2
+    
 
     # blocklist-domains.txt contains a list of domains to block based on previous results of CLIP filtering.
     # the domains are not likely to pass CLIP for either bad captions or the content is almost always NSFW
@@ -176,7 +177,7 @@ async def request_image(datas, start_sampleid, img_output_folder):
         try:
             proces = process_img_content(
                 # tune timeout and connection_timeout to grab more or less files. shorter timeouts will exclude bad performing websites
-                await session.get(url, timeout=5, connection_timeout=15), alt_text, license, sample_id, img_output_folder
+                await session.get(url, timeout=3, connection_timeout=10), alt_text, license, sample_id, img_output_folder
             )
             if proces is not None:
                 tmp_data.append(proces)
@@ -190,11 +191,12 @@ async def request_image(datas, start_sampleid, img_output_folder):
             n.start_soon(_request, data, start_sampleid)
             start_sampleid += 1
 
+    fn = uuid1()
     # trio makes sure at this point all async tasks were executed
-    with open(f".tmp/{uuid1()}.json", "w") as f:
+    with open(f".tmp/{fn}.json", "w") as f:
         ujson.dump(tmp_data, f)
     gc.collect()
-    return
+    return ujson.load(open(f".tmp/{fn}.json"))
 
 
 def dl_wat(valid_data, first_sample_id, img_output_folder):
@@ -207,15 +209,11 @@ def dl_wat(valid_data, first_sample_id, img_output_folder):
     output: dataframe of downloaded images and their parameters
     """
 
-    import pandas as pd
-    
     # Download every image available
     processed_samples = []
     #trio.run(request_image, valid_data, first_sample_id, instruments=[TrioProgress(len(valid_data), False)] )
-    trio.run( request_image, valid_data, first_sample_id, img_output_folder )
-
-    for tmpf in glob(".tmp/*.json"):
-        processed_samples.extend(ujson.load(open(tmpf)))
+    result = trio.run( request_image, valid_data, first_sample_id, img_output_folder )
+    processed_samples.extend(result)
     return pd.DataFrame(
         processed_samples,
         columns=["SAMPLE_ID", "PATH", "URL", "TEXT", "HEIGHT", "WIDTH", "LICENSE"],
