@@ -11,7 +11,7 @@ import warnings
 from glob import glob
 from io import BytesIO
 from urllib.parse import urljoin, urlparse
-from uuid import uuid1
+import uuid
 
 import asks
 import ftfy
@@ -207,57 +207,49 @@ class FileData:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description='Crawling@Home Worker Script'
-    )
+    # helper function to find worker IP
+    myip = ip = get('https://api.ipify.org').text
 
-    parser.add_argument('--name', '-n', type=str,
-                        default="ARKseal", help='Your name')
-    parser.add_argument('--url', '-u', type=str,
-                        default="http://cah.io.community/", help='The Crawling Server')
-    parser.add_argument('--debug', '-d', action='store_true')
-
-    args = parser.parse_args()
-
-    import crawlingathome_client as cah
-
-    print('[crawling@home] loading clip')
-    from clip_filter import run_inference
-    print('\n[crawling@home] clip loaded\n')
-
-    blocked_links = set()
-    with open("blocklist-domain.txt") as f:
-        blocked_links = set(f.read().splitlines())
-
-    failed_links = set()
-    with open("failed-domains.txt") as f:
-        failed_links = set(f.read().splitlines())
-
-    blocked_links |= failed_links
-    del failed_links
-
-    bloom_filter = BloomFilter(max_elements=10000000,
-                        error_rate=0.01, filename=("bloom.bin", -1))
-
-    client = cah.init(
-        url=args.url, nickname=args.name
-    )
-
+    # initialize working folders
     output_folder = "./save/"
-    csv_output_folder = output_folder
     img_output_folder = output_folder + "images/"
 
-    while client.jobCount() > 0:
+    # initialize client variables
+    YOUR_NICKNAME_FOR_THE_LEADERBOARD = os.getenv('CAH_NICKNAME')
+    if YOUR_NICKNAME_FOR_THE_LEADERBOARD is None:
+        YOUR_NICKNAME_FOR_THE_LEADERBOARD = "anonymous"
+    CRAWLINGATHOME_SERVER_URL = "http://cah.io.community/"
+
+    print (f"starting session under `{YOUR_NICKNAME_FOR_THE_LEADERBOARD}` nickname")
+
+    
+
+    # connect to C@H server and initialize client
+    client = None
+    while True:
         try:
-            if not client.isAlive():
-                client = cah.init(
-                    url=args.url, nickname=args.name
-                )
+            client = cah.init(
+                url=CRAWLINGATHOME_SERVER_URL, nickname=YOUR_NICKNAME_FOR_THE_LEADERBOARD, type="CPU"
+            )
+            break
+        except:
+            time.sleep(5)
+
+    # initialize stats variables for previous job
+    last = 0
+
+    # this makes a loop to download new jobs while the script is running
+    # normally it reads while client.jobCount() > 0
+    while client.jobCount() > 0 and client.isAlive():
+        try:
+            lastext = f". Last job duration: {last}"
 
             start = time.time()
+            start0 = start
 
+            # clear working folders for a new job
             if os.path.exists(output_folder):
-                shutil.rmtree(output_folder)
+                shutil.rmtree(output_folder, ignore_errors=True)
             if os.path.exists(".tmp"):
                 shutil.rmtree(".tmp")
 
@@ -265,79 +257,101 @@ if __name__ == "__main__":
             os.mkdir(img_output_folder)
             os.mkdir(".tmp")
 
-            client.newJob()
-            client.downloadShard()
-
+            # get new job and download the wat file
+            while True:
+                try:
+                    client.newJob()
+                    client.downloadShard()
+                except:
+                    time.sleep(30)
+                    continue
+                break
+            
+            # retrieve job details and determine what part of the wat file to parse
             first_sample_id = int(client.start_id)
             last_sample_id = int(client.end_id)
-            shard_of_chunk = client.shard_piece
+            shard_of_chunk = client.shard_piece # TODO
 
-            out_fname = \
-                f"FIRST_SAMPLE_ID_IN_SHARD_{first_sample_id}_LAST_SAMPLE_ID_IN_SHARD_{last_sample_id}_{shard_of_chunk}"
-            print(
-                f"[crawling@home] shard identification {out_fname}"
-            )  # in case test fails, we need to remove bad data
-            client.log("Processing shard")
-            start_processing = time.time()
-
-            fd = FileData("shard.wat")
+            fd = FileData('shard.wat')
 
             if shard_of_chunk == 0:
                 start_index = fd[0]
             if shard_of_chunk == 1:
-                start_index = fd[int(len(fd) * 0.5)]
+                start_index = fd[ int(len(fd)*0.5) ]
 
-            lines = int(len(fd) * 0.5)
+            lines = int(len(fd)*0.5)
 
-            with open("shard.wat", "r") as infile:
-                parsed_data, dedupes = parse_wat(infile, start_index, lines, blocked_links, bloom_filter)
-            random.shuffle(parsed_data)
+            # compute output file names base
+            out_fname = f"FIRST_SAMPLE_ID_IN_SHARD_{str(first_sample_id)}_LAST_SAMPLE_ID_IN_SHARD_{str(last_sample_id)}_{shard_of_chunk}"
+            print(time.time()-start)
+            start = time.time()
+            print (f"[crawling@home] shard id {out_fname}") # in case test fails, we need to remove bad data
 
-            end_processing = time.time()
-            print(f'[crawling@home] processed shard in {end_processing - start_processing}, duplicates found: {dedupes}')
+            blocked = set()
+            with open("crawlingathome-gpu-hcloud/blocklists/blocklist-domain.txt","r") as f:
+                blocked = set(f.read().splitlines())
+            failed = set()
+            with open("crawlingathome-gpu-hcloud/blocklists/failed-domains.txt","r") as f:
+                failed = set(f.read().splitlines())
+            blocked |= failed # merge the 2 sets and use this to reduce the number of attempted links, reduce crawling time.
 
-            client.log("Downloading images")
-            dlparse_df = dl_wat(parsed_data, first_sample_id)
-            dlparse_df.to_csv(output_folder + out_fname +
-                              ".csv", index=False, sep="|")
-            print(
-                f"[crawling@home] Downloaded {len(dlparse_df)} in {round(time.time() - start)} seconds")
-            print(
-                f"[crawling@home] Download efficiency {len(dlparse_df) / (time.time() - start)} img/sec")
+            bloom = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("crawlingathome-gpu-hcloud/blocklists/bloom.bin",-1))
 
-            client.log("Dropping NSFW keywords")
-
-            filtered_df_len = run_inference(
-                dlparse_df, output_folder, out_fname)
-
-            client.log("Uploading Results")
-
-            upload(f'{output_folder}/*{out_fname}*', client.type)
-
-            client.completeJob(filtered_df_len)
-            end = time.time()
-            print(
-                f"[crawling@home] job completed in {round(end - start)} seconds")
-            print(
-                f"[crawling@home] job efficiency {filtered_df_len / (end - start)} pairs/sec")
-
-            if args.debug:
-                break
-        except KeyboardInterrupt:
-            print("[crawling@home] stopping crawler")
-            break
-        except Exception as ex:
-            print(f"[crawling@home] ERROR: {ex}")
-            if args.debug:
-                traceback.print_exc()
-                break
-            if client.isAlive():
+            while True:
                 try:
-                    client.log('Error, restarting job')
+                    client.log("Processing shard" + lastext)
                 except:
-                    print("[crawling@home] Couldn't log to client:")
-    try:
-        if client.isAlive():
-            client.bye()
-    except:
-        pass
+                    time.sleep(5)
+                    continue
+                break
+
+            # parse valid links from wat file
+            with open("shard.wat", "r") as infile:
+                parsed_data, deduped = parse_wat(infile, start_index, lines, blocked, bloom)
+            print (f"parsed wat in {round(time.time()-start,2)}")
+            start = time.time()
+
+            # convert to dataframe and save to disk (for statistics and generating blocking lists)
+            parsed_df = pd.DataFrame(parsed_data, columns=["URL","TEXT","LICENSE"])
+            parsed_df.to_csv(output_folder + out_fname + "_parsed.csv", index=False, sep="|")
+
+            # attempt to spread out clusters of links pointing to the same domain name, improves crawling
+            random.shuffle(parsed_data) 
+            
+            lastlinks = len(parsed_data)
+            print (f"this job has {lastlinks} links and deduped {deduped} links in {round(time.time()-start,2)}")
+            start = time.time()
+
+            while True:
+                try:
+                    client.log("Downloading images" + lastext)
+                except:
+                    time.sleep(5)
+                    continue
+                break
+            
+            # attempt to download validated links and save to disk for stats and blocking lists
+            dlparse_df = dl_wat( parsed_data, first_sample_id)
+            dlparse_df.to_csv(output_folder + out_fname + ".csv", index=False, sep="|")
+            dlparse_df.to_csv(output_folder + out_fname + "_unfiltered.csv", index=False, sep="|")
+            print (f"downloaded {len(dlparse_df)} in {round(time.time() - start, 2)}")
+            print (f"download efficiency {len(dlparse_df)/(time.time() - start)} img/sec")
+            print (f"crawl efficiency {lastlinks/(time.time() - start)} links/sec")
+
+            # at this point we finishes the CPU node job, need to make the data available for GPU worker
+            prefix = uuid.uuid4().hex
+            os.mkdir(prefix)
+            os.system(f"mv save/* {prefix}/")
+            result = upload(prefix, client.type, f"archiveteam@88.198.2.17::gpujobs")
+            if result == 0:
+                client.completeJob(f"rsync {prefix}")
+
+            shutil.rmtree(prefix)
+            last = round(time.time() - start0)
+
+            print(f"job completed in {last} seconds")
+            
+        except Exception as e:
+            print (e)
+            print ("Worker crashed")
+            time.sleep(30)
