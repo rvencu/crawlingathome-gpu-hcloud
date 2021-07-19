@@ -133,6 +133,8 @@ def upload_worker(uploadqueue: JoinableQueue, counter: JoinableQueue, outgoingqu
                 #print (f"[io2] sending all jobs to be marked as completed")
                 for i, job, item in shards:
                     outgoingqueue[i].put((job, results.get(job)))
+                    for file in glob((f"save/*{group_id}*")):
+                        os.remove(file)
                     counter.put(1)
             else:
                 for i, job, item in shards:
@@ -196,6 +198,7 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             #print (f"[gpu] sending group to CLIP filter")
             start = time.time()
             final_images, results = clip_filter.filter(group_parse, group_id, "./save/")
+            
             print(f"filtered {final_images} from {len(group_parse.index)} deduped from {duped} in {round(time.time()-start,2)} sec")
 
             #print (f"[gpu] upload group results to rsync target")
