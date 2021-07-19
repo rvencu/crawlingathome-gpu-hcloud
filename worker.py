@@ -276,7 +276,7 @@ if __name__ == "__main__":
             )
             break
         except:
-            time.sleep(5)
+            time.sleep(60)
 
     # initialize stats variables for previous job
     last = 0
@@ -306,7 +306,7 @@ if __name__ == "__main__":
                     client.newJob()
                     client.downloadShard()
                 except:
-                    time.sleep(30)
+                    time.sleep(60)
                     continue
                 break
             
@@ -397,4 +397,4 @@ if __name__ == "__main__":
         except Exception as e:
             print (e)
             print ("Worker crashed")
-            time.sleep(30)
+            time.sleep(60)

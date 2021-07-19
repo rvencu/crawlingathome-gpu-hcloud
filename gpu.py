@@ -107,7 +107,7 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                 print (f"[io {i}] client forgotten")
                 time.sleep(60)
         except:
-            print (f"[io {i}] client crasher, respawning...")
+            print (f"[io {i}] client crashed, respawning...")
             time.sleep(60)
 
 def io_worker(incomingqueue: JoinableQueue, outgoingqueue: list, groupsize: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL):
@@ -172,6 +172,8 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
 
             for i, job, item in shards:
                 dlparse_df = pd.read_csv(job + "/" + item + ".csv", sep="|")
+                
+                dlparse_df["PATH"] = dlparse_df.PATH.apply(lambda x: re.sub(r"^./save/\d{1,2}/(.*)$", r"save/\1", x))
                 dlparse_df["PATH"] = dlparse_df.apply(lambda x: "./" + job + "/" + x["PATH"].strip("save/"), axis=1)
                 if group_parse is None:
                     group_parse = dlparse_df
@@ -324,7 +326,7 @@ if __name__ == "__main__":
         #initialize joinable queues to transfer messages between multiprocess processes
         # Outbound queues, we need one for each io worker
         outbound = []
-        for _ in range(2 * groupsize): # we need 2x IO workers to keep GPU permanently busy
+        for _ in range(2 * groupsize + 5): # we need 2x IO workers to keep GPU permanently busy
              outbound.append(JoinableQueue())
         inbound = JoinableQueue()
         uploadqueue = JoinableQueue()
