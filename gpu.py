@@ -106,8 +106,9 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
             else:
                 print (f"[io {i}] client forgotten")
                 time.sleep(60)
-        except:
+        except Exception as e:
             print (f"[io {i}] client crashed, respawning...")
+            print (e) #see why clients crashes
             time.sleep(60)
 
 def io_worker(incomingqueue: JoinableQueue, outgoingqueue: list, groupsize: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL):
@@ -115,7 +116,7 @@ def io_worker(incomingqueue: JoinableQueue, outgoingqueue: list, groupsize: int,
     print (f"[io] inbound workers:")
     try:
         # just launch how many threads we need to group jobs into single output
-        for i in range(3 * groupsize + 5):
+        for i in range(2 * groupsize + 5):
             threading.Thread(target=gpu_cah_interface, args=(i, incomingqueue, outgoingqueue[i], YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL)).start()
     except Exception as e:
         print(f"[io] some inbound problem occured: {e}")
@@ -147,6 +148,7 @@ def upload_worker(uploadqueue: JoinableQueue, counter: JoinableQueue, outgoingqu
 
 def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag: JoinableQueue, groupsize: int):
     print (f"[gpu] worker started")
+    first_groupsize = groupsize
     # watch for the incoming queue, when it is big enough we can trigger processing    
     while True:
         #print (f"[gpu] testing incoming queue size")
@@ -201,7 +203,7 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             
             total = len(group_parse.index)
             dedupe_ratio = round((duped - total) / duped, 2)
-            print(f"filtered {final_images} from {total} deduped from {duped} (dedupe ratio {dedupe_ratio}) in {round(time.time()-start,2)} sec ({groupsize})")
+            print(f"{Fore.GREEN}filtered {final_images} from {total} deduped from {duped} (dedupe ratio {dedupe_ratio}) in {round(time.time()-start,2)} sec ({groupsize} ie {round((time.time()-start)/groupsize,2)} s/shrd){Fore.RESET}")
 
             #print (f"[gpu] upload group results to rsync target")
             # find most required upload address among the grouped shards
@@ -210,10 +212,10 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             uploadqueue.put((group_id, upload_address, shards, results))
             
             if final_images < 7500:
-                groupsize = min( 3 * groupsize, groupsize + 3)
+                groupsize = min( 2 * first_groupsize - 5 , groupsize + 3 )
                 print (f"groupsize changed to {groupsize}")
             if final_images > 8500:
-                groupsize = max (groupsize - 3, 1)
+                groupsize = max( groupsize - 3, 1 )
                 print (f"groupsize changed to {groupsize}")
             
             gpuflag.get()
@@ -304,7 +306,7 @@ if __name__ == "__main__":
     print(
         f"[GPU] starting session under `{YOUR_NICKNAME_FOR_THE_LEADERBOARD}` nickname")
 
-    groupsize = 25 # how many shards to group for CLIP
+    groupsize = 28 # how many shards to group for CLIP
 
     if not os.path.exists("./stats/"):
         os.makedirs("./stats/")
@@ -332,7 +334,7 @@ if __name__ == "__main__":
         #initialize joinable queues to transfer messages between multiprocess processes
         # Outbound queues, we need one for each io worker
         outbound = []
-        for _ in range(3 * groupsize + 5): # we need 2x IO workers to keep GPU permanently busy
+        for _ in range(2 * groupsize + 5): # we need 2x IO workers to keep GPU permanently busy
              outbound.append(JoinableQueue())
         inbound = JoinableQueue()
         uploadqueue = JoinableQueue()

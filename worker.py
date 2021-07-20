@@ -286,7 +286,7 @@ if __name__ == "__main__":
     os.system("rsync -zh archiveteam@88.198.2.17::bloom/* crawlingathome-gpu-hcloud/blocklists")
 
     # this makes a loop to download new jobs while the script is running
-    # normally it reads while client.jobCount() > 0
+    loop = 0
     while client.jobCount() > 0 and client.isAlive():
         try:
             lastext = f". Last job duration: {last}"
@@ -397,6 +397,12 @@ if __name__ == "__main__":
             last = round(time.time() - start0)
 
             print(f"job completed in {last} seconds")
+
+            loop += 1
+            if loop==10:
+                # simply refresh the client, and subsequently reload updated bloom filter
+                client.bye()
+                break
             
         except Exception as e:
             print (e)
