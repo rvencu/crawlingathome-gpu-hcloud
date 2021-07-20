@@ -115,7 +115,7 @@ def io_worker(incomingqueue: JoinableQueue, outgoingqueue: list, groupsize: int,
     print (f"[io] inbound workers:")
     try:
         # just launch how many threads we need to group jobs into single output
-        for i in range(2 * groupsize + 5):
+        for i in range(3 * groupsize + 5):
             threading.Thread(target=gpu_cah_interface, args=(i, incomingqueue, outgoingqueue[i], YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL)).start()
     except Exception as e:
         print(f"[io] some inbound problem occured: {e}")
@@ -210,10 +210,10 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             uploadqueue.put((group_id, upload_address, shards, results))
             
             if final_images < 7500:
-                groupsize += 2
+                groupsize = min( 3 * groupsize, groupsize + 3)
                 print (f"groupsize changed to {groupsize}")
             if final_images > 8500:
-                groupsize -= 2
+                groupsize = max (groupsize - 3, 1)
                 print (f"groupsize changed to {groupsize}")
             
             gpuflag.get()
@@ -304,7 +304,7 @@ if __name__ == "__main__":
     print(
         f"[GPU] starting session under `{YOUR_NICKNAME_FOR_THE_LEADERBOARD}` nickname")
 
-    groupsize = 20 # how many shards to group for CLIP
+    groupsize = 25 # how many shards to group for CLIP
 
     if not os.path.exists("./stats/"):
         os.makedirs("./stats/")
@@ -332,7 +332,7 @@ if __name__ == "__main__":
         #initialize joinable queues to transfer messages between multiprocess processes
         # Outbound queues, we need one for each io worker
         outbound = []
-        for _ in range(2 * groupsize + 5): # we need 2x IO workers to keep GPU permanently busy
+        for _ in range(3 * groupsize + 5): # we need 2x IO workers to keep GPU permanently busy
              outbound.append(JoinableQueue())
         inbound = JoinableQueue()
         uploadqueue = JoinableQueue()
