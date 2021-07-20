@@ -199,7 +199,9 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             start = time.time()
             final_images, results = clip_filter.filter(group_parse, group_id, "./save/")
             
-            print(f"filtered {final_images} from {len(group_parse.index)} deduped from {duped} in {round(time.time()-start,2)} sec")
+            total = len(group_parse.index)
+            dedupe_ratio = round((duped - total) / duped, 2)
+            print(f"filtered {final_images} from {total} deduped from {duped} (dedupe ratio {dedupe_ratio}) in {round(time.time()-start,2)} sec ({groupsize})")
 
             #print (f"[gpu] upload group results to rsync target")
             # find most required upload address among the grouped shards
@@ -207,7 +209,12 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             #print (f"most requested upload address is {upload_address}")
             uploadqueue.put((group_id, upload_address, shards, results))
             
-            #print (f"[gpu] cleaning up group folders")
+            if final_images < 7500:
+                groupsize += 2
+                print (f"groupsize changed to {groupsize}")
+            if final_images > 8500:
+                groupsize -= 2
+                print (f"groupsize changed to {groupsize}")
             
             gpuflag.get()
             gpuflag.task_done()
