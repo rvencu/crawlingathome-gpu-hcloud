@@ -296,19 +296,15 @@ def monitor2(nodes, inbound, outbound, counter, inpsize, stdscr, gpuflag):
 
 if __name__ == "__main__":
 
-
-
     YOUR_NICKNAME_FOR_THE_LEADERBOARD = os.getenv('CAH_NICKNAME')
     if YOUR_NICKNAME_FOR_THE_LEADERBOARD is None:
         YOUR_NICKNAME_FOR_THE_LEADERBOARD = "anonymous"
     CRAWLINGATHOME_SERVER_URL = "http://cah.io.community/"
 
-    
-
     print(
         f"[GPU] starting session under `{YOUR_NICKNAME_FOR_THE_LEADERBOARD}` nickname")
 
-    groupsize = 16 # how many shards to group for CLIP
+    groupsize = 20 # how many shards to group for CLIP
 
     if not os.path.exists("./stats/"):
         os.makedirs("./stats/")
