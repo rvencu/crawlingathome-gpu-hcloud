@@ -281,6 +281,8 @@ if __name__ == "__main__":
     # initialize stats variables for previous job
     last = 0
 
+    shutil.rmtree("crawlingathome-gpu-hcloud/blocklists/")
+    os.makedirs("crawlingathome-gpu-hcloud/blocklists/")
     os.system("rsync -zh archiveteam@88.198.2.17::bloom/* crawlingathome-gpu-hcloud/blocklists")
 
     # this makes a loop to download new jobs while the script is running
