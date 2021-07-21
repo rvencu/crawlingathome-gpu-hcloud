@@ -159,9 +159,10 @@ image_embedding*
 *.jpeg
 *.webp
 [1-9]*-[1-9]*-[1-9]*-[1-9]*/
-test.py
+test.*
 duplicates/
 gpujob.zip_*
 results/
 stats/
 save/
+parquet/
