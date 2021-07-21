@@ -283,7 +283,7 @@ if __name__ == "__main__":
 
     shutil.rmtree("crawlingathome-gpu-hcloud/blocklists/")
     os.makedirs("crawlingathome-gpu-hcloud/blocklists/")
-    os.system("rsync -zh archiveteam@88.198.2.17::bloom/* crawlingathome-gpu-hcloud/blocklists")
+    os.system("rsync -zh archiveteam@88.198.2.17::bloom/*.bin crawlingathome-gpu-hcloud/blocklists")
 
     # this makes a loop to download new jobs while the script is running
     loop = 0
@@ -334,6 +334,7 @@ if __name__ == "__main__":
             start = time.time()
             print (f"[crawling@home] shard id {out_fname}") # in case test fails, we need to remove bad data
 
+            '''
             blocked = set()
             with open("crawlingathome-gpu-hcloud/blocklists/blocklist-domain.txt","r") as f:
                 blocked = set(f.read().splitlines())
@@ -341,8 +342,10 @@ if __name__ == "__main__":
             with open("crawlingathome-gpu-hcloud/blocklists/failed-domains.txt","r") as f:
                 failed = set(f.read().splitlines())
             blocked |= failed # merge the 2 sets and use this to reduce the number of attempted links, reduce crawling time.
+            '''
 
             bloom = BloomFilter(max_elements=80000000, error_rate=0.01, filename=("crawlingathome-gpu-hcloud/blocklists/bloom.bin",-1))
+            blocked = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("crawlingathome-gpu-hcloud/blocklists/failed-domains.bin",-1))
 
             while True:
                 try:
