@@ -347,13 +347,14 @@ if __name__ == "__main__":
             bloom = BloomFilter(max_elements=80000000, error_rate=0.01, filename=("crawlingathome-gpu-hcloud/blocklists/bloom.bin",-1))
             blocked = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("crawlingathome-gpu-hcloud/blocklists/failed-domains.bin",-1))
 
+            """
             while True:
                 try:
                     client.log("Processing shard" + lastext)
                 except:
                     time.sleep(5)
                     continue
-                break
+                break """
 
             # parse valid links from wat file
             with open("shard.wat", "r") as infile:
@@ -372,13 +373,13 @@ if __name__ == "__main__":
             print (f"this job has {lastlinks} links and deduped {deduped} links in {round(time.time()-start,2)}")
             start = time.time()
 
-            while True:
+            """ while True:
                 try:
                     client.log("Downloading images" + lastext)
                 except:
                     time.sleep(5)
                     continue
-                break
+                break """
             
             # attempt to download validated links and save to disk for stats and blocking lists
             dlparse_df = dl_wat( parsed_data, first_sample_id)

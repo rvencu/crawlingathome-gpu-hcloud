@@ -306,7 +306,7 @@ if __name__ == "__main__":
     print(
         f"[GPU] starting session under `{YOUR_NICKNAME_FOR_THE_LEADERBOARD}` nickname")
 
-    groupsize = 28 # how many shards to group for CLIP
+    groupsize = 40 # how many shards to group for CLIP
 
     if not os.path.exists("./stats/"):
         os.makedirs("./stats/")
