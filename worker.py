@@ -328,19 +328,9 @@ if __name__ == "__main__":
 
             # compute output file names base
             out_fname = f"FIRST_SAMPLE_ID_IN_SHARD_{str(first_sample_id)}_LAST_SAMPLE_ID_IN_SHARD_{str(last_sample_id)}_{shard_of_chunk}"
-            print(time.time()-start)
+            print(f"shard acquired in {round(time.time()-start,2)} sec")
             start = time.time()
-            print (f"[crawling@home] shard id {out_fname}") # in case test fails, we need to remove bad data
-
-            '''
-            blocked = set()
-            with open("crawlingathome-gpu-hcloud/blocklists/blocklist-domain.txt","r") as f:
-                blocked = set(f.read().splitlines())
-            failed = set()
-            with open("crawlingathome-gpu-hcloud/blocklists/failed-domains.txt","r") as f:
-                failed = set(f.read().splitlines())
-            blocked |= failed # merge the 2 sets and use this to reduce the number of attempted links, reduce crawling time.
-            '''
+            
             if os.path.exists("/home/crawl/crawlingathome-gpu-hcloud/blocklists/"):
                 shutil.rmtree("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
             os.makedirs("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
@@ -350,22 +340,13 @@ if __name__ == "__main__":
             clipped = BloomFilter(max_elements=200000000, error_rate=0.05, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/clipped.bin",-1))
             blocked = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/failed-domains.bin",-1))
 
-            print (f"sync filters in {round(time.time()-start,2)}")
+            print (f"sync filters in {round(time.time()-start,2)} sec")
             start = time.time()
-
-            """
-            while True:
-                try:
-                    client.log("Processing shard" + lastext)
-                except:
-                    time.sleep(5)
-                    continue
-                break """
 
             # parse valid links from wat file
             with open("shard.wat", "r") as infile:
                 parsed_data, deduped, clpd = parse_wat(infile, start_index, lines, blocked, bloom, clipped)
-            print (f"parsed wat in {round(time.time()-start,2)}")
+            print (f"parsed wat in {round(time.time()-start,2)} sec")
             start = time.time()
 
             # convert to dataframe and save to disk (for statistics and generating blocking lists)
@@ -376,17 +357,9 @@ if __name__ == "__main__":
             random.shuffle(parsed_data) 
             
             lastlinks = len(parsed_data)
-            print (f"this job has {lastlinks} links left; deduped {deduped} and clipped {clpd} links in {round(time.time()-start,2)}")
+            print (f"this job has {lastlinks} links left; deduped {deduped} and already clipped {clpd}. Duration {round(time.time()-start,2)} sec")
             start = time.time()
-
-            """ while True:
-                try:
-                    client.log("Downloading images" + lastext)
-                except:
-                    time.sleep(5)
-                    continue
-                break """
-            
+          
             # attempt to download validated links and save to disk for stats and blocking lists
             dlparse_df = dl_wat( parsed_data, first_sample_id)
             dlparse_df.to_csv(output_folder + out_fname + ".csv", index=False, sep="|")
