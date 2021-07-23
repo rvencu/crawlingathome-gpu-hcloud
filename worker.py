@@ -341,7 +341,8 @@ if __name__ == "__main__":
                 failed = set(f.read().splitlines())
             blocked |= failed # merge the 2 sets and use this to reduce the number of attempted links, reduce crawling time.
             '''
-            shutil.rmtree("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
+            if os.path.exists("/home/crawl/crawlingathome-gpu-hcloud/blocklists/"):
+                shutil.rmtree("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
             os.makedirs("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
             os.system("rsync -zh archiveteam@88.198.2.17::bloom/*.bin /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
 
