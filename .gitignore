@@ -166,3 +166,4 @@ results/
 stats/
 save/
 parquet/
+blocklists/*

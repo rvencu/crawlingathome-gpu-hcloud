@@ -5,12 +5,13 @@ import time
 import uuid
 import shutil
 import curses
+import hashlib
 import threading
 import clip_filter
 import pandas as pd
 from glob import glob
 from tqdm import tqdm
-#from mega import Mega
+from bloom_filter2 import BloomFilter
 from pathlib import Path
 from colorama import Fore
 from statistics import mode
@@ -152,6 +153,10 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
     # watch for the incoming queue, when it is big enough we can trigger processing    
     while True:
         #print (f"[gpu] testing incoming queue size")
+        shutil.rmtree("blocklists/")
+        os.makedirs("blocklists/")
+        os.system("rsync -zh archiveteam@88.198.2.17::bloom/*.bin blocklists")
+        bloom = BloomFilter(max_elements=80000000, error_rate=0.01, filename=("blocklists/bloom.bin",-1))
         if incomingqueue.qsize() >= groupsize:
             gpuflag.put(1)
             shards = []
@@ -194,6 +199,11 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             duped = len(group_parse.index)
             group_parse.drop_duplicates(subset=["URL","TEXT"], keep='last', inplace=True)
             group_parse.reset_index(inplace=True, drop=True)
+            total = len(group_parse.index)
+            group_parse.loc[:,"bloom"] = group_parse.apply(lambda row: hashlib.md5((str(row.URL)+str(row.TEXT)).encode("utf-8")).hexdigest() in bloom, axis=1)
+            group_parse = group_parse[group_parse["bloom"] == False]
+            group_parse.reset_index(inplace=True, drop=True)
+            bloomed = len(group_parse.index)
 
             group_parse.to_csv("./stats/" + group_id + "_groupdeduped.csv", index=False, sep="|") # I am using these to find out domains to filter from scraping
 
@@ -201,9 +211,9 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             start = time.time()
             final_images, results = clip_filter.filter(group_parse, group_id, "./save/")
             
-            total = len(group_parse.index)
+            
             dedupe_ratio = round((duped - total) / duped, 2)
-            print(f"{Fore.GREEN}filtered {final_images} from {total} deduped from {duped} (dedupe ratio {dedupe_ratio}) in {round(time.time()-start,2)} sec ({groupsize} ie {round((time.time()-start)/groupsize,2)} s/shrd){Fore.RESET}")
+            print(f"{Fore.GREEN}filtered {final_images} from {bloomed} bloomed from {total} deduped from {duped} (dedupe ratio {dedupe_ratio}) in {round(time.time()-start,2)} sec ({groupsize} ie {round((time.time()-start)/groupsize,2)} s/shrd){Fore.RESET}")
 
             #print (f"[gpu] upload group results to rsync target")
             # find most required upload address among the grouped shards
