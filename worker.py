@@ -357,8 +357,7 @@ if __name__ == "__main__":
             random.shuffle(parsed_data) 
             
             lastlinks = len(parsed_data)
-            print (f"this job has {lastlinks} links left; deduped {deduped} and already clipped {clpd}. Duration {round(time.time()-start,2)} sec")
-            start = time.time()
+            print (f"this job has {lastlinks} links left; deduped {deduped} and already clipped {clpd}")
           
             # attempt to download validated links and save to disk for stats and blocking lists
             dlparse_df = dl_wat( parsed_data, first_sample_id)
