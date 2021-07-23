@@ -29,7 +29,7 @@ def remove_bad_chars(text):
     return "".join(c for c in text if c.isprintable())
 
 
-def parse_wat(content, start, line_count, blocked, bloom):
+def parse_wat(content, start, line_count, blocked, bloom, clipped):
     """
     This function checks the wat file content and attempts to extract valid candidates of image urls and alt texts
 
@@ -52,6 +52,7 @@ def parse_wat(content, start, line_count, blocked, bloom):
     
 
     deduped = 0
+    clpd = 0
     valid_data = []
     content.seek(start)
     for _ in range(line_count):
@@ -103,10 +104,13 @@ def parse_wat(content, start, line_count, blocked, bloom):
                 if concat in bloom: #duplicates:
                     deduped += 1
                     continue
+                if concat in clipped: #duplicates:
+                    clpd += 1
+                    continue
                 valid_data.append((url, alt_text, license))
     return ([
         t for t in {tuple(i) for i in valid_data}
-    ], deduped)  # use a dict in order to remove duplicate tuples from list
+    ], deduped, clpd)  # use a dict in order to remove duplicate tuples from list
 
 
 def process_img_content(response, alt_text, license, sample_id):
@@ -342,7 +346,11 @@ if __name__ == "__main__":
             os.system("rsync -zh archiveteam@88.198.2.17::bloom/*.bin crawlingathome-gpu-hcloud/blocklists")
 
             bloom = BloomFilter(max_elements=80000000, error_rate=0.01, filename=("crawlingathome-gpu-hcloud/blocklists/bloom.bin",-1))
+            clipped = BloomFilter(max_elements=200000000, error_rate=0.05, filename=("crawlingathome-gpu-hcloud/blocklists/clipped.bin",-1))
             blocked = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("crawlingathome-gpu-hcloud/blocklists/failed-domains.bin",-1))
+
+            print (f"sync filters in {round(time.time()-start,2)}")
+            start = time.time()
 
             """
             while True:
@@ -355,7 +363,7 @@ if __name__ == "__main__":
 
             # parse valid links from wat file
             with open("shard.wat", "r") as infile:
-                parsed_data, deduped = parse_wat(infile, start_index, lines, blocked, bloom)
+                parsed_data, deduped, clpd = parse_wat(infile, start_index, lines, blocked, bloom, clipped)
             print (f"parsed wat in {round(time.time()-start,2)}")
             start = time.time()
 
@@ -367,7 +375,7 @@ if __name__ == "__main__":
             random.shuffle(parsed_data) 
             
             lastlinks = len(parsed_data)
-            print (f"this job has {lastlinks} links and deduped {deduped} links in {round(time.time()-start,2)}")
+            print (f"this job has {lastlinks} links left; deduped {deduped} and clipped {clpd} links in {round(time.time()-start,2)}")
             start = time.time()
 
             """ while True:

@@ -75,6 +75,8 @@ def df_clipfilter(df):
     img_embedding, similarities = clip_filter.preprocess_images(df)
     tmp_embed = []
 
+    df["dropped"] = False
+
     for i, img_embed in enumerate(img_embedding):
         if similarities[i] < sim_threshold:
             #df.drop(i, inplace=True)
@@ -104,7 +106,6 @@ def df_clipfilter(df):
             df.at[i, 'dropped'] = True
             continue
         tmp_embed.append(img_embed)
-        df.at[i, 'dropped'] = False
         
     df = df[df["dropped"] != True]
     df.reset_index(drop=True, inplace=True)
@@ -148,6 +149,11 @@ def df_tfrecords(df, output_fname):
 
 
 def filter(df, out_fname, output_folder):
+    # save hashes
+    df.loc[:,"hash"] = df.apply(lambda row: hashlib.md5((str(row.URL)+str(row.TEXT)).encode("utf-8")).hexdigest(), axis=1)
+    with open(f"{output_folder}hashes-{out_fname}.clp", "wt") as f:
+        for item in df["hash"]:
+            f.write(item + "\n")
     results = []
     #start0 = start = time.time()
     img_embeddings, dff = df_clipfilter(df)
@@ -171,7 +177,7 @@ def filter(df, out_fname, output_folder):
         f"{output_folder}crawling_at_home_{out_fname}__00000-of-00001.tfrecord",
     )
     # save hashes
-    dff.loc[:,"hash"] = dff.apply(lambda row: hashlib.md5((str(row.URL)+str(row.TEXT)).encode("utf-8")).hexdigest(), axis=1)
+    #dff.loc[:,"hash"] = dff.apply(lambda row: hashlib.md5((str(row.URL)+str(row.TEXT)).encode("utf-8")).hexdigest(), axis=1)
     with open(f"{output_folder}hashes-{out_fname}.hsh", "wt") as f:
         for item in dff["hash"]:
             f.write(item + "\n")

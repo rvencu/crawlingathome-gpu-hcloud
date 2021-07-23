@@ -195,7 +195,7 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             
             #print (f"[gpu] saving stats")
 
-            group_parse.to_csv("./stats/" + group_id + "_groupduped.csv", index=False, sep="|") # I am using these to find out domains to filter from scraping
+            #group_parse.to_csv("./stats/" + group_id + "_groupduped.csv", index=False, sep="|") # I am using these to find out domains to filter from scraping
             duped = len(group_parse.index)
             group_parse.drop_duplicates(subset=["URL","TEXT"], keep='last', inplace=True)
             group_parse.reset_index(inplace=True, drop=True)
@@ -205,7 +205,7 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             group_parse.reset_index(inplace=True, drop=True)
             bloomed = len(group_parse.index)
 
-            group_parse.to_csv("./stats/" + group_id + "_groupdeduped.csv", index=False, sep="|") # I am using these to find out domains to filter from scraping
+            group_parse.to_csv("./stats/" + group_id + "_beforeclip.csv", index=False, sep="|") # I am using these to find out domains to filter from scraping
 
             #print (f"[gpu] sending group to CLIP filter")
             start = time.time()
