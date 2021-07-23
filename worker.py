@@ -341,13 +341,13 @@ if __name__ == "__main__":
                 failed = set(f.read().splitlines())
             blocked |= failed # merge the 2 sets and use this to reduce the number of attempted links, reduce crawling time.
             '''
-            shutil.rmtree("crawlingathome-gpu-hcloud/blocklists/")
-            os.makedirs("crawlingathome-gpu-hcloud/blocklists/")
-            os.system("rsync -zh archiveteam@88.198.2.17::bloom/*.bin crawlingathome-gpu-hcloud/blocklists")
+            shutil.rmtree("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
+            os.makedirs("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
+            os.system("rsync -zh archiveteam@88.198.2.17::bloom/*.bin /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
 
-            bloom = BloomFilter(max_elements=80000000, error_rate=0.01, filename=("crawlingathome-gpu-hcloud/blocklists/bloom.bin",-1))
-            clipped = BloomFilter(max_elements=200000000, error_rate=0.05, filename=("crawlingathome-gpu-hcloud/blocklists/clipped.bin",-1))
-            blocked = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("crawlingathome-gpu-hcloud/blocklists/failed-domains.bin",-1))
+            bloom = BloomFilter(max_elements=80000000, error_rate=0.01, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/bloom.bin",-1))
+            clipped = BloomFilter(max_elements=200000000, error_rate=0.05, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/clipped.bin",-1))
+            blocked = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/failed-domains.bin",-1))
 
             print (f"sync filters in {round(time.time()-start,2)}")
             start = time.time()
