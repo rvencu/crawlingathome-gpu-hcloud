@@ -81,12 +81,12 @@ def parse_wat(content, start, line_count, blocked, bloom, clipped):
             if any( x in url for x in [".svg", ".gif", "data:image", "javascript:"] ):
                 continue
             # reject links found in blocked list
-            #try:
-            #    if urlparse(url).netloc in blocked:
-            #        continue
-            #except:
+            try:
+                if urlparse(url).netloc in blocked:
+                    continue
+            except:
                 # cannot even parse the url
-            #    continue
+                continue
             # detect ALT text language, we want to retain only English captions
             alt_text = ftfy.fix_text(e["alt"].replace("\n", " ")).strip()
             try:
