@@ -277,18 +277,8 @@ if __name__ == "__main__":
 
     print (f"starting session under `{YOUR_NICKNAME_FOR_THE_LEADERBOARD}` nickname")
 
-    
-
     # connect to C@H server and initialize client
-    client = None
-    while True:
-        try:
-            client = cah.init(
-                url=CRAWLINGATHOME_SERVER_URL, nickname=YOUR_NICKNAME_FOR_THE_LEADERBOARD, type="CPU"
-            )
-            break
-        except:
-            time.sleep(60)
+    client = cah.init(url=CRAWLINGATHOME_SERVER_URL, nickname=YOUR_NICKNAME_FOR_THE_LEADERBOARD, type="CPU")
 
     # initialize stats variables for previous job
     last = 0
@@ -311,7 +301,7 @@ if __name__ == "__main__":
             os.mkdir(".tmp")
 
             # get new job and download the wat file in parallel with bloom updates
-            p = mp.Process(target=updateBloom, args=["archiveteam@88.198.2.17::bloom"]).start()
+            p = mp.Process(target=updateBloom, args=["archiveteam@88.198.2.17::bloom"], daemon=True).start()
             
             client.newJob()
             client.downloadShard()
