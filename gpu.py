@@ -147,17 +147,20 @@ def upload_worker(uploadqueue: JoinableQueue, counter: JoinableQueue, outgoingqu
         else:
             time.sleep(10)
 
+def updateBloom():
+    shutil.rmtree("blocklists/")
+    os.makedirs("blocklists/")
+    os.system("rsync -zh archiveteam@88.198.2.17::bloom/*.bin blocklists")
+
 def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag: JoinableQueue, groupsize: int):
     print (f"[gpu] worker started")
     first_groupsize = groupsize
     # watch for the incoming queue, when it is big enough we can trigger processing    
     while True:
         #print (f"[gpu] testing incoming queue size")
-        shutil.rmtree("blocklists/")
-        os.makedirs("blocklists/")
-        os.system("rsync -zh archiveteam@88.198.2.17::bloom/*.bin blocklists")
-        bloom = BloomFilter(max_elements=80000000, error_rate=0.01, filename=("blocklists/bloom.bin",-1))
         if incomingqueue.qsize() >= groupsize:
+            t = threading.Thread(target=updateBloom)
+            t.start()
             gpuflag.put(1)
             shards = []
             addresses = []
@@ -200,6 +203,10 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             group_parse.drop_duplicates(subset=["URL","TEXT"], keep='last', inplace=True)
             group_parse.reset_index(inplace=True, drop=True)
             total = len(group_parse.index)
+
+            t.join()
+            bloom = BloomFilter(max_elements=80000000, error_rate=0.01, filename=("blocklists/bloom.bin",-1))
+
             group_parse.loc[:,"bloom"] = group_parse.apply(lambda row: hashlib.md5((str(row.URL)+str(row.TEXT)).encode("utf-8")).hexdigest() in bloom, axis=1)
             group_parse = group_parse[group_parse["bloom"] == False]
             group_parse.reset_index(inplace=True, drop=True)
