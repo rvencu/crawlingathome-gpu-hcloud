@@ -239,7 +239,6 @@ def updateBloom(target):
     os.makedirs("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
     os.system(f"rsync -zh {target}/*.bin /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
     print(f"Updated bloom filters in {round(time.time()-start),2} sec")
-    return
 
 class FileData:
     """
@@ -326,7 +325,7 @@ if __name__ == "__main__":
 
             # compute output file names base
             out_fname = f"FIRST_SAMPLE_ID_IN_SHARD_{str(first_sample_id)}_LAST_SAMPLE_ID_IN_SHARD_{str(last_sample_id)}_{shard_of_chunk}"
-            print(f"shard acquired in {round(time.time()-start,2)} sec")
+            print(f"shard acquired in {round(time.time()-start,2)} sec (including bloom updates)")
             start = time.time()
 
             bloom = BloomFilter(max_elements=80000000, error_rate=0.01, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/bloom.bin",-1))
