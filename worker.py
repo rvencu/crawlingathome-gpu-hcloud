@@ -232,11 +232,11 @@ def upload(source: str, clientType: str, target: str):
     options = "-rzh" if clientType == "CPU" else "-zh"
     return os.system(f"rsync {options} {source} {target}")
 
-def updateBloom():
+def updateBloom(target):
     if os.path.exists("/home/crawl/crawlingathome-gpu-hcloud/blocklists/"):
         shutil.rmtree("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
     os.makedirs("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
-    os.system("rsync -zh archiveteam@88.198.2.17::bloom/*.bin /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
+    os.system(f"rsync -zh {target}/*.bin /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
 
 class FileData:
     """
@@ -310,7 +310,7 @@ if __name__ == "__main__":
             os.mkdir(".tmp")
 
             # get new job and download the wat file in parallel with bloom updates
-            p = mp.Process(target=updateBloom, args=[]).start()
+            p = mp.Process(target=updateBloom, args=["archiveteam@88.198.2.17::bloom"]).start()
             
             client.newJob()
             client.downloadShard()
