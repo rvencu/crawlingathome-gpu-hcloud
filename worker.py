@@ -237,6 +237,7 @@ def updateBloom(target):
         shutil.rmtree("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
     os.makedirs("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
     os.system(f"rsync -zh {target}/*.bin /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
+    return
 
 class FileData:
     """
