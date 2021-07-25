@@ -281,6 +281,8 @@ if __name__ == "__main__":
     # connect to C@H server and initialize client
     client = cah.init(url=CRAWLINGATHOME_SERVER_URL, nickname=YOUR_NICKNAME_FOR_THE_LEADERBOARD, type="CPU")
 
+    updateBloom("archiveteam@88.198.2.17::bloom")
+
     # initialize stats variables for previous job
     last = 0
     loop = 0
@@ -306,14 +308,14 @@ if __name__ == "__main__":
             n = 3
             modulo = random.randint(0, n-1)
             # get new job and download the wat file in parallel with bloom updates
-            if loop % n == modulo:
+            if loop > 0 and loop % n == modulo:
                 t = Thread(target=updateBloom, args=["archiveteam@88.198.2.17::bloom"])
                 t.start()
 
             client.newJob()
             client.downloadShard()
 
-            if loop % n == modulo:
+            if loop > 0 and loop % n == modulo:
                 t.join()
             
             loop += 1
