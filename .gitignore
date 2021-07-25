@@ -167,3 +167,5 @@ stats/
 save/
 parquet/
 blocklists/*
+*.tar
+*.tar.gz

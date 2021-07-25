@@ -103,14 +103,14 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                             time.sleep(1)
                 else:
                     print (f"[io {i}] no jobs")
-                    time.sleep(60)
+                    time.sleep(10)
             else:
                 print (f"[io {i}] client forgotten")
-                time.sleep(60)
+                time.sleep(10)
         except Exception as e:
             print (f"[io {i}] client crashed, respawning...")
             print (e) #see why clients crashes
-            time.sleep(60)
+            time.sleep(10)
 
 def io_worker(incomingqueue: JoinableQueue, outgoingqueue: list, groupsize: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL):
     # separate process to initialize threaded workers
@@ -346,7 +346,11 @@ if __name__ == "__main__":
             for dir in dirnames:
                 if re_uuid.match(dir):
                     shutil.rmtree(dir)
-
+        re_gz = re.compile(r'.*.tar.gz.*', re.I)
+        for root, dirnames, filenames in os.walk("."):
+            for file in filenames:
+                if re_gz.match(file):
+                    os.remove(file)
         
         #initialize joinable queues to transfer messages between multiprocess processes
         # Outbound queues, we need one for each io worker
