@@ -8,6 +8,7 @@ import ujson
 import shutil
 import random
 import hashlib
+import tarfile
 import pandas as pd
 from glob import glob
 from uuid import uuid1
@@ -227,10 +228,10 @@ def dl_wat(valid_data, first_sample_id):
     )
 
 def upload(source: str, clientType: str, target: str):
+    with tarfile.open(f"{source}.tar", "w:gz") as tar:
+        tar.add(source, arcname=os.path.basename(source))
     print(f"client type is {clientType}")
-    #target = "gpujobs" if clientType == "CPU" else "CAH"
-    options = "-rzh" if clientType == "CPU" else "-zh"
-    return os.system(f"rsync {options} {source} {target}")
+    return os.system(f"rsync -zh {source}.tar {target}")
 
 def updateBloom(target):
     start = time.time()
