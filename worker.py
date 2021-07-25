@@ -283,6 +283,7 @@ if __name__ == "__main__":
 
     # initialize stats variables for previous job
     last = 0
+    loop = 0
 
     while client.jobCount() > 0 and client.isAlive():
         try:
@@ -302,13 +303,17 @@ if __name__ == "__main__":
             os.mkdir(".tmp")
 
             # get new job and download the wat file in parallel with bloom updates
-            t = Thread(target=updateBloom, args=["archiveteam@88.198.2.17::bloom"])
-            t.start()
+            if loop % 3 == 0:
+                t = Thread(target=updateBloom, args=["archiveteam@88.198.2.17::bloom"])
+                t.start()
 
             client.newJob()
             client.downloadShard()
 
-            t.join()
+            if loop % 3 == 0:
+                t.join()
+            
+            loop += 1
             
             # retrieve job details and determine what part of the wat file to parse
             first_sample_id = int(client.start_id)
