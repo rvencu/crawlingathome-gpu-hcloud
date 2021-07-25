@@ -13,6 +13,7 @@ from glob import glob
 from uuid import uuid1
 from io import BytesIO
 from requests import get
+import multiprocessing as mp
 import crawlingathome_client as cah
 from bloom_filter2 import BloomFilter
 from urllib.parse import urljoin, urlparse
@@ -231,6 +232,12 @@ def upload(source: str, clientType: str, target: str):
     options = "-rzh" if clientType == "CPU" else "-zh"
     return os.system(f"rsync {options} {source} {target}")
 
+def updateBloom():
+    if os.path.exists("/home/crawl/crawlingathome-gpu-hcloud/blocklists/"):
+        shutil.rmtree("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
+    os.makedirs("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
+    os.system("rsync -zh archiveteam@88.198.2.17::bloom/*.bin /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
+
 class FileData:
     """
     Helper class to easily find wat file size, mid position, etc
@@ -302,15 +309,13 @@ if __name__ == "__main__":
             os.mkdir(img_output_folder)
             os.mkdir(".tmp")
 
-            # get new job and download the wat file
-            while True:
-                try:
-                    client.newJob()
-                    client.downloadShard()
-                except:
-                    time.sleep(60)
-                    continue
-                break
+            # get new job and download the wat file in parallel with bloom updates
+            p = mp.Process(updateBloom).start()
+            
+            client.newJob()
+            client.downloadShard()
+
+            p.join()
             
             # retrieve job details and determine what part of the wat file to parse
             first_sample_id = int(client.start_id)
@@ -330,11 +335,6 @@ if __name__ == "__main__":
             out_fname = f"FIRST_SAMPLE_ID_IN_SHARD_{str(first_sample_id)}_LAST_SAMPLE_ID_IN_SHARD_{str(last_sample_id)}_{shard_of_chunk}"
             print(f"shard acquired in {round(time.time()-start,2)} sec")
             start = time.time()
-            
-            if os.path.exists("/home/crawl/crawlingathome-gpu-hcloud/blocklists/"):
-                shutil.rmtree("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
-            os.makedirs("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
-            os.system("rsync -zh archiveteam@88.198.2.17::bloom/*.bin /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
 
             bloom = BloomFilter(max_elements=80000000, error_rate=0.01, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/bloom.bin",-1))
             clipped = BloomFilter(max_elements=200000000, error_rate=0.05, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/clipped.bin",-1))
