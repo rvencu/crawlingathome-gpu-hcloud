@@ -302,7 +302,11 @@ if __name__ == "__main__":
             os.mkdir(".tmp")
 
             # get new job and download the wat file in parallel with bloom updates
-            t = Thread(target=updateBloom, args=["archiveteam@88.198.2.17::bloom"]).start()
+            t = Thread(updateBloom, args=["archiveteam@88.198.2.17::bloom"])
+            try:
+                t.start()
+            except Exception as e:
+                print(f"thread not started {e}")
             
             client.newJob()
             client.downloadShard()
