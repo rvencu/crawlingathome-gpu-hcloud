@@ -13,7 +13,7 @@ from glob import glob
 from uuid import uuid1
 from io import BytesIO
 from requests import get
-import multiprocessing as mp
+from threading import Thread
 import crawlingathome_client as cah
 from bloom_filter2 import BloomFilter
 from urllib.parse import urljoin, urlparse
@@ -303,13 +303,12 @@ if __name__ == "__main__":
             os.mkdir(".tmp")
 
             # get new job and download the wat file in parallel with bloom updates
-            p = mp.Process(target=updateBloom, args=["archiveteam@88.198.2.17::bloom"], daemon=True).start()
+            t = Thread(target=updateBloom, args=["archiveteam@88.198.2.17::bloom"]).start()
             
             client.newJob()
             client.downloadShard()
 
-            if p is not None:
-                p.join()
+            t.join()
             
             # retrieve job details and determine what part of the wat file to parse
             first_sample_id = int(client.start_id)
