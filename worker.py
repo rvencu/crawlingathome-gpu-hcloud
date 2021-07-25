@@ -302,15 +302,18 @@ if __name__ == "__main__":
             os.mkdir(img_output_folder)
             os.mkdir(".tmp")
 
+            #randomize updates
+            n = 3
+            modulo = random.randint(0, n-1)
             # get new job and download the wat file in parallel with bloom updates
-            if loop % 3 == 0:
+            if loop % n == modulo:
                 t = Thread(target=updateBloom, args=["archiveteam@88.198.2.17::bloom"])
                 t.start()
 
             client.newJob()
             client.downloadShard()
 
-            if loop % 3 == 0:
+            if loop % n == modulo:
                 t.join()
             
             loop += 1
