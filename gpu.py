@@ -71,7 +71,7 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                     # found repeating shards, need to clear old files before continuing
                     if os.path.exists("./"+ job):
                         shutil.rmtree("./"+ job, ignore_errors=True)
-                    os.mkdir("./"+ job)
+                    #os.mkdir("./"+ job)
                     client.downloadShard()
 
                     if len(glob(f"{job}/*.csv")) == 0:
@@ -95,8 +95,11 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                                 try:
                                     client.completeJob(int(pairs))
                                 except:
-                                    pass
-                            shutil.rmtree("./"+ job)
+                                    client.invalidURL()
+                            if os.path.exists("./"+ job):
+                                shutil.rmtree("./"+ job)
+                            if os.path.exists(f"{job}.tar.gz"):
+                                os.remove(f"{job}.tar.gz")
                             outgoingqueue.task_done()
                             break # we can let the worker request a new job
                         else:
