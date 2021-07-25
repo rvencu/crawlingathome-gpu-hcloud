@@ -233,10 +233,12 @@ def upload(source: str, clientType: str, target: str):
     return os.system(f"rsync {options} {source} {target}")
 
 def updateBloom(target):
+    start = time.time()
     if os.path.exists("/home/crawl/crawlingathome-gpu-hcloud/blocklists/"):
         shutil.rmtree("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
     os.makedirs("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
     os.system(f"rsync -zh {target}/*.bin /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
+    print(f"Updated bloom filters in {round(time.time()-start),2} sec")
     return
 
 class FileData:
@@ -306,7 +308,8 @@ if __name__ == "__main__":
             client.newJob()
             client.downloadShard()
 
-            p.join()
+            if p is not None:
+                p.join()
             
             # retrieve job details and determine what part of the wat file to parse
             first_sample_id = int(client.start_id)
