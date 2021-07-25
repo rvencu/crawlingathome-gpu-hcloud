@@ -310,7 +310,7 @@ if __name__ == "__main__":
             os.mkdir(".tmp")
 
             # get new job and download the wat file in parallel with bloom updates
-            p = mp.Process(target=updateBloom).start()
+            p = mp.Process(target=updateBloom, args=[]).start()
             
             client.newJob()
             client.downloadShard()
