@@ -231,12 +231,11 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             #print (f"most requested upload address is {upload_address}")
             uploadqueue.put((group_id, upload_address, shards, results))
             
-            if final_images < 7500:
-                groupsize = min( int(2.7 * first_groupsize) - 5 , groupsize + 3 )
-                print (f"groupsize changed to {groupsize}")
-            if final_images > 8500:
-                groupsize = max( groupsize - 3, 1 )
-                print (f"groupsize changed to {groupsize}")
+            # dynamic adjustment of groupsize so we can get close to 8000 pairs per group as fast as possible
+            gradient = int((final_images-8000)/500)
+            groupsize = min( int(2.7 * first_groupsize) - 5 , groupsize - gradient )
+            groupsize = max( groupsize - gradient, 1 )
+            print (f"groupsize changed to {groupsize}")
             
             gpuflag.get()
             gpuflag.task_done()
@@ -326,7 +325,7 @@ if __name__ == "__main__":
     print(
         f"[GPU] starting session under `{YOUR_NICKNAME_FOR_THE_LEADERBOARD}` nickname")
 
-    groupsize = 42 # how many shards to group for CLIP
+    groupsize = 57 # how many shards to group for CLIP
 
     if not os.path.exists("./stats/"):
         os.makedirs("./stats/")

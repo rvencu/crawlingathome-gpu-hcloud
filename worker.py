@@ -375,7 +375,7 @@ if __name__ == "__main__":
             prefix = uuid.uuid4().hex
             os.mkdir(prefix)
             os.system(f"mv save/* {prefix}/")
-            result = upload(prefix, client.type, f"archiveteam@88.198.2.17::gpujobs")
+            result = upload(prefix, client.type, client.upload_address)
             if result == 0:
                 client.completeJob(f"rsync {prefix}")
 
