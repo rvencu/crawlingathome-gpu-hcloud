@@ -232,8 +232,10 @@ def upload(source: str, clientType: str, target: str):
         tar.add(source, arcname=os.path.basename(source))
     print(f"client type is {clientType}")
     result = os.system(f"rsync -av {source}.tar.gz {target}")
-    if os.path.exists(f"{source}.tar.gz"):
-        os.remove(f"{source}.tar.gz")
+    if os.path.exists(f"/home/crawl/{source}.tar.gz"):
+        os.remove(f"/home/crawl/{source}.tar.gz")
+    if os.path.exists(f"/home/crawl/{source}"):
+        shutil.rmtree(f"/home/crawl/{source}", ignore_errors=True)
     return result
 
 def updateBloom(target):
@@ -384,7 +386,6 @@ if __name__ == "__main__":
             if result == 0:
                 client.completeJob(f"rsync {prefix}")
 
-            shutil.rmtree(prefix)
             last = round(time.time() - start0)
 
             print(f"job completed in {last} seconds")
