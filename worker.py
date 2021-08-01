@@ -231,7 +231,10 @@ def upload(source: str, clientType: str, target: str):
     with tarfile.open(f"{source}.tar.gz", "w:gz") as tar:
         tar.add(source, arcname=os.path.basename(source))
     print(f"client type is {clientType}")
-    return os.system(f"rsync -av {source}.tar.gz {target}")
+    result = os.system(f"rsync -av {source}.tar.gz {target}")
+    if os.path.exists(source):
+        os.remove(source)
+    return result
 
 def updateBloom(target):
     start = time.time()
