@@ -37,6 +37,7 @@ write_files:
     rm -rf /home/crawl/gpusemaphore
     rm -rf /home/crawl/gpuabort
     rm -rf /home/crawl/gpulocal
+    rm -rf /home/crawl/*.tar.gz
     cd crawlingathome-gpu-hcloud
     rm worker.py
     wget https://raw.githubusercontent.com/rvencu/crawlingathome-gpu-hcloud/staged-clients/worker.py
