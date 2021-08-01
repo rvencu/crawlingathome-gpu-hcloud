@@ -153,7 +153,8 @@ def upload_worker(uploadqueue: JoinableQueue, counter: JoinableQueue, outgoingqu
 def updateBloom():
     shutil.rmtree("blocklists/")
     os.makedirs("blocklists/")
-    os.system("rsync -zh archiveteam@88.198.2.17::bloom/*.bin blocklists")
+    #os.system("rsync -zh archiveteam@88.198.2.17::bloom/*.bin blocklists")
+    os.system("rsync -av --partial --inplace --progress archiveteam@88.198.2.17::bloom/*.bin blocklists")
 
 def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag: JoinableQueue, groupsize: int):
     print (f"[gpu] worker started")
