@@ -11,11 +11,11 @@ import clip_filter
 import pandas as pd
 from glob import glob
 from tqdm import tqdm
-from bloom_filter2 import BloomFilter
 from pathlib import Path
 from colorama import Fore
 from statistics import mode
 import crawlingathome_client as cah
+from bloom_filter2 import BloomFilter
 sys.path.append('./crawlingathome-worker/')
 from multiprocessing import JoinableQueue, Process
 
@@ -133,7 +133,7 @@ def upload_worker(uploadqueue: JoinableQueue, counter: JoinableQueue, outgoingqu
     while True:
         if uploadqueue.qsize() > 0:
             group_id, upload_address, shards, results = uploadqueue.get()
-            response = os.system(f"rsync -zh save/*{group_id}* {upload_address}") # to do get target from client
+            response = os.system(f"rsync -av save/*{group_id}* {upload_address}") # to do get target from client
             if response == 0:
                 #print (f"[io2] sending all jobs to be marked as completed")
                 for i, job, item in shards:
