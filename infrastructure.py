@@ -37,7 +37,7 @@ async def up(nodes, pref_loc, server_type="cx11"):
     with open("cloud-init", "r") as user_data:
         script = user_data.read()
     for token in tokens:
-        print(f"[swarm] nodes to be spun up: {nodes}")
+        print(f"[swarm] nodes to spin up: {nodes}")
         if (nodes > 0):
             try:
                 hclient = Client(token=token.rstrip())
