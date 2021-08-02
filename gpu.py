@@ -209,7 +209,7 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             total = len(group_parse.index)
 
             t.join()
-            bloom = BloomFilter(max_elements=200000000, error_rate=0.05, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/bloom200M.bin",-1))
+            bloom = BloomFilter(max_elements=200000000, error_rate=0.05, filename=("blocklists/bloom200M.bin",-1))
 
             group_parse.loc[:,"bloom"] = group_parse.apply(lambda row: hashlib.md5((str(row.URL)+str(row.TEXT)).encode("utf-8")).hexdigest() in bloom, axis=1)
             group_parse = group_parse[group_parse["bloom"] == False]
