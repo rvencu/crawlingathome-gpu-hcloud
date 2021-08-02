@@ -347,7 +347,7 @@ if __name__ == "__main__":
             print(f"shard acquired in {round(time.time()-start,2)} sec (including bloom updates)")
             start = time.time()
 
-            bloom = BloomFilter(max_elements=80000000, error_rate=0.01, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/bloom.bin",-1))
+            bloom = BloomFilter(max_elements=200000000, error_rate=0.05, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/bloom200M.bin",-1))
             clipped = BloomFilter(max_elements=200000000, error_rate=0.05, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/clipped.bin",-1))
             blocked = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/failed-domains.bin",-1))
 
