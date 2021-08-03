@@ -124,13 +124,7 @@ async def respawn(workers, ip, server_type="cx11"):
             aclient = SSHClient(ip, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False)
             aclient.execute('systemctl restart crawl', sudo=True )
             aclient.disconnect()
-            '''
-            subprocess.call(
-                ["ssh", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "-oStrictHostKeyChecking=no", "-oUserKnownHostsFile=/dev/null", "crawl@" + ip, "sudo", "systemctl", "restart", "crawl"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-            '''
+
         except:
             # if impossible to restart the service then delete the worker and try to re-create it
             server.delete()
@@ -168,13 +162,7 @@ def exists_remote(host, path, silent=False):
     status = output.exit_code
 
     aclient.disconnect()
-    '''
-    status = subprocess.call(
-        ["ssh", "-oStrictHostKeyChecking=no", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "-oStrictHostKeyChecking=no", "-oUserKnownHostsFile=/dev/null", host, "test -f {}".format(pipes.quote(path))],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    '''
+
     if not silent:
         print(".", end = "", flush=True)
     if status == 0:
@@ -200,31 +188,11 @@ async def wait_for_infrastructure (workers):
                 ready.append(hostname)
         #print(len(ready))
         time.sleep(10)
-    '''
-    for i in range(len(workers)):
-        subprocess.call(
-            ["ssh-keygen", "-R", workers[i]],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        time.sleep(5)
-        while not exists_remote(
-            f"crawl@{workers[i]}", "/home/crawl/crawl.log"
-        ):
-            time.sleep(30)
-    '''
 
 def last_status(host,path):
     aclient = SSHClient(ip, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False)
     read = aclient.run_command("tail -1 {}".format(pipes.quote(path)))
     aclient.disconnect()
-    '''
-    read = subprocess.run(
-        ["ssh", "-oStrictHostKeyChecking=no", "-oIdentitiesOnly=yes", "-i~/.ssh/id_cah", "-oStrictHostKeyChecking=no", "-oUserKnownHostsFile=/dev/null", host, "tail -1 {}".format(pipes.quote(path))],
-        capture_output=True,
-        text=True
-    )
-    '''
     return read.stdout
 
 def reset_workers():
@@ -249,6 +217,17 @@ if __name__ == "__main__":
     if command == "up":
         try:
             start = time.time()
+            sshkey=""
+            escape = ["\\","$",".","*","[","^","/"]
+            with open (f"{os.getenv('HOME')}/.ssh/id_cah.pub","rt") as f:
+                sshkey = f.read().split(" ")[1]
+                for char in escape:
+                    sshkey = sshkey.replace(char,"\\"+char)
+            print(sshkey)
+            os.system("rm cloud-init")
+            os.system("cp cloud-config.yaml cloud-init")
+            os.system(f"sed -i -e \"s/<<your_nickname>>/{os.getenv('CAH_NICKNAME')}/\" cloud-init")
+            os.system(f"sed -i -e \"s/<<your_ssh_public_key>>/{sshkey}/\" cloud-init")
             # generate cloud workers
             workers = trio.run(up, nodes, location)
             with open("workers.txt", "w") as f:

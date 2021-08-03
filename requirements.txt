@@ -1,10 +1,8 @@
-datasets
 ftfy
 pandas
 pycld2
 regex
 tfr_image
-tractor
 trio
 ujson
 colorama

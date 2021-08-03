@@ -244,7 +244,7 @@ def updateBloom(target):
         shutil.rmtree("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
     os.makedirs("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
     os.system(f"rsync -av --partial --inplace --progress {target}/*.bin /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
-    #os.system(f'wget -m -np -c -U "eye02" -w 2 -R "index.html*" "https://the-eye.eu/public/AI/cahblacklists/"')
+    #os.system(f'wget -m -np -c -U "Crawling@Home" --tries=15 -R "index.html*" "http://the-eye.eu/public/AI/cahblacklists/"')
     #os.system("mv ./the-eye.eu/public/AI/cahblacklists/* /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
     print(f"Updated bloom filters in {round(time.time()-start, 2)} sec")
 

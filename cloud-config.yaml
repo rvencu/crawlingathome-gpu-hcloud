@@ -6,25 +6,22 @@ users:
     sudo: ALL=(ALL) NOPASSWD:ALL
     shell: /bin/bash
     ssh_authorized_keys:
-      - <<your_ssh_public_key>>
+      - ssh-rsa <<your_ssh_public_key>>
 package_update: true
 package_upgrade: true
 packages:
  - python3-pip
  - git
- - git-lfs
  - build-essential
  - libssl-dev
  - libffi-dev
  - python3-dev
  - libwebp-dev
  - libjpeg-dev
- - python3-venv
 write_files:
 - path: /etc/environment
   content: |
     CAH_NICKNAME="<<your_nickname>>"
-    PYTHONHASHSEED=0
   append: true
 - path: /home/crawl/worker-reset.sh
   permissions: '0744'
@@ -40,9 +37,44 @@ write_files:
     rm -rf /home/crawl/*.tar.gz
     cd crawlingathome-gpu-hcloud
     rm worker.py
-    wget https://raw.githubusercontent.com/rvencu/crawlingathome-gpu-hcloud/staged-clients/worker.py
+    wget https://raw.githubusercontent.com/rvencu/crawlingathome-gpu-hcloud/main/worker.py
     chown crawl:adm -R /home/crawl/
     systemctl restart crawl
+- path: /etc/security/limits.conf
+  content: |
+    *     soft     nproc     65535
+    *     hard     nproc     65535
+    *     soft     nofile    65535
+    *     hard     nofile    65535
+    root  soft     nproc     65535
+    root  hard     nproc     65535
+    root  soft     nofile    65535
+    root  hard     nofile    65535
+  append: true
+- path: /home/crawl/crawl.sh
+  permissions: '0744'
+  content: |
+    #!/bin/bash
+    while true
+      do
+        python3 -u /home/crawl/crawlingathome-gpu-hcloud/worker.py >> /home/crawl/crawl.log 2>&1
+        sleep 1
+      done
+- path: /etc/systemd/system/crawl.service
+  permissions: '0664'
+  content: |
+    [Unit]
+    After=network.service
+    Description=Crawling @ Home
+    [Service]
+    Type=simple
+    LimitNOFILE=2097152
+    WorkingDirectory=/home/crawl
+    ExecStart=/home/crawl/crawl.sh
+    EnvironmentFile=/etc/environment
+    User=crawl
+    [Install]
+    WantedBy=multi-user.target
 runcmd:
  - [ ls, -l, / ]
  - [ sh, -xc, "echo $(date) ': hello crawl!'" ]
@@ -57,22 +89,9 @@ runcmd:
  #- 'echo "/swapfile none swap sw 0 0" | tee -a /etc/fstab'
  #- sysctl vm.swappiness=75
  #- 'echo "vm.swappiness=75" | tee -a /etc/sysctl.conf'
- # make ramdisk (actually no need for ramdisk)
- # - 'echo "tmpfs  /home/crawl/save  tmpfs  rw,size=512M  0   0" | tee -a /etc/fstab'
-# take care of max open files
- - echo "* soft     nproc          65535 " >> /etc/security/limits.conf
- - echo "* hard     nproc          65535 " >> /etc/security/limits.conf
- - echo "* soft     nofile         65535" >> /etc/security/limits.conf
- - echo "* hard     nofile         65535" >> /etc/security/limits.conf
- - echo "root soft     nproc          65535 " >> /etc/security/limits.conf
- - echo "root hard     nproc          65535 " >> /etc/security/limits.conf
- - echo "root soft     nofile         65535" >> /etc/security/limits.conf
- - echo "root hard     nofile         65535" >> /etc/security/limits.conf
+ # take care of max open files
  - echo "session required pam_limits.so" >> /etc/pam.d/common-session
  - echo "fs.file-max = 2097152" >> /etc/sysctl.conf
-# install git lfs
- - git lfs install
- - git lfs track "duplicates*.txt"
 # secure ssh
  - sed -i -e '/^\(#\|\)PermitRootLogin/s/^.*$/PermitRootLogin no/' /etc/ssh/sshd_config
  - sed -i -e '/^\(#\|\)PasswordAuthentication/s/^.*$/PasswordAuthentication no/' /etc/ssh/sshd_config
@@ -84,33 +103,14 @@ runcmd:
  - sed -i '$a AllowUsers crawl' /etc/ssh/sshd_config
  # install the script
  - cd /home/crawl
- - git clone https://github.com/rvencu/crawlingathome-gpu-hcloud --branch staged-clients
+ - git clone https://github.com/rvencu/crawlingathome-gpu-hcloud
  - cd crawlingathome-gpu-hcloud
  - bash worker-setup.sh
  # make the script run as a service at startup
- - echo "[Unit]" >> /etc/systemd/system/crawl.service
- - echo "After=network.service" >> /etc/systemd/system/crawl.service
- - echo "Description=Crawling @ Home" >> /etc/systemd/system/crawl.service
- - echo "[Service]" >> /etc/systemd/system/crawl.service
- - echo "Type=simple" >> /etc/systemd/system/crawl.service
- - echo "LimitNOFILE=2097152" >> /etc/systemd/system/crawl.service
- - echo "WorkingDirectory=/home/crawl" >> /etc/systemd/system/crawl.service
- - echo "ExecStart=/home/crawl/crawl.sh" >> /etc/systemd/system/crawl.service
- - echo "EnvironmentFile=/etc/environment" >> /etc/systemd/system/crawl.service
- - echo "User=crawl" >> /etc/systemd/system/crawl.service
- - echo "[Install]" >> /etc/systemd/system/crawl.service
- - echo "WantedBy=multi-user.target" >> /etc/systemd/system/crawl.service
- - chmod 664 /etc/systemd/system/crawl.service
  - systemctl daemon-reload
  - systemctl enable crawl.service
- - echo "#!/bin/bash" >> /home/crawl/crawl.sh
- - echo "while true" >> /home/crawl/crawl.sh
- - echo "do" >> /home/crawl/crawl.sh
- - echo "python3 -u /home/crawl/crawlingathome-gpu-hcloud/worker.py >> /home/crawl/crawl.log 2>&1" >> /home/crawl/crawl.sh
- - echo "sleep 1" >> /home/crawl/crawl.sh
- - echo "done" >> /home/crawl/crawl.sh
- - chmod 744 /home/crawl/crawl.sh
  - chown crawl:adm -R /home/crawl/
  - apt clean
  - reboot
 final_message: "The system is finally up, after $UPTIME seconds"
+
