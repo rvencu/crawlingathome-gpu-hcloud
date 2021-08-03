@@ -37,7 +37,7 @@ write_files:
     rm -rf /home/crawl/*.tar.gz
     cd crawlingathome-gpu-hcloud
     rm worker.py
-    wget https://raw.githubusercontent.com/rvencu/crawlingathome-gpu-hcloud/main/worker.py
+    wget https://raw.githubusercontent.com/rvencu/crawlingathome-gpu-hcloud/staged-clients/worker.py
     chown crawl:adm -R /home/crawl/
     systemctl restart crawl
 - path: /etc/security/limits.conf
@@ -103,7 +103,7 @@ runcmd:
  - sed -i '$a AllowUsers crawl' /etc/ssh/sshd_config
  # install the script
  - cd /home/crawl
- - git clone https://github.com/rvencu/crawlingathome-gpu-hcloud
+ - git clone https://github.com/rvencu/crawlingathome-gpu-hcloud --branch staged-clients
  - cd crawlingathome-gpu-hcloud
  - bash worker-setup.sh
  # make the script run as a service at startup

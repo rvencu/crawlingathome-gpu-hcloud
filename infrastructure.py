@@ -38,7 +38,7 @@ async def up(nodes, pref_loc, server_type="cx11"):
         script = user_data.read()
     for token in tokens:
         print(f"[swarm] nodes to spin up: {nodes}")
-        if (nodes > 0):
+        if (nodes > 0 and not token.startswith("#")):
             try:
                 hclient = Client(token=token.rstrip())
                 if pref_loc == None:
@@ -69,13 +69,13 @@ async def up(nodes, pref_loc, server_type="cx11"):
                         workers.append(srv.public_net.ipv4.ip)
                         nodes = nodes - 1
                     except APIException as e:
-                        print (f"[swarm] API Exception: " + str(e))
+                        print (f"[swarm] API Exception: " + str(e) + " ("+ token +")")
                         break
                     except Exception as e:
                         print(e)
                         break
             except APIException as e:
-                print (f"[swarm] API Exception: " + str(e))
+                print (f"[swarm] API Exception: " + str(e) + " ("+ token +")")
                 continue
             except Exception as e:
                 print(e)
@@ -97,7 +97,7 @@ async def down():
                     continue
                 server.delete()
         except APIException as e:
-            print (f"[swarm] API Exception: " + str(e))
+            print (f"[swarm] API Exception: " + str(e) + " ("+ token +")")
             continue
 
 async def down_server(workers, i):
@@ -223,7 +223,7 @@ if __name__ == "__main__":
                 sshkey = f.read().split(" ")[1]
                 for char in escape:
                     sshkey = sshkey.replace(char,"\\"+char)
-            print(sshkey)
+            #print(sshkey)
             os.system("rm cloud-init")
             os.system("cp cloud-config.yaml cloud-init")
             os.system(f"sed -i -e \"s/<<your_nickname>>/{os.getenv('CAH_NICKNAME')}/\" cloud-init")

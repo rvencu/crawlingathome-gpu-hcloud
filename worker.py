@@ -34,7 +34,8 @@ class Tracer(trio.abc.Instrument):
 
     def task_exited(self, task):
         self.requests += 1
-        self.exceptions += task.custom_sleep_data
+        if task.custom_sleep_data == 1:
+            self.exceptions += 1
     
     def after_run(self):
         print(f"We had {self.exceptions} errors within {self.requests} requests or a percentage of {round(self.exceptions/self.requests, 2)}")
