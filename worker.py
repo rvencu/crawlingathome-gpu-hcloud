@@ -26,6 +26,20 @@ asks.init("trio")
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True  # https://stackoverflow.com/a/47958486
 
+class Tracer(trio.abc.Instrument):
+
+    def __init__(self):
+        self.exceptions = 0
+        self.requests = 0
+
+    def task_exited(self, task):
+        self.requests += 1
+        self.exceptions += task.custom_sleep_data
+    
+    def after_run(self):
+        print(f"We had {self.exceptions} errors within {self.requests} requests or a percentage of {round(self.exceptions/self.requests, 2)}")
+
+
 def remove_bad_chars(text):
     # cleanup text so language can be detected
     return "".join(c for c in text if c.isprintable())
@@ -177,8 +191,8 @@ async def request_image(datas, start_sampleid):
     async def _request(data, sample_id):
         url, alt_text, license = data
         # the following 2 lines are related to Trio Instrument to capture events from multiple threads
-        # task = trio.lowlevel.current_task()
-        # task.custom_sleep_data = None # custom_sleep_data can transport information from thread to main thread
+        task = trio.lowlevel.current_task()
+        task.custom_sleep_data = 0 # for success do not count errors
         try:
             proces = process_img_content(
                 # tune timeout and connection_timeout to grab more or less files. shorter timeouts will exclude bad performing websites
@@ -186,8 +200,8 @@ async def request_image(datas, start_sampleid):
             )
             if proces is not None:
                 tmp_data.append(proces)
-                # task.custom_sleep_data = 1
         except Exception:
+            task.custom_sleep_data = 1 # when exception is hit, count it
             return
 
     # this section launches many parallel requests
@@ -218,7 +232,7 @@ def dl_wat(valid_data, first_sample_id):
     # Download every image available
     processed_samples = []
     #trio.run(request_image, valid_data, first_sample_id, instruments=[TrioProgress(len(valid_data), False)] )
-    trio.run( request_image, valid_data, first_sample_id )
+    trio.run( request_image, valid_data, first_sample_id, instruments=[Tracer()] )
 
     for tmpf in glob(".tmp/*.json"):
         processed_samples.extend(ujson.load(open(tmpf)))
