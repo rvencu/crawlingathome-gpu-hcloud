@@ -18,13 +18,14 @@ import time
 start = time.time()
 now = datetime.now().strftime("%Y/%m/%d_%H:%M")
 
-bloom = BloomFilter(max_elements=80000000, error_rate=0.01, filename=("/home/archiveteam/CAH/bloom/bloom.bin",-1))
+bloom = BloomFilter(max_elements=200000000, error_rate=0.05, filename=("/home/archiveteam/CAH/bloom/bloom200M.bin",-1))
 filesbloom = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("/home/archiveteam/filesbloom.bin",-1))
 failed = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("/home/archiveteam/CAH/bloom/failed-domains.bin",-1))
 filesfailed = BloomFilter(max_elements=100000, error_rate=0.01, filename=("/home/archiveteam/filesfailed.bin",-1))
 clipped = BloomFilter(max_elements=200000000, error_rate=0.05, filename=("/home/archiveteam/CAH/bloom/clipped.bin",-1))
-filesclipped = BloomFilter(max_elements=100000, error_rate=0.01, filename=("/home/archiveteam/filesclipped.bin",-1))
+filesclipped = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("/home/archiveteam/filesclipped.bin",-1))
 
+time.sleep(15)
 counter = 0
 uniques = 0
 for file in glob("/home/archiveteam/CAH/hashes/*"):
@@ -64,13 +65,19 @@ for file in glob("/home/archiveteam/CAH/clipped/*"):
         filesclipped.add(stem)
 
 pd.set_option('precision', 2)
-df = pd.read_csv("bloom.log", sep=" ",header=None, names=["Date", "a", "main filter (max 80M, 1%)", "b", "total including duplicates","c","clipped filter (max 200M, 5%)","d","failed filter","e"])
-df["main filter (max 80M, 1%)"]=df["main filter (max 80M, 1%)"]/1000000
+df = pd.read_csv("bloom.log", sep=" ",header=None, names=["Date", "a", "unique pairs (max 200M, 5%)", "b", "total including duplicates","c","clipped filter (max 200M, 5%)","d","failed filter","e"])
+df["Date"]=df.Date.apply(lambda x: datetime.strptime(x, "[%Y/%m/%d_%H:%M]"))
+df["unique pairs (max 200M, 5%)"]=df["unique pairs (max 200M, 5%)"]/1000000
 df["total including duplicates"]=df["total including duplicates"]/1000000
 df["clipped filter (max 200M, 5%)"]=df["clipped filter (max 200M, 5%)"]/1000000
-with open('dashboard.txt', 'w') as file:
-    file.write("<h1>Bloom filters status</h1>\n")
-    file.write(str(df.sum(axis=0, numeric_only=True)).replace("\n","<br/>"))
 
 if uniques > 0:
     print(f"[{now}] added {uniques} \"from total of\" {counter} \"(i.e. {round((counter-uniques)*100/(counter+sys.float_info.epsilon),2)}% duplication in {round(time.time()-start,2)} sec) Also added \" {clipped_counter} \"clipped and\" {failed_counter} failed")
+    with open('dashboard.txt', 'w') as file:
+        file.write("<h1>Bloom filters status</h1>\n")
+        file.write(str(df.sum(axis=0, numeric_only=True)).replace("\n","<br/>"))
+        file.write("<br/><br/>")
+        file.write("<h2>Last day stats</h2>\n")
+        file.write(str(df[df.Date > datetime.now() - pd.to_timedelta("1day")].sum(axis=0, numeric_only=True)).replace("\n","<br/>"))
+        file.write("<h2>Last week stats</h2>\n")
+        file.write(str(df[df.Date > datetime.now() - pd.to_timedelta("7day")].sum(axis=0, numeric_only=True)).replace("\n","<br/>"))
