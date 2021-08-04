@@ -31,13 +31,14 @@ class Tracer(trio.abc.Instrument):
     def __init__(self):
         self.exceptions = 0
         self.requests = 0
-        self.rate = round(self.exceptions / (self.requests + sys.float_info.epsilon), 2)
+        self.rate = 0
 
     def task_exited(self, task):
         if task.custom_sleep_data is not None:
             self.requests += 1
         if task.custom_sleep_data == 1:
             self.exceptions += 1
+        self.rate = round(self.exceptions / (self.requests + sys.float_info.epsilon), 2)
     
     def after_run(self):
         print(f"We had {self.exceptions} errors within {self.requests} requests or a percentage of {self.rate}")
@@ -195,7 +196,6 @@ async def request_image(datas, start_sampleid):
         url, alt_text, license = data
         # the following 2 lines are related to Trio Instrument to capture events from multiple threads
         task = trio.lowlevel.current_task()
-        task.custom_sleep_data = 0 # for success do not count errors
         try:
             proces = process_img_content(
                 # tune timeout and connection_timeout to grab more or less files. shorter timeouts will exclude bad performing websites
@@ -203,6 +203,7 @@ async def request_image(datas, start_sampleid):
             )
             if proces is not None:
                 tmp_data.append(proces)
+            task.custom_sleep_data = 0 # for success do not count errors
         except Exception:
             task.custom_sleep_data = 1 # when exception is hit, count it
         return
