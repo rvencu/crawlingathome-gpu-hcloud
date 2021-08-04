@@ -11,8 +11,8 @@ git clone "https://github.com/TheoCoombes/crawlingathome" crawlingathome_client
 pip3 install torch==1.9.0+cu111 torchvision==0.10.0+cu111 torchaudio==0.9.0 -f https://download.pytorch.org/whl/torch_stable.html
 pip3 install git+https://github.com/rvencu/asks
 pip3 install -r crawlingathome_client/requirements.txt --no-cache-dir
-pip3 install -r requirements.txt --no-cache-dir
-conda install tensorflow --no-cache-dir
+pip3 install -r gpu-requirements.txt --no-cache-dir
+pip install tensorflow==2.5 --no-cache-dir
 pip install clip-anytorch
 
 git clone "https://github.com/hetznercloud/hcloud-python" hcloud

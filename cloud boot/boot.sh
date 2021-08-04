@@ -1,6 +1,4 @@
 #!/bin/sh
-#change with your nickname below, also your public ssh key at the end of the script
-
 apt update
 yes | apt upgrade
 yes | apt install python3-pip git build-essential libssl-dev libffi-dev python3-dev libwebp-dev libjpeg-dev
@@ -75,12 +73,10 @@ echo "python3 -u /home/crawl/crawlingathome-gpu-hcloud/worker.py >> /home/crawl/
 echo "sleep 1" >> /home/crawl/crawl.sh
 echo "done" >> /home/crawl/crawl.sh
 chmod 744 /home/crawl/crawl.sh
-chown crawl:crawl -R /home/crawl/
-
-sudo -u crawl -i
 mkdir /home/crawl/.ssh
 echo 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQCc7pu7rHD7SYUh2LLiy5So0pHcSYMSGD8j+mvmgN0c3XX+YEzfHiv1jj5qqnv/VreOzsUSiMNkNenFsbR+6UV/ZSDX3L/df0iMD1SUhOUMh/AJDrA4OzmJUcs3mGeQc22FEBNw+fYii5DNeCtwvKi+ToFQ+uI9iibEldIKC7oOhcFO9lRfK4QZe2cEhIldSL3n/jfrEaRbvj5XmVvpXa0Z4c1yfuekJM0osSjAgfbFIoQ/T3Hn/spN0osaxhbxpdeoGRtbqpUWrtUIA0JBDdWBvNzkSMyHJNUbKA+rGJmaJyCeXIb7MKzbInmuh+pZ8BdZQLpWhq/LrjHxPa19lbDabl40l/0fLjs+u1G6F4sMY/ZtKXhCZGeT5quHnDeJH/a3gCmNJD/yvftlPTN3i+nyg3YxTvs846Ge4IkGI7fsq1KmLxEA9N2RwFOekjMqxXagnZasOscreUjNwlzQiXA/vOIXNpCTJ6cOT/EWHjg2eiGbaaScs+V4GNlJHSkVRSTfoB5RSY8qFUOE3urBjLm2yur9Y1ZG1DDNKsC7rCxFXgFl7F3JEeDN3PRso0Tlv2FGOoWEjjwSeGOmamYP+Wdj30PZemeYjqRDvehTP1xRHEHByxqpeYeCQPgoYWzD+VQNWnMUMw1ajgf23M2xf5fVwGiuG1C66X+z0diGyLFgLQ== rvencu@bigai' >> /home/crawl/.ssh/authorized_keys
-logout
+
+chown crawl:crawl -R /home/crawl/
 
 apt clean
 reboot

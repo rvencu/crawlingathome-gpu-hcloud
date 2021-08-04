@@ -1,6 +1,5 @@
 ftfy
 pandas
-pycld2
 regex
 tfr_image
 trio
