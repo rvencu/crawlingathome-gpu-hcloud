@@ -33,7 +33,8 @@ class Tracer(trio.abc.Instrument):
         self.requests = 0
 
     def task_exited(self, task):
-        self.requests += 1
+        if task.custom_sleep_data is not None:
+            self.requests += 1
         if task.custom_sleep_data == 1:
             self.exceptions += 1
     
