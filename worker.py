@@ -31,6 +31,7 @@ class Tracer(trio.abc.Instrument):
     def __init__(self):
         self.exceptions = 0
         self.requests = 0
+        self.rate = round(self.exceptions / (self.requests + sys.float_info.epsilon), 2)
 
     def task_exited(self, task):
         if task.custom_sleep_data is not None:
@@ -39,7 +40,7 @@ class Tracer(trio.abc.Instrument):
             self.exceptions += 1
     
     def after_run(self):
-        print(f"We had {self.exceptions} errors within {self.requests} requests or a percentage of {round(self.exceptions/self.requests, 2)}")
+        print(f"We had {self.exceptions} errors within {self.requests} requests or a percentage of {self.rate}")
 
 
 def remove_bad_chars(text):
