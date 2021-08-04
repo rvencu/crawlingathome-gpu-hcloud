@@ -205,7 +205,7 @@ async def request_image(datas, start_sampleid):
                 tmp_data.append(proces)
         except Exception:
             task.custom_sleep_data = 1 # when exception is hit, count it
-            return
+        return
 
     # this section launches many parallel requests
     async with trio.open_nursery() as n:
