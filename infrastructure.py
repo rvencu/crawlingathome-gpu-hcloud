@@ -88,17 +88,18 @@ async def down():
     with open(".env", "r") as auth:
         tokens = auth.readlines()
     for token in tokens:
-        try:
-            servers = await list_servers(token.rstrip())
-            hclient = Client(token=token.rstrip())
-            for server in servers:
-                server = hclient.servers.get_by_name(server.name)
-                if server is None:
-                    continue
-                server.delete()
-        except APIException as e:
-            print (f"[swarm] API Exception: " + str(e) + " ("+ token +")")
-            continue
+        if not token.startswith("#"):
+            try:
+                servers = await list_servers(token.rstrip())
+                hclient = Client(token=token.rstrip())
+                for server in servers:
+                    server = hclient.servers.get_by_name(server.name)
+                    if server is None:
+                        continue
+                    server.delete()
+            except APIException as e:
+                print (f"[swarm] API Exception: " + str(e) + " ("+ token +")")
+                continue
 
 async def down_server(workers, i):
     with open(".env", "r") as auth:
