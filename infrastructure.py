@@ -96,7 +96,7 @@ async def up(nodes, pref_loc, server_type="cx11"):
     print (f"[swarm] Cloud swarm intialized with {len(workers)} nodes. If this is less than expected please check your account limits")
     return workers
 
-async def down():
+async def down(cloud):
     with open(".env", "r") as auth:
         tokens = auth.readlines()
     for token in tokens:
@@ -274,7 +274,7 @@ if __name__ == "__main__":
             print(e)
             sys.exit()
     elif command == "down":
-        trio.run(down, args=[cloud])
+        trio.run(down, cloud)
         print (f"[swarm] Cloud swarm was shutdown")
     elif command == "reset":
         reset_workers(cloud)
