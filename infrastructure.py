@@ -1,3 +1,15 @@
+# usage:
+# starting swarm
+#   python3 infrastructure.py command cloud nodes datacenter
+#               where
+#                   1st arg can be up, down, reset
+#                   2nd arg can be hetzner, vultr, alibaba, hostwinds
+#                   3rd arg is optional, number of nodes, implicit 1
+#                   4th arg is optionsl, datacenter for hetzner (fsn1, )
+#                   
+#                   
+#                   
+
 import os 
 import sys
 import trio
@@ -196,9 +208,9 @@ def last_status(host,path):
     aclient.disconnect()
     return read.stdout
 
-def reset_workers():
+def reset_workers(cloud):
     workers = []
-    with open("workers.txt", "r") as f:
+    with open(f"{cloud}.txt", "r") as f:
         for line in f.readlines():
             workers.append(line.strip("\n"))
     pclient = ParallelSSHClient(workers, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False )
@@ -207,13 +219,14 @@ def reset_workers():
 
 if __name__ == "__main__":
     command = sys.argv[1]
+    cloud = sys.argv[2]
     location = ""
-    if len(sys.argv) > 2:
-        nodes = int(sys.argv[2])
+    if len(sys.argv) > 3:
+        nodes = int(sys.argv[3])
     else:
         nodes = 1
-    if len(sys.argv) > 3:
-        location = sys.argv[3]
+    if len(sys.argv) > 4:
+        location = sys.argv[4]
     
     if command == "up":
         try:
@@ -225,18 +238,32 @@ if __name__ == "__main__":
                 for char in escape:
                     sshkey = sshkey.replace(char,"\\"+char)
             #print(sshkey)
-            os.system("rm cloud-init")
-            os.system("cp 'cloud boot/cloud-init.yaml' cloud-init")
-            os.system(f"sed -i -e \"s/<<your_nickname>>/{os.getenv('CAH_NICKNAME')}/\" cloud-init")
-            os.system(f"sed -i -e \"s/<<your_ssh_public_key>>/{sshkey}/\" cloud-init")
+            if cloud in ["hetzner"]:
+                os.system("rm cloud-init")
+                os.system("cp 'cloud boot/cloud-init.yaml' cloud-init")
+                os.system(f"sed -i -e \"s/<<your_nickname>>/{os.getenv('CAH_NICKNAME')}/\" cloud-init")
+                os.system(f"sed -i -e \"s/<<your_ssh_public_key>>/{sshkey}/\" cloud-init")
+                os.system(f"sed -i -e \"s/<<deployment_cloud>>/{cloud}/\" cloud-init")
+            elif cloud in ["vultr"]:
+                # do some boot.sh API calls
+                os.system("rm boot")
+                os.system("cp 'cloud boot/boot.sh' boot")
+                os.system(f"sed -i -e \"s/<<your_nickname>>/{os.getenv('CAH_NICKNAME')}/\" boot")
+                os.system(f"sed -i -e \"s/<<your_ssh_public_key>>/{sshkey}/\" boot")
+                os.system(f"sed -i -e \"s/<<deployment_cloud>>/{cloud}/\" boot")
+                print ("Manual setup: please use `boot` file to manually initialize your cloud nodes.")
+                sys.exit()
+            else:
+                print ("not recognized cloud, abandoning")
+                sys.exit()
             # generate cloud workers
             workers = trio.run(up, nodes, location)
-            with open("workers.txt", "w") as f:
+            with open(f"{cloud}.txt", "w") as f:
                 for ip in workers:
                     f.write(ip + "\n")
             trio.run(wait_for_infrastructure, workers)
             print(
-                f"[swarm] {len(workers)} nodes cloud swarm is up and was initialized in {round(time.time() - start)}s")
+                f"[swarm] {len(workers)} nodes cloud swarm is up in {cloud} cloud and was initialized in {round(time.time() - start)}s")
         except KeyboardInterrupt:
             print(f"[swarm] Abort! Deleting cloud swarm...")
             trio.run(down)
@@ -247,8 +274,8 @@ if __name__ == "__main__":
             print(e)
             sys.exit()
     elif command == "down":
-        trio.run(down)
+        trio.run(down, args=[cloud])
         print (f"[swarm] Cloud swarm was shutdown")
     elif command == "reset":
-        reset_workers()
+        reset_workers(cloud)
         print(f"[swarm] All workers were reset")

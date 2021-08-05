@@ -261,9 +261,11 @@ def updateBloom(target):
     if os.path.exists("/home/crawl/crawlingathome-gpu-hcloud/blocklists/"):
         shutil.rmtree("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
     os.makedirs("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
-    os.system(f"rsync -av --partial --inplace --progress {target}/*.bin /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
-    #os.system(f'wget -m -np -c -U "Crawling@Home" --tries=15 -R "index.html*" "http://the-eye.eu/public/AI/cahblacklists/"')
-    #os.system("mv ./the-eye.eu/public/AI/cahblacklists/* /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
+    if (os.getenv("CLOUD") in ["hetzner","alibaba"]):
+        os.system(f"rsync -av --partial --inplace --progress {target}/*.bin /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
+    else:
+        os.system(f'wget -m -np -c -U "Crawling@Home" --tries=15 -R "index.html*" "http://the-eye.eu/public/AI/cahblacklists/"')
+        os.system("mv ./the-eye.eu/public/AI/cahblacklists/* /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
     print(f"Updated bloom filters in {round(time.time()-start, 2)} sec")
 
 class FileData:
