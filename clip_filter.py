@@ -20,7 +20,7 @@ class CLIPDataset(torch.utils.data.Dataset):
         row = self.dataframe.iloc[index]
         return (
             self.image_transform(Image.open(row["PATH"])),
-            self.tokenizer(row["TEXT"], truncate_text=True)[0],
+            self.tokenizer(row["TEXT"], truncate=True)[0],
         )
 
 class CLIP:
