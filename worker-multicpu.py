@@ -22,7 +22,7 @@ import crawlingathome_client as cah
 from bloom_filter2 import BloomFilter
 from urllib.parse import urljoin, urlparse
 sys.path.append('./crawlingathome-worker/')
-from multiprocessing import Process, cpu_count
+from multiprocessing import Process, cpu_count, JoinableQueue
 from PIL import Image, ImageFile, UnidentifiedImageError 
 
 import asks
@@ -35,7 +35,7 @@ def remove_bad_chars(text):
     return "".join(c for c in text if c.isprintable())
 
 
-def parse_wat(content, start, line_count, blocked, bloom, clipped):
+def parse_wat(content, start, line_count, blocked, bloom, clipped, want_update, bloom_processing):
     """
     This function checks the wat file content and attempts to extract valid candidates of image urls and alt texts
 
@@ -61,6 +61,13 @@ def parse_wat(content, start, line_count, blocked, bloom, clipped):
     clpd = 0
     valid_data = []
     content.seek(start)
+
+    #wait while bloom filters are updating
+    while want_update.qsize() > 0:
+        time.sleep(5)
+    #block updates for a little while
+    bloom_processing.put(1) # value does not matter
+
     for _ in range(line_count):
         line = content.readline()
         if "IMG@" not in line:
@@ -113,7 +120,9 @@ def parse_wat(content, start, line_count, blocked, bloom, clipped):
                 if concat in clipped: #duplicates:
                     clpd += 1
                     continue
-                valid_data.append((url, alt_text, license))
+                valid_data.append((url, alt_text, license))    
+    bloom_processing.get()
+    bloom_processing.task_done()
     return ([
         t for t in {tuple(i) for i in valid_data}
     ], deduped, clpd)  # use a dict in order to remove duplicate tuples from list
@@ -239,17 +248,28 @@ def upload(source: str, clientType: str, target: str):
         shutil.rmtree(f"/home/crawl/{source}", ignore_errors=True)
     return result
 
-def updateBloom(target):
-    start = time.time()
-    if os.path.exists("/home/crawl/crawlingathome-gpu-hcloud/blocklists/"):
-        shutil.rmtree("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
-    os.makedirs("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
-    if (os.getenv("CLOUD") in ["hetzner","alibaba"]):
-        os.system(f"rsync -av --partial --inplace --progress {target}/*.bin /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
-    else:
-        os.system(f'wget -m -np -c -U "Crawling@Home" --tries=15 -R "index.html*" "http://the-eye.eu/public/AI/cahblacklists/"')
-        os.system("mv ./the-eye.eu/public/AI/cahblacklists/* /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
-    print(f"Updated bloom filters in {round(time.time()-start, 2)} sec")
+def updateBloom(want_update: JoinableQueue, queues: JoinableQueue, target):
+    while True:
+        flag = 0
+        for queue in queues:
+            flag += queue.qsize()
+        if flag==0:
+            want_update.put(1) # the value does not matter
+            start = time.time()
+            if os.path.exists("/home/crawl/crawlingathome-gpu-hcloud/blocklists/"):
+                shutil.rmtree("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
+            os.makedirs("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
+            if (os.getenv("CLOUD") in ["hetzner","alibaba"]):
+                os.system(f"rsync -av --partial --inplace --progress {target}/*.bin /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
+            else:
+                os.system(f'wget -m -np -c -U "Crawling@Home" --tries=15 -R "index.html*" "http://the-eye.eu/public/AI/cahblacklists/"')
+                os.system("mv ./the-eye.eu/public/AI/cahblacklists/* /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
+            print(f"[multicpu bloom] Updated bloom filters in {round(time.time()-start, 2)} sec")
+            want_update.get()
+            want_update.task_done()
+            time.sleep(250)
+        else:
+            time.sleep(5)
 
 class FileData:
     """
@@ -272,7 +292,7 @@ class FileData:
     def __len__(self):
         return self._length
 
-def proc_worker(i: int, bloom, clipped, blocked, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVER_URL):
+def proc_worker(i: int, want_update: JoinableQueue, bloom_processing: JoinableQueue, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVER_URL):
     # initialize working folders
     output_folder = f"./save/{i}/"
     img_output_folder = output_folder + "images/"
@@ -284,7 +304,6 @@ def proc_worker(i: int, bloom, clipped, blocked, YOUR_NICKNAME_FOR_THE_LEADERBOA
 
     # initialize stats variables for previous job
     last = 0
-    loop = 0
     # this makes a loop to download new jobs while the script is running
     # normally it reads while client.jobCount() > 0
     while client.jobCount() > 0 and client.isAlive():
@@ -300,22 +319,20 @@ def proc_worker(i: int, bloom, clipped, blocked, YOUR_NICKNAME_FOR_THE_LEADERBOA
 
             os.makedirs(img_output_folder)
 
-            #randomize updates
-            n = 3
-            modulo = random.randint(0, n-1)
-            # get new job and download the wat file in parallel with bloom updates
-            if loop > 0 and loop % n == modulo:
-                t = Thread(target=updateBloom, args=["archiveteam@88.198.2.17::bloom"])
-                t.start()
-
             # get new job and download the wat file
             client.newJob()
             client.downloadShard(output_folder)
-
-            if loop > 0 and loop % n == modulo:
-                t.join()
             
-            loop += 1
+            #wait while bloom filters are updating
+            while want_update.qsize() > 0:
+                time.sleep(5)
+            #block updates for a little while
+            bloom_processing.put(1) # value does not matter
+            bloom = BloomFilter(max_elements=200000000, error_rate=0.05, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/bloom200M.bin",-1))
+            clipped = BloomFilter(max_elements=200000000, error_rate=0.05, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/clipped.bin",-1))
+            blocked = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/failed-domains.bin",-1))
+            bloom_processing.get()
+            bloom_processing.task_done()
 
             # retrieve job details and determine what part of the wat file to parse
             first_sample_id = int(client.start_id)
@@ -340,7 +357,7 @@ def proc_worker(i: int, bloom, clipped, blocked, YOUR_NICKNAME_FOR_THE_LEADERBOA
 
             # parse valid links from wat file
             with open(output_folder+"shard.wat", "r") as infile:
-                parsed_data, deduped, clpd = parse_wat(infile, start_index, lines, blocked, bloom, clipped)
+                parsed_data, deduped, clpd = parse_wat(infile, start_index, lines, blocked, bloom, clipped, want_update, bloom_processing)
             print (f"[multicpu {i}] parsed wat in {round(time.time()-start,2)}")
             os.remove(output_folder+"shard.wat")
             start = time.time()
@@ -395,17 +412,21 @@ if __name__ == "__main__":
 
     if not os.path.exists(".tmp"):
         os.mkdir(".tmp")
-
-    updateBloom("archiveteam@88.198.2.17::bloom")
-    bloom = BloomFilter(max_elements=200000000, error_rate=0.05, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/bloom200M.bin",-1))
-    clipped = BloomFilter(max_elements=200000000, error_rate=0.05, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/clipped.bin",-1))
-    blocked = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/failed-domains.bin",-1))
+    
+    #use a queue where bloom updating process announces its intention. if something is in queue, then updating, if removed from queue then free to process at all workers
+    want_update = JoinableQueue()
 
     workers = []
+    queues = []
     for i in range ( cpu_count()-1 ):
-        workers.append(Process(target=proc_worker, args= [i, bloom, clipped, blocked, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVER_URL], daemon=True))
+        #use this queue to annount that bloom is currently processing and please do not update filters. if queue is not empty please wait, if queue is empty you may update filters
+        bloom_processing = JoinableQueue()
+        queues.append(bloom_processing)
+        workers.append(Process(target=proc_worker, args= [i, want_update, bloom_processing, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVER_URL], daemon=True))
+
+    Process(target=updateBloom, args= [want_update, queues, "archiveteam@88.198.2.17::bloom"], daemon=True).start()
 
     for worker in workers:
         worker.start()
         time.sleep(10)
-    proc_worker(-1, bloom, clipped, blocked, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVER_URL)
+    proc_worker(-1, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVER_URL)
