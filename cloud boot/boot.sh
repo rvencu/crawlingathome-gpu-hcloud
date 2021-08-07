@@ -2,8 +2,8 @@
 apt update
 yes | apt upgrade
 yes | apt install python3-pip git build-essential libssl-dev libffi-dev python3-dev libwebp-dev libjpeg-dev
-echo 'CAH_NICKNAME="rvencu-vultr"' >> /etc/environment
-echo 'CLOUD="<<deployment_cloud>>"' >> /etc/environment
+echo 'CAH_NICKNAME="rvencu-multicpu"' >> /etc/environment
+echo 'CLOUD="alibaba"' >> /etc/environment
 
 fallocate -l 512M /swapfile
 chmod 600 /swapfile
@@ -52,8 +52,6 @@ cd crawlingathome-gpu-hcloud
 git clone "https://github.com/TheoCoombes/crawlingathome" crawlingathome_client
 pip3 install -r crawlingathome_client/requirements.txt --no-cache-dir
 pip3 install -r worker-requirements.txt --no-cache-dir
-yes | pip uninstall pillow
-CC="cc -mavx2" pip install -U --force-reinstall pillow-simd
 
 echo "[Unit]" >> /etc/systemd/system/crawl.service
 echo "After=network.service" >> /etc/systemd/system/crawl.service

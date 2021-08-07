@@ -272,7 +272,7 @@ class FileData:
     def __len__(self):
         return self._length
 
-def proc_worker(i: int, blocked, bloom, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVER_URL):
+def proc_worker(i: int, bloom, clipped, blocked, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVER_URL):
     # initialize working folders
     output_folder = f"./save/{i}/"
     img_output_folder = output_folder + "images/"
@@ -333,19 +333,15 @@ def proc_worker(i: int, blocked, bloom, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAW
 
             # compute output file names base
             out_fname = f"FIRST_SAMPLE_ID_IN_SHARD_{str(first_sample_id)}_LAST_SAMPLE_ID_IN_SHARD_{str(last_sample_id)}_{shard_of_chunk}"
-            print(f"[crawling@home {i}] shard {out_fname} acquired in {round(time.time()-start,2)} sec (including bloom updates)")
+            print(f"[multicpu {i}] shard {out_fname} acquired in {round(time.time()-start,2)} sec (including bloom updates)")
             start = time.time()
 
-            bloom = BloomFilter(max_elements=200000000, error_rate=0.05, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/bloom200M.bin",-1))
-            clipped = BloomFilter(max_elements=200000000, error_rate=0.05, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/clipped.bin",-1))
-            blocked = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/failed-domains.bin",-1))
-
-            print (f"sync filters in {round(time.time()-start,2)} sec")         
+            print (f"[multicpu {i}] sync filters in {round(time.time()-start,2)} sec")         
 
             # parse valid links from wat file
             with open(output_folder+"shard.wat", "r") as infile:
                 parsed_data, deduped, clpd = parse_wat(infile, start_index, lines, blocked, bloom, clipped)
-            print (f"parsed wat in {round(time.time()-start,2)}")
+            print (f"[multicpu {i}] parsed wat in {round(time.time()-start,2)}")
             os.remove(output_folder+"shard.wat")
             start = time.time()
 
@@ -357,12 +353,11 @@ def proc_worker(i: int, blocked, bloom, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAW
             random.shuffle(parsed_data) 
             
             lastlinks = len(parsed_data)
-            print (f"this job has {lastlinks} links and deduped {deduped} links in {round(time.time()-start,2)}")
+            print (f"[multicpu {i}] this job has {lastlinks} links and deduped {deduped} links in {round(time.time()-start,2)}")
             start = time.time()
 
             lastlinks = len(parsed_data)
-            print (f"this job has {lastlinks} links left; deduped {deduped} and already clipped {clpd}")
-          
+            print (f"[multicpu {i}] this job has {lastlinks} links left; deduped {deduped} and already clipped {clpd}")
             
             # attempt to download validated links and save to disk for stats and blocking lists
             dlparse_df = dl_wat( parsed_data, first_sample_id, img_output_folder)
@@ -371,9 +366,9 @@ def proc_worker(i: int, blocked, bloom, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAW
             dlparse_df = dl_wat( parsed_data, first_sample_id)
             dlparse_df.to_csv(output_folder + out_fname + ".csv", index=False, sep="|")
             dlparse_df.to_csv(output_folder + out_fname + "_unfiltered.csv", index=False, sep="|")
-            print (f"downloaded {len(dlparse_df)} in {round(time.time() - start, 2)}")
-            print (f"download efficiency {len(dlparse_df)/(time.time() - start)} img/sec")
-            print (f"crawl efficiency {lastlinks/(time.time() - start)} links/sec")
+            print (f"[multicpu {i}] downloaded {len(dlparse_df)} in {round(time.time() - start, 2)}")
+            print (f"[multicpu {i}] download efficiency {len(dlparse_df)/(time.time() - start)} img/sec")
+            print (f"[multicpu {i}] crawl efficiency {lastlinks/(time.time() - start)} links/sec")
 
             # at this point we finishes the CPU node job, need to make the data available for GPU worker
             prefix = uuid.uuid4().hex
@@ -386,11 +381,11 @@ def proc_worker(i: int, blocked, bloom, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAW
 
             last = round(time.time() - start0)
 
-            print(f"{i} job completed in {last} seconds")
+            print(f"[multicpu {i}] job completed in {last} seconds")
            
         except Exception as e:
             print (e)
-            print ("Worker crashed")
+            print ("[multicpu {i}] Worker crashed")
             time.sleep(60)
 
 if __name__ == "__main__":
@@ -406,21 +401,16 @@ if __name__ == "__main__":
     if not os.path.exists(".tmp"):
         os.mkdir(".tmp")
 
-    blocked = set()
-    with open("crawlingathome-gpu-hcloud/blocklists/blocklist-domain.txt","r") as f:
-        blocked = set(f.read().splitlines())
-    failed = set()
-    with open("crawlingathome-gpu-hcloud/blocklists/failed-domains.txt","r") as f:
-        failed = set(f.read().splitlines())
-    blocked |= failed # merge the 2 sets and use this to reduce the number of attempted links, reduce crawling time.
-
-    bloom = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("crawlingathome-gpu-hcloud/blocklists/bloom.bin",-1))
+    updateBloom("archiveteam@88.198.2.17::bloom")
+    bloom = BloomFilter(max_elements=200000000, error_rate=0.05, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/bloom200M.bin",-1))
+    clipped = BloomFilter(max_elements=200000000, error_rate=0.05, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/clipped.bin",-1))
+    blocked = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/failed-domains.bin",-1))
 
     workers = []
-    for i in range (2 * cpu_count() - 1):
-        workers.append(Process(target=proc_worker, args= [i, blocked, bloom, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVER_URL], daemon=True))
+    for i in range ( cpu_count()-1 ):
+        workers.append(Process(target=proc_worker, args= [i, bloom, clipped, blocked, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVER_URL], daemon=True))
 
     for worker in workers:
         worker.start()
         time.sleep(10)
-    proc_worker(10, blocked, bloom, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVER_URL)
+    proc_worker(-1, bloom, clipped, blocked, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVER_URL)
