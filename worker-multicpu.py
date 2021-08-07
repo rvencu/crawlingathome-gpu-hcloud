@@ -35,7 +35,7 @@ def remove_bad_chars(text):
     return "".join(c for c in text if c.isprintable())
 
 
-def parse_wat(content, start, line_count, blocked, bloom, clipped, want_update, bloom_processing):
+def parse_wat(content, start, line_count, blocked, bloom, clipped, want_update, bloom_processing, i):
     """
     This function checks the wat file content and attempts to extract valid candidates of image urls and alt texts
 
@@ -66,6 +66,7 @@ def parse_wat(content, start, line_count, blocked, bloom, clipped, want_update, 
     while want_update.qsize() > 0:
         time.sleep(5)
     #block updates for a little while
+    print(f"[multicpu {i}] I want to parse wat with bloom filters")
     bloom_processing.put(1) # value does not matter
 
     for _ in range(line_count):
@@ -251,25 +252,30 @@ def upload(source: str, clientType: str, target: str):
 def updateBloom(want_update: JoinableQueue, queues: JoinableQueue, target):
     while True:
         flag = 0
-        for queue in queues:
-            flag += queue.qsize()
-        if flag==0:
-            want_update.put(1) # the value does not matter
-            start = time.time()
-            if os.path.exists("/home/crawl/crawlingathome-gpu-hcloud/blocklists/"):
-                shutil.rmtree("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
-            os.makedirs("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
-            if (os.getenv("CLOUD") in ["hetzner","alibaba"]):
-                os.system(f"rsync -av --partial --inplace --progress {target}/*.bin /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
+        print(f"[multicpu bloom] I want to update bloom filters")
+        want_update.put(1) # the value does not matter
+
+        while True:
+            for queue in queues:
+                flag += queue.qsize()
+            if flag==0:
+                start = time.time()
+                if os.path.exists("/home/crawl/crawlingathome-gpu-hcloud/blocklists/"):
+                    shutil.rmtree("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
+                os.makedirs("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
+                if (os.getenv("CLOUD") in ["hetzner","alibaba"]):
+                    os.system(f"rsync -av --partial --inplace --progress {target}/*.bin /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
+                else:
+                    os.system(f'wget -m -np -c -U "Crawling@Home" --tries=15 -R "index.html*" "http://the-eye.eu/public/AI/cahblacklists/"')
+                    os.system("mv ./the-eye.eu/public/AI/cahblacklists/* /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
+                print(f"[multicpu bloom] Updated bloom filters in {round(time.time()-start, 2)} sec")
+                want_update.get()
+                want_update.task_done()
+                break
             else:
-                os.system(f'wget -m -np -c -U "Crawling@Home" --tries=15 -R "index.html*" "http://the-eye.eu/public/AI/cahblacklists/"')
-                os.system("mv ./the-eye.eu/public/AI/cahblacklists/* /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
-            print(f"[multicpu bloom] Updated bloom filters in {round(time.time()-start, 2)} sec")
-            want_update.get()
-            want_update.task_done()
-            time.sleep(250)
-        else:
-            time.sleep(5)
+                time.sleep(10)
+
+        time.sleep(300)
 
 class FileData:
     """
@@ -327,6 +333,7 @@ def proc_worker(i: int, want_update: JoinableQueue, bloom_processing: JoinableQu
             while want_update.qsize() > 0:
                 time.sleep(5)
             #block updates for a little while
+            print(f"[multicpu {i}] I want to define filter objects")
             bloom_processing.put(1) # value does not matter
             bloom = BloomFilter(max_elements=200000000, error_rate=0.05, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/bloom200M.bin",-1))
             clipped = BloomFilter(max_elements=200000000, error_rate=0.05, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/clipped.bin",-1))
@@ -357,9 +364,13 @@ def proc_worker(i: int, want_update: JoinableQueue, bloom_processing: JoinableQu
 
             # parse valid links from wat file
             with open(output_folder+"shard.wat", "r") as infile:
-                parsed_data, deduped, clpd = parse_wat(infile, start_index, lines, blocked, bloom, clipped, want_update, bloom_processing)
+                parsed_data, deduped, clpd = parse_wat(infile, start_index, lines, blocked, bloom, clipped, want_update, bloom_processing, i)
             print (f"[multicpu {i}] parsed wat in {round(time.time()-start,2)}")
             os.remove(output_folder+"shard.wat")
+            bloom = None
+            clipped = None
+            blocked = None
+
             start = time.time()
 
             # convert to dataframe and save to disk (for statistics and generating blocking lists)
@@ -429,4 +440,7 @@ if __name__ == "__main__":
     for worker in workers:
         worker.start()
         time.sleep(10)
-    proc_worker(-1, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVER_URL)
+    
+    while True:
+        #keep main process alive
+        time.sleep(60)
