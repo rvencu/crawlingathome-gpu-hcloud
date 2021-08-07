@@ -18,6 +18,7 @@ packages:
  - python3-dev
  - libwebp-dev
  - libjpeg-dev
+ - libwebp-dev
 write_files:
 - path: /etc/environment
   content: |

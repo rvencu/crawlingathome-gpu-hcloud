@@ -1,7 +1,7 @@
 #!/bin/sh
 apt update
 yes | apt upgrade
-yes | apt install python3-pip git build-essential libssl-dev libffi-dev python3-dev libwebp-dev libjpeg-dev
+yes | apt install python3-pip git build-essential libssl-dev libffi-dev python3-dev libwebp-dev libjpeg-dev libwebp-dev
 echo 'CAH_NICKNAME="rvencu-multicpu"' >> /etc/environment
 echo 'CLOUD="alibaba"' >> /etc/environment
 
