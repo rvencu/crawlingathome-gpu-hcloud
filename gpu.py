@@ -151,7 +151,8 @@ def upload_worker(uploadqueue: JoinableQueue, counter: JoinableQueue, outgoingqu
             time.sleep(10)
 
 def updateBloom():
-    shutil.rmtree("blocklists/")
+    if os.path.exists("blocklists/"):
+        shutil.rmtree("blocklists/")
     os.makedirs("blocklists/")
     #os.system("rsync -zh archiveteam@88.198.2.17::bloom/*.bin blocklists")
     os.system("rsync -av --partial --inplace --progress archiveteam@88.198.2.17::bloom/*.bin blocklists")
@@ -189,7 +190,7 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             for i, job, item in shards:
                 dlparse_df = pd.read_csv(job + "/" + item + ".csv", sep="|")
                 
-                dlparse_df["PATH"] = dlparse_df.PATH.apply(lambda x: re.sub(r"^./save/\d{1,2}/(.*)$", r"save/\1", x))
+                dlparse_df["PATH"] = dlparse_df.PATH.apply(lambda x: re.sub(r"^(.*)./save/[-]?[1-9][0-9]?[0-9]?/(.*)$", r"save/\2", x))
                 dlparse_df["PATH"] = dlparse_df.apply(lambda x: "./" + job + "/" + x["PATH"].strip("save/"), axis=1)
                 if group_parse is None:
                     group_parse = dlparse_df
