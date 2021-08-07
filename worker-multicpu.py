@@ -351,19 +351,14 @@ def proc_worker(i: int, bloom, clipped, blocked, YOUR_NICKNAME_FOR_THE_LEADERBOA
 
             # attempt to spread out clusters of links pointing to the same domain name, improves crawling
             random.shuffle(parsed_data) 
-            
-            lastlinks = len(parsed_data)
-            print (f"[multicpu {i}] this job has {lastlinks} links and deduped {deduped} links in {round(time.time()-start,2)}")
-            start = time.time()
-
+        
             lastlinks = len(parsed_data)
             print (f"[multicpu {i}] this job has {lastlinks} links left; deduped {deduped} and already clipped {clpd}")
-            
+        
+            start = time.time()            
             # attempt to download validated links and save to disk for stats and blocking lists
             dlparse_df = dl_wat( parsed_data, first_sample_id, img_output_folder)
             dlparse_df["PATH"] = dlparse_df.PATH.apply(lambda x: re.sub(r"^./save/\d{1,2}/(.*)$", r"save/\1", x))
-
-            dlparse_df = dl_wat( parsed_data, first_sample_id)
             dlparse_df.to_csv(output_folder + out_fname + ".csv", index=False, sep="|")
             dlparse_df.to_csv(output_folder + out_fname + "_unfiltered.csv", index=False, sep="|")
             print (f"[multicpu {i}] downloaded {len(dlparse_df)} in {round(time.time() - start, 2)}")
