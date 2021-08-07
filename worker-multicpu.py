@@ -5,17 +5,19 @@ import sys
 import time
 import trio
 import uuid
+import ftfy
 import ujson
 import shutil
 import random
 import hashlib
-import ftfy
+import tarfile
 import pycld2 as cld2
 import pandas as pd
 from glob import glob
 from uuid import uuid1
 from io import BytesIO
 from requests import get
+from threading import Thread
 import crawlingathome_client as cah
 from bloom_filter2 import BloomFilter
 from urllib.parse import urljoin, urlparse
@@ -33,7 +35,7 @@ def remove_bad_chars(text):
     return "".join(c for c in text if c.isprintable())
 
 
-def parse_wat(content, start, line_count, blocked, bloom):
+def parse_wat(content, start, line_count, blocked, bloom, clipped):
     """
     This function checks the wat file content and attempts to extract valid candidates of image urls and alt texts
 
@@ -44,7 +46,8 @@ def parse_wat(content, start, line_count, blocked, bloom):
     output: a list of tuples (url, text, license)
     """
 
-    
+    import ftfy
+    import pycld2 as cld2
 
     # blocklist-domains.txt contains a list of domains to block based on previous results of CLIP filtering.
     # the domains are not likely to pass CLIP for either bad captions or the content is almost always NSFW
@@ -55,6 +58,7 @@ def parse_wat(content, start, line_count, blocked, bloom):
     
 
     deduped = 0
+    clpd = 0
     valid_data = []
     content.seek(start)
     for _ in range(line_count):
@@ -106,10 +110,14 @@ def parse_wat(content, start, line_count, blocked, bloom):
                 if concat in bloom: #duplicates:
                     deduped += 1
                     continue
+                if concat in clipped: #duplicates:
+                    clpd += 1
+                    continue
                 valid_data.append((url, alt_text, license))
     return ([
         t for t in {tuple(i) for i in valid_data}
-    ], deduped)  # use a dict in order to remove duplicate tuples from list
+    ], deduped, clpd)  # use a dict in order to remove duplicate tuples from list
+
 
 
 def process_img_content(response, alt_text, license, sample_id, img_output_folder):
@@ -221,10 +229,27 @@ def dl_wat(valid_data, first_sample_id, img_output_folder):
     )
 
 def upload(source: str, clientType: str, target: str):
+    with tarfile.open(f"{source}.tar.gz", "w:gz") as tar:
+        tar.add(source, arcname=os.path.basename(source))
     print(f"client type is {clientType}")
-    #target = "gpujobs" if clientType == "CPU" else "CAH"
-    options = "-rzh" if clientType == "CPU" else "-zh"
-    return os.system(f"rsync {options} {source} {target}")
+    result = os.system(f"rsync -av {source}.tar.gz {target}")
+    if os.path.exists(f"/home/crawl/{source}.tar.gz"):
+        os.remove(f"/home/crawl/{source}.tar.gz")
+    if os.path.exists(f"/home/crawl/{source}"):
+        shutil.rmtree(f"/home/crawl/{source}", ignore_errors=True)
+    return result
+
+def updateBloom(target):
+    start = time.time()
+    if os.path.exists("/home/crawl/crawlingathome-gpu-hcloud/blocklists/"):
+        shutil.rmtree("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
+    os.makedirs("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
+    if (os.getenv("CLOUD") in ["hetzner","alibaba"]):
+        os.system(f"rsync -av --partial --inplace --progress {target}/*.bin /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
+    else:
+        os.system(f'wget -m -np -c -U "Crawling@Home" --tries=15 -R "index.html*" "http://the-eye.eu/public/AI/cahblacklists/"')
+        os.system("mv ./the-eye.eu/public/AI/cahblacklists/* /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
+    print(f"Updated bloom filters in {round(time.time()-start, 2)} sec")
 
 class FileData:
     """
@@ -259,7 +284,7 @@ def proc_worker(i: int, blocked, bloom, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAW
 
     # initialize stats variables for previous job
     last = 0
-
+    loop = 0
     # this makes a loop to download new jobs while the script is running
     # normally it reads while client.jobCount() > 0
     while client.jobCount() > 0 and client.isAlive():
@@ -275,9 +300,22 @@ def proc_worker(i: int, blocked, bloom, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAW
 
             os.makedirs(img_output_folder)
 
+            #randomize updates
+            n = 3
+            modulo = random.randint(0, n-1)
+            # get new job and download the wat file in parallel with bloom updates
+            if loop > 0 and loop % n == modulo:
+                t = Thread(target=updateBloom, args=["archiveteam@88.198.2.17::bloom"])
+                t.start()
+
             # get new job and download the wat file
             client.newJob()
             client.downloadShard(output_folder)
+
+            if loop > 0 and loop % n == modulo:
+                t.join()
+            
+            loop += 1
 
             # retrieve job details and determine what part of the wat file to parse
             first_sample_id = int(client.start_id)
@@ -295,15 +333,18 @@ def proc_worker(i: int, blocked, bloom, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAW
 
             # compute output file names base
             out_fname = f"FIRST_SAMPLE_ID_IN_SHARD_{str(first_sample_id)}_LAST_SAMPLE_ID_IN_SHARD_{str(last_sample_id)}_{shard_of_chunk}"
-            print(time.time()-start)
+            print(f"[crawling@home {i}] shard {out_fname} acquired in {round(time.time()-start,2)} sec (including bloom updates)")
             start = time.time()
-            print (f"[crawling@home {i}] shard id {out_fname}") # in case test fails, we need to remove bad data
 
-            client.log("Processing shard" + lastext)
+            bloom = BloomFilter(max_elements=200000000, error_rate=0.05, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/bloom200M.bin",-1))
+            clipped = BloomFilter(max_elements=200000000, error_rate=0.05, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/clipped.bin",-1))
+            blocked = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/failed-domains.bin",-1))
+
+            print (f"sync filters in {round(time.time()-start,2)} sec")         
 
             # parse valid links from wat file
             with open(output_folder+"shard.wat", "r") as infile:
-                parsed_data, deduped = parse_wat(infile, start_index, lines, blocked, bloom)
+                parsed_data, deduped, clpd = parse_wat(infile, start_index, lines, blocked, bloom, clipped)
             print (f"parsed wat in {round(time.time()-start,2)}")
             os.remove(output_folder+"shard.wat")
             start = time.time()
@@ -319,29 +360,30 @@ def proc_worker(i: int, blocked, bloom, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAW
             print (f"this job has {lastlinks} links and deduped {deduped} links in {round(time.time()-start,2)}")
             start = time.time()
 
-            client.log("Downloading images" + lastext)
+            lastlinks = len(parsed_data)
+            print (f"this job has {lastlinks} links left; deduped {deduped} and already clipped {clpd}")
+          
             
             # attempt to download validated links and save to disk for stats and blocking lists
             dlparse_df = dl_wat( parsed_data, first_sample_id, img_output_folder)
             dlparse_df["PATH"] = dlparse_df.PATH.apply(lambda x: re.sub(r"^./save/\d{1,2}/(.*)$", r"save/\1", x))
 
-            dlparse_df.to_csv(output_folder+out_fname + ".csv", index=False, sep="|")
-            dlparse_df.to_csv(output_folder+out_fname + "_unfiltered.csv", index=False, sep="|")
-            print (f"{i} downloaded {len(dlparse_df)} in {round(time.time() - start, 2)}")
-            print (f"{i} download efficiency {len(dlparse_df)/(time.time() - start)} img/sec")
-            print (f"{i} crawl efficiency {lastlinks/(time.time() - start)} links/sec")
+            dlparse_df = dl_wat( parsed_data, first_sample_id)
+            dlparse_df.to_csv(output_folder + out_fname + ".csv", index=False, sep="|")
+            dlparse_df.to_csv(output_folder + out_fname + "_unfiltered.csv", index=False, sep="|")
+            print (f"downloaded {len(dlparse_df)} in {round(time.time() - start, 2)}")
+            print (f"download efficiency {len(dlparse_df)/(time.time() - start)} img/sec")
+            print (f"crawl efficiency {lastlinks/(time.time() - start)} links/sec")
 
             # at this point we finishes the CPU node job, need to make the data available for GPU worker
             prefix = uuid.uuid4().hex
             os.mkdir(f"{prefix}")
             os.system(f"mv {output_folder}/* {prefix}/")
             
-            result = upload(f"{prefix}", client.type, f"archiveteam@88.198.2.17::gpujobs")
+            result = upload(prefix, client.type, client.upload_address)
             if result == 0:
                 client.completeJob(f"rsync {prefix}")
 
-            shutil.rmtree(f"{prefix}")
-                        
             last = round(time.time() - start0)
 
             print(f"{i} job completed in {last} seconds")
@@ -349,7 +391,7 @@ def proc_worker(i: int, blocked, bloom, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAW
         except Exception as e:
             print (e)
             print ("Worker crashed")
-            time.sleep(30)
+            time.sleep(60)
 
 if __name__ == "__main__":
 
