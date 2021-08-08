@@ -415,9 +415,9 @@ if __name__ == "__main__":
 
     print (f"starting session under `{YOUR_NICKNAME_FOR_THE_LEADERBOARD}` nickname")
 
-    procs = cpu_count - 2
+    procs = cpu_count() - 2
     if len(sys.argv) > 1:
-        procs = min(int(sys.argv[1]), cpu_count -2)
+        procs = min(int(sys.argv[1]), cpu_count() -2)
     
 
     if not os.path.exists(".tmp"):
