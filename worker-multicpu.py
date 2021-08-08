@@ -11,13 +11,10 @@ import shutil
 import random
 import hashlib
 import tarfile
-import pycld2 as cld2
 import pandas as pd
-from glob import glob
+import pycld2 as cld2
 from uuid import uuid1
 from io import BytesIO
-from requests import get
-from threading import Thread
 import crawlingathome_client as cah
 from bloom_filter2 import BloomFilter
 from urllib.parse import urljoin, urlparse
@@ -45,9 +42,6 @@ def parse_wat(content, start, line_count, blocked, bloom, clipped, want_update, 
     
     output: a list of tuples (url, text, license)
     """
-
-    import ftfy
-    import pycld2 as cld2
 
     # blocklist-domains.txt contains a list of domains to block based on previous results of CLIP filtering.
     # the domains are not likely to pass CLIP for either bad captions or the content is almost always NSFW

@@ -324,6 +324,8 @@ if __name__ == "__main__":
         YOUR_NICKNAME_FOR_THE_LEADERBOARD = "anonymous"
     CRAWLINGATHOME_SERVER_URL = "http://cah.io.community/"
 
+    time.sleep(20)
+
     print(
         f"[GPU] starting session under `{YOUR_NICKNAME_FOR_THE_LEADERBOARD}` nickname")
 
