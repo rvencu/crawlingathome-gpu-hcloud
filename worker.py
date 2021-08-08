@@ -214,8 +214,8 @@ async def request_image(datas, start_sampleid):
                 await session.get(url, timeout=5, connection_timeout=15), alt_text, license, sample_id
             )
             if proces is not None:
-                tmp_data.append(proces)
-            task.custom_sleep_data = (0, proces[7], time.time()-start) # for success do not count errors
+                task.custom_sleep_data = (0, proces[7], time.time()-start) # for success do not count errors
+                tmp_data.append(proces[0:6])
         except Exception:
             task.custom_sleep_data = (1, 0, time.time()-start) # when exception is hit, count it
         return
