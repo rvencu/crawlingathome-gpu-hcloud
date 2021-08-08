@@ -7,8 +7,12 @@
 #                   3rd arg is optional, number of nodes, implicit 1
 #                   4th arg is optionsl, datacenter for hetzner (fsn1, )
 #                   
-#                   
-#                   
+#  the .env file format with single space delimiter
+#  lx2evY5dL2uScjjp...Hjsobzcxvbm5Ng9gb27gulMC...CsobCmqOKlCmwzn6Qi rvencu     -1    rv
+#                        API token                                  nickname  nodes real_name
+# where nodes = -1 means we can spin up to the very server limit
+#       nodes = 0 - do not use this key
+#       nodes > 0 - spin up only to the minimum between this number and server limit
 
 import os 
 import sys
@@ -45,23 +49,27 @@ async def up(nodes, pref_loc, server_type="cx11"):
     script = ""
     nodes = int(nodes)
     with open(".env", "r") as auth:
-        tokens = auth.readlines()
+        tokens = auth.readlines().split(" ")
     with open("cloud-init", "r") as user_data:
         script = user_data.read()
     for token in tokens:
+        number = nodes
+        if int(token[2])>0:
+            number = min(nodes, int(token[2]))
+        init = script.replace("<<your_nickname>>", token[1])
         print(f"[swarm] nodes to spin up: {nodes}")
-        if (nodes > 0 and not token.startswith("#")):
+        if (number > 0 and int(token[2])!=0):
             try:
-                hclient = Client(token=token.rstrip())
+                hclient = Client(token=token[0])
                 if pref_loc == None:
                     print ("[swarm] no specific location provided")
                     locations = hclient.locations.get_all()
                     loc = cycle(locations)
-                    zip = [[i, next(loc)] for i in range(nodes)]
+                    zip = [[i, next(loc)] for i in range(number)]
                 else:
                     print (f"[swarm] using {pref_loc} location")
                     location = hclient.locations.get_by_name(pref_loc)
-                    zip = [[i, location] for i in range(nodes)]
+                    zip = [[i, location] for i in range(number)]
                 for i, loc in zip:
                     try:
                         response = hclient.servers.create(
@@ -72,25 +80,25 @@ async def up(nodes, pref_loc, server_type="cx11"):
                             None, #volumes
                             None, #firewalls
                             None, #networks
-                            script,
+                            init,
                             None, #labels
                             loc, #location - todo: create servers in all locations
                             None, #datacenter
                         )
                         srv = response.server
-                        workers.append(srv.public_net.ipv4.ip)
+                        workers.append((srv.public_net.ipv4.ip, token[1])) # tuple IP and nickname
                         nodes = nodes - 1
                     except APIException as e:
-                        print (f"[swarm] API Exception: " + str(e) + " ("+ token +")")
+                        print (f"[swarm] API Exception: " + str(e) + " ("+ token[0] + " " + token[1] + ")")
                         break
                     except Exception as e:
                         print(e)
                         break
             except APIException as e:
-                print (f"[swarm] API Exception: " + str(e) + " ("+ token +")")
+                print (f"[swarm] API Exception: " + str(e) + " ("+ token[0] + " " + token[1] + ")")
                 continue
             except Exception as e:
-                print(e)
+                print (f"[swarm] API Exception: " + str(e) + " ("+ token[0] + " " + token[1] + ")")
                 continue
             
     print (f"[swarm] Cloud swarm intialized with {len(workers)} nodes. If this is less than expected please check your account limits")
@@ -98,36 +106,26 @@ async def up(nodes, pref_loc, server_type="cx11"):
 
 async def down(cloud):
     with open(".env", "r") as auth:
-        tokens = auth.readlines()
+        tokens = auth.readlines().split(" ")
     for token in tokens:
-        if not token.startswith("#"):
+        if int(token[2]) != 0:
             try:
-                servers = await list_servers(token.rstrip())
-                hclient = Client(token=token.rstrip())
+                servers = await list_servers(token[0])
+                hclient = Client(token=token[0])
                 for server in servers:
                     server = hclient.servers.get_by_name(server.name)
                     if server is None:
                         continue
                     server.delete()
             except APIException as e:
-                print (f"[swarm] API Exception: " + str(e) + " ("+ token +")")
+                print (f"[swarm] API Exception: " + str(e) + " ("+ token[0] + " " + token[1] + ")")
                 continue
-
-async def down_server(workers, i):
-    with open(".env", "r") as auth:
-        tokens = auth.readlines()
-    for token in tokens:
-        hclient = Client(token=token.rstrip())
-        server = hclient.servers.get_by_name("cah-worker-"+str(i))
-        if server is None:
-            continue
-        server.delete()
 
 async def respawn(workers, ip, server_type="cx11"):
     with open(".env", "r") as auth:
-        tokens = auth.readlines()
+        tokens = auth.readlines().split(" ")
     for token in tokens:
-        hclient = Client(token=token.rstrip())
+        hclient = Client(token=token[0])
         index = workers.index(ip)
         server = hclient.servers.get_by_name(f"cah-worker-{index}")
         if server is None:
@@ -142,7 +140,7 @@ async def respawn(workers, ip, server_type="cx11"):
             # if impossible to restart the service then delete the worker and try to re-create it
             server.delete()
             with open("cloud-init", "r") as user_data:
-                script = user_data.read()
+                script = user_data.read().
                 try:
                     response = hclient.servers.create(
                         "cah-worker-"+index,
@@ -187,7 +185,7 @@ async def wait_for_infrastructure (workers):
     print(f"[swarm] Waiting for {len(workers)} nodes to become ready. Polling starts after 4 minutes...")
     time.sleep(240)
     ready = []
-    pclient = ParallelSSHClient(workers, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False )
+    pclient = ParallelSSHClient(workers[0], user='crawl', pkey="~/.ssh/id_cah", identity_auth=False )
     while len(ready) < len(workers):
         print(".", end = "", flush=True)
         ready = []
@@ -202,7 +200,7 @@ async def wait_for_infrastructure (workers):
         #print(len(ready))
         time.sleep(10)
 
-def last_status(host,path):
+def last_status(ip, path):
     aclient = SSHClient(ip, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False)
     read = aclient.run_command("tail -1 {}".format(pipes.quote(path)))
     aclient.disconnect()
@@ -212,8 +210,8 @@ def reset_workers(cloud):
     workers = []
     with open(f"{cloud}.txt", "r") as f:
         for line in f.readlines():
-            workers.append(line.strip("\n"))
-    pclient = ParallelSSHClient(workers, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False )
+            workers.append(line.split(" "))
+    pclient = ParallelSSHClient(workers[0], user='crawl', pkey="~/.ssh/id_cah", identity_auth=False )
     output = pclient.run_command('source worker-reset.sh', sudo=True)
     pclient.join(output)
 
@@ -241,7 +239,6 @@ if __name__ == "__main__":
             if cloud in ["hetzner"]:
                 os.system("rm cloud-init")
                 os.system("cp 'cloud boot/cloud-init.yaml' cloud-init")
-                os.system(f"sed -i -e \"s/<<your_nickname>>/{os.getenv('CAH_NICKNAME')}/\" cloud-init")
                 os.system(f"sed -i -e \"s/<<your_ssh_public_key>>/{sshkey}/\" cloud-init")
                 os.system(f"sed -i -e \"s/<<deployment_cloud>>/{cloud}/\" cloud-init")
             elif cloud in ["vultr"]:
@@ -259,8 +256,8 @@ if __name__ == "__main__":
             # generate cloud workers
             workers = trio.run(up, nodes, location)
             with open(f"{cloud}.txt", "w") as f:
-                for ip in workers:
-                    f.write(ip + "\n")
+                for ip, nickname in workers:
+                    f.write(ip + " " + nickname + "\n")
             trio.run(wait_for_infrastructure, workers)
             print(
                 f"[swarm] {len(workers)} nodes cloud swarm is up in {cloud} cloud and was initialized in {round(time.time() - start)}s")

@@ -32,16 +32,23 @@ class Tracer(trio.abc.Instrument):
         self.exceptions = 0
         self.requests = 0
         self.rate = 0
+        self.imgproc_duration = 0
+        self.succes_duration = 0
+        self.error_duration = 0
 
     def task_exited(self, task):
-        if task.custom_sleep_data in [0, 1] :
+        if task.custom_sleep_data[0] in [0, 1] :
             self.requests += 1
-        if task.custom_sleep_data == 1:
+        if task.custom_sleep_data[0] == 1:
             self.exceptions += 1
+            self.error_duration += task.custom_sleep_data[2]
+        if task.custom_sleep_data[0] == 0:
+            self.succes_duration += task.custom_sleep_data[2]
         self.rate = round(self.exceptions / (self.requests + sys.float_info.epsilon), 2)
+        self.imgproc_duration += task.custom_sleep_data[1]
     
     def after_run(self):
-        print(f"We had {self.exceptions} errors within {self.requests} requests or a percentage of {self.rate}")
+        print(f"We had {self.exceptions} errors within {self.requests} requests or a percentage of {self.rate}. Time was split into: total image processing duration {self.imgproc_duration}. Total succeded requests duration {self.succes_duration}. Total failed requests duration {self.error_duration}")
 
 
 def remove_bad_chars(text):
@@ -142,6 +149,7 @@ def process_img_content(response, alt_text, license, sample_id):
 
     output: list of image parameters or None if image is rejected
     """
+    start = time.time()
 
     img_output_folder = "save/images/"
     try:
@@ -166,7 +174,7 @@ def process_img_content(response, alt_text, license, sample_id):
     except (KeyError, UnidentifiedImageError):
         return
 
-    return [str(sample_id), out_fname, response.url, alt_text, width, height, license]
+    return [str(sample_id), out_fname, response.url, alt_text, width, height, license, time.time()-start]
 
 
 async def request_image(datas, start_sampleid):
@@ -193,6 +201,9 @@ async def request_image(datas, start_sampleid):
     }
 
     async def _request(data, sample_id):
+
+        start=time.time()
+
         url, alt_text, license = data
         # the following 2 lines are related to Trio Instrument to capture events from multiple threads
         task = trio.lowlevel.current_task()
@@ -203,9 +214,9 @@ async def request_image(datas, start_sampleid):
             )
             if proces is not None:
                 tmp_data.append(proces)
-            task.custom_sleep_data = 0 # for success do not count errors
+            task.custom_sleep_data = (0, proces[7], time.time()-start) # for success do not count errors
         except Exception:
-            task.custom_sleep_data = 1 # when exception is hit, count it
+            task.custom_sleep_data = (1, 0, time.time()-start) # when exception is hit, count it
         return
 
     # this section launches many parallel requests
