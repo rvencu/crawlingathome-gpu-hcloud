@@ -223,12 +223,12 @@ async def request_image(datas, start_sampleid):
         # the following 2 lines are related to Trio Instrument to capture events from multiple threads
         task = trio.lowlevel.current_task()
         try:
-            response = await session.get(url, timeout=7, connection_timeout=15), alt_text, license, sample_id
+            response = await session.get(url, timeout=7, connection_timeout=15)
             dltime = round(time.time()-start, 2)
             start=time.time()
             proces = process_img_content(
                 # tune timeout and connection_timeout to grab more or less files. shorter timeouts will exclude bad performing websites
-                response
+                response, alt_text, license, sample_id
             )
             proctime = round(time.time()-start, 2)
             task.custom_sleep_data = (0, dltime, proctime) # for success do not count errors
