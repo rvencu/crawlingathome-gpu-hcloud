@@ -4,12 +4,14 @@ import sys
 import time
 import trio
 import uuid
+import ftfy
 import ujson
 import shutil
 import random
 import hashlib
 import tarfile
 import pandas as pd
+import pycld2 as cld2
 from glob import glob
 from uuid import uuid1
 from io import BytesIO
@@ -71,9 +73,6 @@ def parse_wat(content, start, line_count, blocked, bloom, clipped):
     
     output: a list of tuples (url, text, license)
     """
-
-    import ftfy
-    import pycld2 as cld2
 
     # blocklist-domains.txt contains a list of domains to block based on previous results of CLIP filtering.
     # the domains are not likely to pass CLIP for either bad captions or the content is almost always NSFW
@@ -188,8 +187,10 @@ async def request_image(datas, start_sampleid):
 
     output: list of lists with succesfully downloaded images and their parameters. this list is dumped on disk as json file
     """
+    N_TASKS = 32
 
     tmp_data = []
+    sofa = trio.Queue(N_TASKS)
 
     # change the number of parallel connections based on CPU speed, network capabilities, etc.
     # the number of 192 is optimized for 1 vCPU droplet at Hetzner Cloud (code CX11)
@@ -203,35 +204,43 @@ async def request_image(datas, start_sampleid):
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     }
 
-    async def _request(data, sample_id):
-
-        start=time.time()
-
-        url, alt_text, license = data
-        # the following 2 lines are related to Trio Instrument to capture events from multiple threads
-        task = trio.lowlevel.current_task()
-        try:
-            response = await session.get(url, timeout=7, connection_timeout=15)
-            dltime = round(time.time()-start, 2)
+    async def _request():
+        while True:
+            if sofa.empty():
+                return
             start=time.time()
-            proces = process_img_content(
-                # tune timeout and connection_timeout to grab more or less files. shorter timeouts will exclude bad performing websites
-                response, alt_text, license, sample_id
-            )
-            proctime = round(time.time()-start, 2)
-            task.custom_sleep_data = (0, dltime, proctime) # for success do not count errors
-            if proces is not None:
-                tmp_data.append(proces)
-        except Exception:
-            task.custom_sleep_data = (1, 0, round(time.time()-start,2)) # when exception is hit, count it
-        return
+            data, sample_id = await sofa.get()
 
-    # this section launches many parallel requests
+            url, alt_text, license = data
+            # the following 2 lines are related to Trio Instrument to capture events from multiple threads
+            task = trio.lowlevel.current_task()
+            try:
+                response = await session.get(url, timeout=10, connection_timeout=20)
+                dltime = round(time.time()-start, 2)
+                start=time.time()
+                proces = process_img_content(
+                    # tune timeout and connection_timeout to grab more or less files. shorter timeouts will exclude bad performing websites
+                    response, alt_text, license, sample_id
+                )
+                proctime = round(time.time()-start, 2)
+                task.custom_sleep_data = (0, dltime, proctime) # for success do not count errors
+                if proces is not None:
+                    tmp_data.append(proces)
+            except Exception:
+                task.custom_sleep_data = (1, 0, round(time.time()-start,2)) # when exception is hit, count it
+            return
+
+    async def producer(data):
+        await sofa.put(data)
+
     async with trio.open_nursery() as n:
         for data in datas:
-            n.start_soon(_request, data, start_sampleid)
+            n.start_soon(producer, (data, start_sampleid))
             start_sampleid += 1
-
+        await trio.sleep(0.2)
+        for _ in range(N_TASKS):
+            n.start_soon(_request)
+            
     # trio makes sure at this point all async tasks were executed
     with open(f".tmp/{uuid1()}.json", "w") as f:
         ujson.dump(tmp_data, f)
@@ -412,9 +421,9 @@ if __name__ == "__main__":
             dlparse_df = dl_wat( parsed_data, first_sample_id)
             dlparse_df.to_csv(output_folder + out_fname + ".csv", index=False, sep="|")
             dlparse_df.to_csv(output_folder + out_fname + "_unfiltered.csv", index=False, sep="|")
-            print (f"downloaded {len(dlparse_df)} in {round(time.time() - start, 2)}")
-            print (f"download efficiency {len(dlparse_df)/(time.time() - start)} img/sec")
-            print (f"crawl efficiency {lastlinks/(time.time() - start)} links/sec")
+            print (f"retained {len(dlparse_df)} images in {round(time.time() - start, 2)}")
+            print (f"scraping efficiency {len(dlparse_df)/(time.time() - start)} img/sec")
+            print (f"crawling efficiency {lastlinks/(time.time() - start)} links/sec")
 
             # at this point we finishes the CPU node job, need to make the data available for GPU worker
             prefix = uuid.uuid4().hex
