@@ -213,9 +213,11 @@ async def request_image(datas, start_sampleid):
                 # tune timeout and connection_timeout to grab more or less files. shorter timeouts will exclude bad performing websites
                 await session.get(url, timeout=5, connection_timeout=15), alt_text, license, sample_id
             )
-            task.custom_sleep_data = (0, proces[7], round(time.time()-start,2)) # for success do not count errors
             if proces is not None:
+                task.custom_sleep_data = (0, proces[7], round(time.time()-start,2)) # for success do not count errors
                 tmp_data.append(proces.pop(7))
+            else:
+                task.custom_sleep_data = (0, 0, round(time.time()-start,2)) # for success do not count errors
         except Exception:
             task.custom_sleep_data = (1, 0, time.time()-start) # when exception is hit, count it
         return
