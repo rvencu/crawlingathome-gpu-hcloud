@@ -187,10 +187,8 @@ async def request_image(datas, start_sampleid):
 
     output: list of lists with succesfully downloaded images and their parameters. this list is dumped on disk as json file
     """
-    N_TASKS = 32
-
     tmp_data = []
-    sofa = trio.Queue(N_TASKS)
+    limit = trio.CapacityLimiter(165)
 
     # change the number of parallel connections based on CPU speed, network capabilities, etc.
     # the number of 192 is optimized for 1 vCPU droplet at Hetzner Cloud (code CX11)
@@ -204,12 +202,9 @@ async def request_image(datas, start_sampleid):
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     }
 
-    async def _request():
+    async def _request(data, sample_id):
         while True:
-            if sofa.empty():
-                return
             start=time.time()
-            data, sample_id = await sofa.get()
 
             url, alt_text, license = data
             # the following 2 lines are related to Trio Instrument to capture events from multiple threads
@@ -230,16 +225,11 @@ async def request_image(datas, start_sampleid):
                 task.custom_sleep_data = (1, 0, round(time.time()-start,2)) # when exception is hit, count it
             return
 
-    async def producer(data):
-        await sofa.put(data)
-
     async with trio.open_nursery() as n:
         for data in datas:
-            n.start_soon(producer, (data, start_sampleid))
+            async with limit:
+                n.start_soon(_request, data, start_sampleid)
             start_sampleid += 1
-        await trio.sleep(0.2)
-        for _ in range(N_TASKS):
-            n.start_soon(_request)
             
     # trio makes sure at this point all async tasks were executed
     with open(f".tmp/{uuid1()}.json", "w") as f:
