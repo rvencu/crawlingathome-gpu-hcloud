@@ -35,11 +35,10 @@ class Tracer(trio.abc.Instrument):
         self.downloads = 0
         self.rate = 0
         self.imgproc_duration = 0
-        self.succes_duration = 0
-        self.try_duration = 0
+        self.download_duration = 0
         self.error_duration = 0
         self.avg_download = 0
-        self.avg_try = 0
+        self.avg_process = 0
         self.abv_error = 0
 
     def task_exited(self, task):
