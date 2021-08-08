@@ -50,10 +50,11 @@ class Tracer(trio.abc.Instrument):
                 self.exceptions += 1
                 self.error_duration += task.custom_sleep_data[2]
             if task.custom_sleep_data[0] == 0: # this is image downloaded
-                self.succes_duration += task.custom_sleep_data[2]
-                self.imgproc_duration += task.custom_sleep_data[1]
+                self.download_duration += task.custom_sleep_data[1]
+                self.imgproc_duration += task.custom_sleep_data[2]
                 self.downloads += 1
             if task.custom_sleep_data[0] == 1: # this is ok try but not download
+                self.download_duration += task.custom_sleep_data[1]
                 self.try_duration += task.custom_sleep_data[2]
                 self.tried += 1
             self.rate = round(self.exceptions / (self.requests + sys.float_info.epsilon), 2)
@@ -63,8 +64,8 @@ class Tracer(trio.abc.Instrument):
     
     def after_run(self):
         print(f"We had {self.exceptions} errors within {self.requests} requests or a percentage of {self.rate}.")
-        print(f"Time was split into: total image processing duration {self.imgproc_duration}. Total succeded requests duration {self.succes_duration}. Total failed requests duration {self.error_duration}")
-        print(f"Averages: downloaded image {self.avg_download}, tried downloads {self.avg_try}, exceptions {self.avg_error}")
+        print(f"Time was split into: total image processing duration {round(self.imgproc_duration,2)} s. Total succeded requests duration {round(self.succes_duration,2)} s. Total failed requests duration {round(self.error_duration,2)} s.")
+        print(f"Averages: downloaded image {self.avg_download} s/img, tried downloads {self.avg_try} s/link, exceptions {self.avg_error} s/link")
 
 
 def remove_bad_chars(text):
@@ -165,8 +166,6 @@ def process_img_content(response, alt_text, license, sample_id):
 
     output: list of image parameters or None if image is rejected
     """
-    start = time.time()
-
     img_output_folder = "save/images/"
     try:
         # reject too small images
@@ -190,7 +189,7 @@ def process_img_content(response, alt_text, license, sample_id):
     except (KeyError, UnidentifiedImageError):
         return
 
-    return [str(sample_id), out_fname, response.url, alt_text, width, height, license, round(time.time()-start,2)]
+    return [str(sample_id), out_fname, response.url, alt_text, width, height, license]
 
 
 async def request_image(datas, start_sampleid):
@@ -206,7 +205,7 @@ async def request_image(datas, start_sampleid):
 
     # change the number of parallel connections based on CPU speed, network capabilities, etc.
     # the number of 192 is optimized for 1 vCPU droplet at Hetzner Cloud (code CX11)
-    session = asks.Session(connections=192)
+    session = asks.Session(connections=164)
     # try to make the bot website friendly
     session.headers = {
         "User-Agent": "Crawling at Home Project (http://cah.io.community)",
@@ -224,18 +223,19 @@ async def request_image(datas, start_sampleid):
         # the following 2 lines are related to Trio Instrument to capture events from multiple threads
         task = trio.lowlevel.current_task()
         try:
+            response = await session.get(url, timeout=7, connection_timeout=15), alt_text, license, sample_id
+            dltime = round(time.time()-start, 2)
+            start=time.time()
             proces = process_img_content(
                 # tune timeout and connection_timeout to grab more or less files. shorter timeouts will exclude bad performing websites
-                await session.get(url, timeout=5, connection_timeout=15), alt_text, license, sample_id
+                response
             )
+            proctime = round(time.time()-start, 2)
+            task.custom_sleep_data = (0, dltime, proctime) # for success do not count errors
             if proces is not None:
-                task.custom_sleep_data = (0, proces[7], round(time.time()-start,2)) # for success do not count errors
-                del proces[-1]
                 tmp_data.append(proces)
-            else:
-                task.custom_sleep_data = (1, 0, round(time.time()-start,2)) # for success do not count errors
         except Exception:
-            task.custom_sleep_data = (2, 0, time.time()-start) # when exception is hit, count it
+            task.custom_sleep_data = (2, 0, round(time.time()-start,2)) # when exception is hit, count it
         return
 
     # this section launches many parallel requests
