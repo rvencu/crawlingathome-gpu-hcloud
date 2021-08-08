@@ -215,7 +215,7 @@ async def request_image(datas, start_sampleid):
             )
             if proces is not None:
                 task.custom_sleep_data = (0, proces[7], time.time()-start) # for success do not count errors
-                tmp_data.append(proces[0:6])
+                tmp_data.append(proces[0:7])
         except Exception:
             task.custom_sleep_data = (1, 0, time.time()-start) # when exception is hit, count it
         return
