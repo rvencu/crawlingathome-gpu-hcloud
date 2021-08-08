@@ -31,25 +31,40 @@ class Tracer(trio.abc.Instrument):
     def __init__(self):
         self.exceptions = 0
         self.requests = 0
+        self.tried = 0
+        self.downloads = 0
         self.rate = 0
         self.imgproc_duration = 0
         self.succes_duration = 0
+        self.try_duration = 0
         self.error_duration = 0
+        self.avg_download = 0
+        self.avg_try = 0
+        self.abv_error = 0
 
     def task_exited(self, task):
         if task.custom_sleep_data is not None:
-            if task.custom_sleep_data[0] in [0, 1] :
+            if task.custom_sleep_data[0] in [0, 1, 2] :
                 self.requests += 1
-            if task.custom_sleep_data[0] == 1:
+            if task.custom_sleep_data[0] == 2: # this is exception
                 self.exceptions += 1
                 self.error_duration += task.custom_sleep_data[2]
-            if task.custom_sleep_data[0] == 0:
+            if task.custom_sleep_data[0] == 0: # this is image downloaded
                 self.succes_duration += task.custom_sleep_data[2]
+                self.imgproc_duration += task.custom_sleep_data[1]
+                self.downloads += 1
+            if task.custom_sleep_data[0] == 1: # this is ok try but not download
+                self.try_duration += task.custom_sleep_data[2]
+                self.tried += 1
             self.rate = round(self.exceptions / (self.requests + sys.float_info.epsilon), 2)
-            self.imgproc_duration += task.custom_sleep_data[1]
+            self.avg_download = round(self.succes_duration / (self.downloads + sys.float_info.epsilon), 2)
+            self.avg_try = round(self.try_duration / (self.tried + sys.float_info.epsilon), 2)
+            self.avg_error = round(self.error_duration / (self.exceptions + sys.float_info.epsilon), 2)
     
     def after_run(self):
-        print(f"We had {self.exceptions} errors within {self.requests} requests or a percentage of {self.rate}. Time was split into: total image processing duration {self.imgproc_duration}. Total succeded requests duration {self.succes_duration}. Total failed requests duration {self.error_duration}")
+        print(f"We had {self.exceptions} errors within {self.requests} requests or a percentage of {self.rate}.")
+        print(f"Time was split into: total image processing duration {self.imgproc_duration}. Total succeded requests duration {self.succes_duration}. Total failed requests duration {self.error_duration}")
+        print(f"Averages: downloaded image {self.avg_download}, tried downloads {self.avg_try}, exceptions {self.avg_error}")
 
 
 def remove_bad_chars(text):
@@ -215,11 +230,12 @@ async def request_image(datas, start_sampleid):
             )
             if proces is not None:
                 task.custom_sleep_data = (0, proces[7], round(time.time()-start,2)) # for success do not count errors
-                tmp_data.append(proces.pop(7))
+                del proces[-1]
+                tmp_data.append(proces)
             else:
-                task.custom_sleep_data = (0, 0, round(time.time()-start,2)) # for success do not count errors
+                task.custom_sleep_data = (1, 0, round(time.time()-start,2)) # for success do not count errors
         except Exception:
-            task.custom_sleep_data = (1, 0, time.time()-start) # when exception is hit, count it
+            task.custom_sleep_data = (2, 0, time.time()-start) # when exception is hit, count it
         return
 
     # this section launches many parallel requests
