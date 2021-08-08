@@ -438,7 +438,7 @@ if __name__ == "__main__":
 
     for worker in workers:
         worker.start()
-        time.sleep(10)
+        time.sleep(1)
     
     while True:
         #keep main process alive
