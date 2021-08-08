@@ -49,7 +49,7 @@ async def up(nodes, pref_loc, server_type="cx11"):
     script = ""
     nodes = int(nodes)
     with open(".env", "r") as auth:
-        tokens = auth.readlines().split(" ")
+        tokens = [x.split(" ") for x in auth.readlines()]
     with open("cloud-init", "r") as user_data:
         script = user_data.read()
     for token in tokens:
@@ -106,7 +106,7 @@ async def up(nodes, pref_loc, server_type="cx11"):
 
 async def down(cloud):
     with open(".env", "r") as auth:
-        tokens = auth.readlines().split(" ")
+        tokens = [x.split(" ") for x in auth.readlines()]
     for token in tokens:
         if int(token[2]) != 0:
             try:
@@ -140,7 +140,7 @@ async def respawn(workers, ip, server_type="cx11"):
             # if impossible to restart the service then delete the worker and try to re-create it
             server.delete()
             with open("cloud-init", "r") as user_data:
-                script = user_data.read().
+                script = user_data.read().replace("<<your_nickname>>", token[1])
                 try:
                     response = hclient.servers.create(
                         "cah-worker-"+index,
@@ -210,8 +210,8 @@ def reset_workers(cloud):
     workers = []
     with open(f"{cloud}.txt", "r") as f:
         for line in f.readlines():
-            workers.append(line.split(" "))
-    pclient = ParallelSSHClient(workers[0], user='crawl', pkey="~/.ssh/id_cah", identity_auth=False )
+            workers.append(line.split(" ")[0])
+    pclient = ParallelSSHClient(workers, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False )
     output = pclient.run_command('source worker-reset.sh', sudo=True)
     pclient.join(output)
 

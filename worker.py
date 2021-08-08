@@ -37,15 +37,16 @@ class Tracer(trio.abc.Instrument):
         self.error_duration = 0
 
     def task_exited(self, task):
-        if task.custom_sleep_data[0] in [0, 1] :
-            self.requests += 1
-        if task.custom_sleep_data[0] == 1:
-            self.exceptions += 1
-            self.error_duration += task.custom_sleep_data[2]
-        if task.custom_sleep_data[0] == 0:
-            self.succes_duration += task.custom_sleep_data[2]
-        self.rate = round(self.exceptions / (self.requests + sys.float_info.epsilon), 2)
-        self.imgproc_duration += task.custom_sleep_data[1]
+        if task.custom_sleep_data is not None:
+            if task.custom_sleep_data[0] in [0, 1] :
+                self.requests += 1
+            if task.custom_sleep_data[0] == 1:
+                self.exceptions += 1
+                self.error_duration += task.custom_sleep_data[2]
+            if task.custom_sleep_data[0] == 0:
+                self.succes_duration += task.custom_sleep_data[2]
+            self.rate = round(self.exceptions / (self.requests + sys.float_info.epsilon), 2)
+            self.imgproc_duration += task.custom_sleep_data[1]
     
     def after_run(self):
         print(f"We had {self.exceptions} errors within {self.requests} requests or a percentage of {self.rate}. Time was split into: total image processing duration {self.imgproc_duration}. Total succeded requests duration {self.succes_duration}. Total failed requests duration {self.error_duration}")
