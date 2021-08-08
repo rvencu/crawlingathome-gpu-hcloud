@@ -415,6 +415,11 @@ if __name__ == "__main__":
 
     print (f"starting session under `{YOUR_NICKNAME_FOR_THE_LEADERBOARD}` nickname")
 
+    procs = cpu_count - 2
+    if len(sys.argv) > 1:
+        procs = min(int(sys.argv[1]), cpu_count -2)
+    
+
     if not os.path.exists(".tmp"):
         os.mkdir(".tmp")
     
@@ -423,7 +428,7 @@ if __name__ == "__main__":
 
     workers = []
     queues = []
-    for i in range ( cpu_count()-1 ):
+    for i in range ( procs ):
         #use this queue to annount that bloom is currently processing and please do not update filters. if queue is not empty please wait, if queue is empty you may update filters
         bloom_processing = JoinableQueue()
         queues.append(bloom_processing)
