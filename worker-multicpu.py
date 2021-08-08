@@ -58,6 +58,7 @@ def parse_wat(content, start, line_count, blocked, bloom, clipped, want_update, 
 
     #wait while bloom filters are updating
     while want_update.qsize() > 0:
+        print(f"[multicpu {i}] waiting for bloom to release workers filtering")
         time.sleep(5)
     #block updates for a little while
     print(f"[multicpu {i}] I want to parse wat with bloom filters")
@@ -267,6 +268,7 @@ def updateBloom(want_update: JoinableQueue, queues: JoinableQueue, target):
                 want_update.task_done()
                 break
             else:
+                print("[multicpu bloom] waiting for workers to release the filters update...")
                 time.sleep(10)
 
         time.sleep(300)
@@ -325,6 +327,7 @@ def proc_worker(i: int, want_update: JoinableQueue, bloom_processing: JoinableQu
             
             #wait while bloom filters are updating
             while want_update.qsize() > 0:
+                print(f"[multicpu {i}] waiting for bloom to release workers filtering")
                 time.sleep(5)
             #block updates for a little while
             print(f"[multicpu {i}] I want to define filter objects")
