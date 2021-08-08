@@ -188,7 +188,7 @@ async def request_image(datas, start_sampleid):
     output: list of lists with succesfully downloaded images and their parameters. this list is dumped on disk as json file
     """
     tmp_data = []
-    limit = trio.CapacityLimiter(600)
+    limit = trio.CapacityLimiter(1000)
 
     # change the number of parallel connections based on CPU speed, network capabilities, etc.
     # the number of 192 is optimized for 1 vCPU droplet at Hetzner Cloud (code CX11)
