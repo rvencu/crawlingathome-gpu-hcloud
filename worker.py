@@ -55,17 +55,17 @@ class Tracer(trio.abc.Instrument):
                 self.downloads += 1
             if task.custom_sleep_data[0] == 1: # this is ok try but not download
                 self.download_duration += task.custom_sleep_data[1]
-                self.try_duration += task.custom_sleep_data[2]
+                self.imgproc_duration += task.custom_sleep_data[2]
                 self.tried += 1
             self.rate = round(self.exceptions / (self.requests + sys.float_info.epsilon), 2)
-            self.avg_download = round(self.succes_duration / (self.downloads + sys.float_info.epsilon), 2)
-            self.avg_try = round(self.try_duration / (self.tried + sys.float_info.epsilon), 2)
+            self.avg_download = round(self.download_duration / (self.downloads + sys.float_info.epsilon), 2)
+            self.avg_process = round(self.imgproc_duration / (self.tried + sys.float_info.epsilon), 2)
             self.avg_error = round(self.error_duration / (self.exceptions + sys.float_info.epsilon), 2)
     
     def after_run(self):
         print(f"We had {self.exceptions} errors within {self.requests} requests or a percentage of {self.rate}.")
-        print(f"Time was split into: total image processing duration {round(self.imgproc_duration,2)} s. Total succeded requests duration {round(self.succes_duration,2)} s. Total failed requests duration {round(self.error_duration,2)} s.")
-        print(f"Averages: downloaded image {self.avg_download} s/img, tried downloads {self.avg_try} s/link, exceptions {self.avg_error} s/link")
+        print(f"Time was split into: total image processing duration {round(self.imgproc_duration,2)} s. Total image downloading duration {round(self.download_duration,2)} s. Total failed requests duration {round(self.error_duration,2)} s.")
+        print(f"Averages: downloading images {self.avg_download} s/img, processing images {self.avg_process} s/img, exceptions {self.avg_error} s/link")
 
 
 def remove_bad_chars(text):
