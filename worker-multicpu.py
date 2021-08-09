@@ -183,6 +183,7 @@ async def request_image(datas, start_sampleid, img_output_folder):
     """
 
     tmp_data = []
+    limit = trio.CapacityLimiter(1000)
 
     # change the number of parallel connections based on CPU speed, network capabilities, etc.
     # the number of 192 is optimized for 1 vCPU droplet at Hetzner Cloud (code CX11)
@@ -204,7 +205,7 @@ async def request_image(datas, start_sampleid, img_output_folder):
         try:
             proces = process_img_content(
                 # tune timeout and connection_timeout to grab more or less files. shorter timeouts will exclude bad performing websites
-                await session.get(url, timeout=3, connection_timeout=10), alt_text, license, sample_id, img_output_folder
+                await session.get(url, timeout=10, connection_timeout=20), alt_text, license, sample_id, img_output_folder
             )
             if proces is not None:
                 tmp_data.append(proces)
@@ -215,7 +216,8 @@ async def request_image(datas, start_sampleid, img_output_folder):
     # this section launches many parallel requests
     async with trio.open_nursery() as n:
         for data in datas:
-            n.start_soon(_request, data, start_sampleid)
+            async with limit:
+                n.start_soon(_request, data, start_sampleid)
             start_sampleid += 1
 
     fn = uuid1()
