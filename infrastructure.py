@@ -43,7 +43,7 @@ async def list_servers(tok=""):
         servers = servers + hclient.servers.get_all()
     return servers
 
-async def up(nodes, pref_loc, server_type="cx11"):
+async def up(nodes, pref_loc, server_type="cx11", nick=""):
     workers = []
     tokens = []
     script = ""
@@ -53,6 +53,8 @@ async def up(nodes, pref_loc, server_type="cx11"):
     with open("cloud-init", "r") as user_data:
         script = user_data.read()
     for token in tokens:
+        if nick != "" and nick != token[1]:
+            continue
         number = nodes
         if int(token[2])>0:
             number = min(nodes, int(token[2]))
@@ -104,17 +106,26 @@ async def up(nodes, pref_loc, server_type="cx11"):
     print (f"[swarm] Cloud swarm intialized with {len(workers)} nodes. If this is less than expected please check your account limits")
     return workers
 
-async def down(cloud):
+async def down(cloud, nick=""):
+    workers = []
+    nicknames = []
+    with open(f"{cloud}.txt", "r") as f:
+        for line in f.readlines():
+            workers.append(line.split(" ")[0])
+            nicknames.append(line.split(" ")[1])
     with open(".env", "r") as auth:
         tokens = [x.split(" ") for x in auth.readlines()]
     for token in tokens:
+        if nick != "" and nick != token[1]:
+            continue
         if int(token[2]) != 0:
             try:
                 servers = await list_servers(token[0])
                 hclient = Client(token=token[0])
                 for server in servers:
                     server = hclient.servers.get_by_name(server.name)
-                    if server is None:
+                    ip = server.public_net.ipv4.ip
+                    if ip not in workers:
                         continue
                     server.delete()
             except APIException as e:
