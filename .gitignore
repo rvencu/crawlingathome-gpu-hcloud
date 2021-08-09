@@ -170,3 +170,5 @@ blocklists/*
 *.tar
 *.tar.gz
 hetzner.txt
+alibaba.txt
+test/
