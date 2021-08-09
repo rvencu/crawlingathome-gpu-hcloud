@@ -198,7 +198,7 @@ async def request_image(datas, start_sampleid):
         "User-Agent": "Crawling at Home Project (http://cah.io.community)",
         "Accept-Language": "en-US",
         "Accept-Encoding": "gzip, deflate",
-        "Referer": "https://commoncrawl.org",
+        "Referer": "https://www.google.com",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     }
 
