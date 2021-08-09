@@ -53,9 +53,9 @@ class Tracer(trio.abc.Instrument):
         avg_download = round(self.download_duration / (self.downloads + sys.float_info.epsilon), 2)
         avg_process = round(self.imgproc_duration / (self.downloads + sys.float_info.epsilon), 2)
         avg_error = round(self.error_duration / (self.exceptions + sys.float_info.epsilon), 2)
-        print(f"We had {self.exceptions} errors within {self.downloads + self.exceptions} requests or a rate of {rate}. A number of {self.downloads} images were downloaded.")
-        print(f"Total image downloading duration {round(self.download_duration,2)} s. Total image processing duration {round(self.imgproc_duration, 2)} s. Total failed requests duration {round(self.error_duration,2)} s.")
-        print(f"Averages: downloading images {avg_download} s/img, processing images {avg_process} s/img, exceptions {avg_error} s/link")
+        print(f"[instrumentation] While scraping there were {self.exceptions} errors within {self.downloads + self.exceptions} candidates (error rate = {rate * 100} %). {self.downloads} images were downloaded.")
+        print(f"[instrumentation] Cumulative image processing duration {round(self.imgproc_duration, 2)} s.")
+        print(f"[instrumentation] Average downloading time {avg_download} s/img, image processing time {avg_process} s/img, exceptions processing time {avg_error} s/link")
 
 
 def remove_bad_chars(text):
@@ -381,20 +381,17 @@ if __name__ == "__main__":
 
             # compute output file names base
             out_fname = f"FIRST_SAMPLE_ID_IN_SHARD_{str(first_sample_id)}_LAST_SAMPLE_ID_IN_SHARD_{str(last_sample_id)}_{shard_of_chunk}"
-            print(f"shard acquired in {round(time.time()-start,2)} sec (including bloom updates)")
+            print(f"[stats] Shard acquired in {round(time.time()-start,2)} sec (including bloom updates)")
             start = time.time()
 
             bloom = BloomFilter(max_elements=200000000, error_rate=0.05, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/bloom200M.bin",-1))
             clipped = BloomFilter(max_elements=200000000, error_rate=0.05, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/clipped.bin",-1))
             blocked = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/failed-domains.bin",-1))
 
-            print (f"sync filters in {round(time.time()-start,2)} sec")
-            start = time.time()
-
             # parse valid links from wat file
             with open("shard.wat", "r") as infile:
                 parsed_data, deduped, clpd = parse_wat(infile, start_index, lines, blocked, bloom, clipped)
-            print (f"parsed wat in {round(time.time()-start,2)} sec")
+            print (f"[stats] Parsed wat in {round(time.time()-start,2)} sec")
             start = time.time()
 
             # convert to dataframe and save to disk (for statistics and generating blocking lists)
@@ -405,15 +402,15 @@ if __name__ == "__main__":
             random.shuffle(parsed_data) 
             
             lastlinks = len(parsed_data)
-            print (f"this job has {lastlinks} links left; deduped {deduped} and already clipped {clpd}")
+            print (f"[stats] This job has {lastlinks} candidates after removing {deduped} already in dataset and additional {clpd} CLIPed before")
           
             # attempt to download validated links and save to disk for stats and blocking lists
             dlparse_df = dl_wat( parsed_data, first_sample_id)
             dlparse_df.to_csv(output_folder + out_fname + ".csv", index=False, sep="|")
             dlparse_df.to_csv(output_folder + out_fname + "_unfiltered.csv", index=False, sep="|")
-            print (f"retained {len(dlparse_df)} images in {round(time.time() - start, 2)}")
-            print (f"scraping efficiency {len(dlparse_df)/(time.time() - start)} img/sec")
-            print (f"crawling efficiency {lastlinks/(time.time() - start)} links/sec")
+            print (f"[stats] pairs retained {len(dlparse_df)} in {round(time.time() - start, 2)}")
+            print (f"[stats] scraping efficiency {len(dlparse_df)/(time.time() - start)} img/sec")
+            print (f"[stats] crawling efficiency {lastlinks/(time.time() - start)} links/sec")
 
             # at this point we finishes the CPU node job, need to make the data available for GPU worker
             prefix = uuid.uuid4().hex
@@ -425,7 +422,7 @@ if __name__ == "__main__":
 
             last = round(time.time() - start0)
 
-            print(f"job completed in {last} seconds")
+            print(f"[stats] Job completed in {last} seconds")
             
         except Exception as e:
             print (e)
