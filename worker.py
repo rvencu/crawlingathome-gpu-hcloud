@@ -290,16 +290,17 @@ def updateBloom(target, initial=False):
             shutil.rmtree("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
         os.makedirs("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
         if (os.getenv("CLOUD") in ["hetzner","alibaba"]):
-            os.system(f"rsync -av --partial --inplace --progress {target}/*.bin /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
+            os.system(f"rsync -av --partial --inplace --progress {target}/clipped*.bin /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
+            os.system(f"rsync -av --partial --inplace --progress {target}/failed*.bin /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
         else:
-            os.system(f'wget -m -np -c -U "Crawling@Home" --tries=15 -R "index.html*" "http://the-eye.eu/public/AI/cahblacklists/"')
+            os.system(f'wget -m -np -c -U "Crawling@Home" --tries=15 -R "index.html*,bloom*.bin" "http://the-eye.eu/public/AI/cahblacklists/"')
             os.system("mv ./the-eye.eu/public/AI/cahblacklists/* /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
     else:
         #overwrite only active filter
         if (os.getenv("CLOUD") in ["hetzner","alibaba"]):
             os.system(f"rsync -av --partial --inplace --progress {target}/*_active.bin /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
         else:
-            os.system(f'wget -m -np -c -U "Crawling@Home" --tries=15 -R "index.html*" -A "*_active.bin" "http://the-eye.eu/public/AI/cahblacklists/"')
+            os.system(f'wget -m -np -c -U "Crawling@Home" --tries=15 -R "index.html*,bloom*.bin" -A "*_active.bin" "http://the-eye.eu/public/AI/cahblacklists/"')
             os.system("cp ./the-eye.eu/public/AI/cahblacklists/* /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
             os.system("rm -rf ./the-eye.eu/public/AI/cahblacklists/*")
 
