@@ -1,4 +1,6 @@
 #!/bin/sh
+sudo su root
+
 apt update
 yes | DEBIAN_FRONTEND=noninteractive apt upgrade
 yes | apt install python3-pip git build-essential libssl-dev libffi-dev python3-dev libwebp-dev libjpeg-dev libwebp-dev
@@ -86,5 +88,5 @@ CC="cc -mavx2" pip install -U --force-reinstall pillow-simd
 
 exit
 
-apt clean
-reboot
+sudo apt clean
+sudo reboot
