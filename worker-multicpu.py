@@ -387,6 +387,7 @@ def proc_worker(i: int, want_update: JoinableQueue, bloom_processing: JoinableQu
 
             # convert to dataframe and save to disk (for statistics and generating blocking lists)
             parsed_df = pd.DataFrame(parsed_data, columns=["URL","TEXT","LICENSE"])
+            parsed_df = parsed_df.drop_duplicates(subset=["URL"])
             parsed_df.to_csv(output_folder+out_fname + "_parsed.csv", index=False, sep="|")
 
             # attempt to spread out clusters of links pointing to the same domain name, improves crawling
