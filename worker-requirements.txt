@@ -5,3 +5,4 @@ trio
 ujson
 asks
 bloom-filter2
+pillow

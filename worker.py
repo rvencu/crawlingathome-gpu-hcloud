@@ -5,6 +5,7 @@ import time
 import trio
 import uuid
 import ftfy
+import math
 import ujson
 import shutil
 import random
@@ -164,6 +165,11 @@ def process_img_content(response, alt_text, license, sample_id):
             # reject if too large (might be a DOS decompression bomb)
             if width * height > 89478484:
                 return
+            if width * height > 8294400: #if image is larger than 4K then attempt scale down
+                ratio = math.sqrt(width * height / 8294400)
+                width = int(width/ratio)
+                height = int(height/ratio)
+                im = im.resize((width, height))
             im_format = im.format
             out_fname = f"{img_output_folder}{str(sample_id)}.{im_format.lower()}"
             # reject if format is not in this list
