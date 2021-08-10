@@ -64,7 +64,7 @@ def remove_bad_chars(text):
     return "".join(c for c in text if c.isprintable())
 
 
-def parse_wat(content, start, line_count, blocked, bloom, clipped):
+def parse_wat(content, start, line_count):
     """
     This function checks the wat file content and attempts to extract valid candidates of image urls and alt texts
 
@@ -81,7 +81,9 @@ def parse_wat(content, start, line_count, blocked, bloom, clipped):
     # failed-domains.txt contains failed domains, i.e. domains with image links and suitable alt texts that actually
     # do not produce any image. domains that mayb dissapeared, or are good at blocking scrapers. List is also learned from
     # past crawling effort
-    
+
+    clipped = [BloomFilter(max_elements=200000000, error_rate=0.05, filename=(x,-1)) for x in glob("/home/crawl/crawlingathome-gpu-hcloud/blocklists/clipped*")]
+    blocked = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/failed-domains.bin",-1))    
 
     deduped = 0
     clpd = 0
@@ -133,16 +135,18 @@ def parse_wat(content, start, line_count, blocked, bloom, clipped):
                 # reject if pair is a duplicate
                 #concat = str(hash(url + alt_text))
                 concat = hashlib.md5((url + alt_text).encode("utf-8")).hexdigest()
-                if concat in bloom: #duplicates:
-                    deduped += 1
-                    continue
-                if concat in clipped: #duplicates:
-                    clpd += 1
+                clp = False
+                for filter in clipped:
+                    if concat in filter: #duplicates:
+                        clpd += 1
+                        clp = True
+                        break
+                if clp:
                     continue
                 valid_data.append((url, alt_text, license))
     return ([
         t for t in {tuple(i) for i in valid_data}
-    ], deduped, clpd)  # use a dict in order to remove duplicate tuples from list
+    ], clpd)  # use a dict in order to remove duplicate tuples from list
 
 
 def process_img_content(response, alt_text, license, sample_id):
@@ -279,16 +283,26 @@ def upload(source: str, clientType: str, target: str):
         shutil.rmtree(f"/home/crawl/{source}", ignore_errors=True)
     return result
 
-def updateBloom(target):
+def updateBloom(target, initial=False):
     start = time.time()
-    if os.path.exists("/home/crawl/crawlingathome-gpu-hcloud/blocklists/"):
-        shutil.rmtree("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
-    os.makedirs("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
-    if (os.getenv("CLOUD") in ["hetzner","alibaba"]):
-        os.system(f"rsync -av --partial --inplace --progress {target}/*.bin /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
+    if initial:
+        if os.path.exists("/home/crawl/crawlingathome-gpu-hcloud/blocklists/"):
+            shutil.rmtree("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
+        os.makedirs("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
+        if (os.getenv("CLOUD") in ["hetzner","alibaba"]):
+            os.system(f"rsync -av --partial --inplace --progress {target}/*.bin /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
+        else:
+            os.system(f'wget -m -np -c -U "Crawling@Home" --tries=15 -R "index.html*" "http://the-eye.eu/public/AI/cahblacklists/"')
+            os.system("mv ./the-eye.eu/public/AI/cahblacklists/* /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
     else:
-        os.system(f'wget -m -np -c -U "Crawling@Home" --tries=15 -R "index.html*" "http://the-eye.eu/public/AI/cahblacklists/"')
-        os.system("mv ./the-eye.eu/public/AI/cahblacklists/* /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
+        #overwrite only active filter
+        if (os.getenv("CLOUD") in ["hetzner","alibaba"]):
+            os.system(f"rsync -av --partial --inplace --progress {target}/*_active.bin /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
+        else:
+            os.system(f'wget -m -np -c -U "Crawling@Home" --tries=15 -R "index.html*" -A "*_active.bin" "http://the-eye.eu/public/AI/cahblacklists/"')
+            os.system("cp ./the-eye.eu/public/AI/cahblacklists/* /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
+            os.system("rm -rf ./the-eye.eu/public/AI/cahblacklists/*")
+
     print(f"Updated bloom filters in {round(time.time()-start, 2)} sec")
 
 class FileData:
@@ -314,9 +328,6 @@ class FileData:
 
 if __name__ == "__main__":
 
-    # helper function to find worker IP
-    myip = ip = get('https://api.ipify.org').text
-
     # initialize working folders
     output_folder = "./save/"
     img_output_folder = output_folder + "images/"
@@ -332,7 +343,7 @@ if __name__ == "__main__":
     # connect to C@H server and initialize client
     client = cah.init(url=CRAWLINGATHOME_SERVER_URL, nickname=YOUR_NICKNAME_FOR_THE_LEADERBOARD, type="CPU")
 
-    updateBloom("archiveteam@88.198.2.17::bloom")
+    updateBloom("archiveteam@88.198.2.17::bloom", True)
 
     # initialize stats variables for previous job
     last = 0
@@ -390,13 +401,9 @@ if __name__ == "__main__":
             print(f"[stats] Shard acquired in {round(time.time()-start,2)} sec (including bloom updates)")
             start = time.time()
 
-            bloom = BloomFilter(max_elements=200000000, error_rate=0.05, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/bloom200M.bin",-1))
-            clipped = BloomFilter(max_elements=200000000, error_rate=0.05, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/clipped.bin",-1))
-            blocked = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/failed-domains.bin",-1))
-
             # parse valid links from wat file
             with open("shard.wat", "r") as infile:
-                parsed_data, deduped, clpd = parse_wat(infile, start_index, lines, blocked, bloom, clipped)
+                parsed_data, clpd = parse_wat(infile, start_index, lines)
             print (f"[stats] Parsed wat in {round(time.time()-start,2)} sec")
             start = time.time()
 
@@ -409,7 +416,7 @@ if __name__ == "__main__":
             random.shuffle(parsed_data) 
             
             lastlinks = len(parsed_data)
-            print (f"[stats] This job has {lastlinks} candidates after removing {deduped} already in dataset and additional {clpd} CLIPed before")
+            print (f"[stats] This job has {lastlinks} candidates after removing {clpd} via bloom filters")
           
             # attempt to download validated links and save to disk for stats and blocking lists
             dlparse_df = dl_wat( parsed_data, first_sample_id)
