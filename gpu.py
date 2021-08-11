@@ -89,13 +89,15 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                     while True:
                         if outgoingqueue.qsize() > 0:
                             outjob, pairs = outgoingqueue.get() # I am poping out from queue only if my current job is finished
-                            if pairs > 0:
+                            if pairs >= 0:
                                 #print (f"[io {i}] mark job as complete: {job}")
                                 # cleanup temp storage now
                                 try:
                                     client.completeJob(int(pairs))
                                 except:
                                     client.invalidURL()
+                            else:
+                                client.invalidURL()
                             if os.path.exists("./"+ job):
                                 shutil.rmtree("./"+ job)
                             if os.path.exists(f"{job}.tar.gz"):
@@ -247,7 +249,7 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             uploadqueue.put((group_id, upload_address, shards, results))
             
             # dynamic adjustment of groupsize so we can get close to 8000 pairs per group as fast as possible
-            gradient = int((final_images-20000)/3000)
+            gradient = int((final_images-20000)/7000)
             groupsize = min( int(3 * first_groupsize) - 5 , groupsize - gradient )
             groupsize = max( groupsize - gradient, 3 )
             print (f"groupsize changed to {groupsize}")
