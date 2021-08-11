@@ -7,6 +7,7 @@ from multiprocessing import cpu_count
 from multiprocessing.queues import JoinableQueue
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
+use_jit = torch.cuda.is_available() and '1.7.1' in torch.__version__
 class CLIPDataset(torch.utils.data.Dataset):
     def __init__(self, dataframe, preprocess):
         self.dataframe = dataframe
@@ -25,7 +26,7 @@ class CLIPDataset(torch.utils.data.Dataset):
 
 class CLIP:
     def __init__(self):
-        self.model, self.preprocess = clip.load("ViT-B/32", device=device, jit=False)
+        self.model, self.preprocess = clip.load("ViT-B/32", device=device, jit=use_jit)
         self.cosine_similarity = torch.nn.CosineSimilarity(dim=1, eps=1e-6)
         with torch.no_grad():
             self.categories = self.model.encode_text(clip.tokenize(["neutral","selfie", "illustration, drawing", "toys, play, kids, children", "teddy bear, puppet", "animal, bird, mammal, insect" "fashion, clothes", "logo, commercial, ad, advertisement", "drawing, painting","anime, cartoon","comedy, fun","romance, love story","thriller, suspense, crime story","action, action movie", "horror, monster movie", "documentary", "news, journalism", "entertainment", "talk show", "porn, sex, sperm, nipples, breats, tits, boops, penis, dick, cock, clitoris, vagina, fuck, lust, horny, sexual, lick, licking",  "porn, sex, sperm, nipples", "porn, sex, sperm, penis, dick, cock", "nipples, breats, tits, boops, sexy", "penis, dick, cock", "clitoris, vagina", "sex, fuck, lust, horny, sexual, lick, licking", "porn, sex, sexy","sexy, hot","sperm, skin","lust, horny, sexual","lick, licking, body", "anime, hentai, sexy", "cartoon, sexy, sex", "hentai", "anime, sexy, breasts", "hentai"]).to(device))

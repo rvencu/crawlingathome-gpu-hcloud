@@ -150,12 +150,21 @@ def upload_worker(uploadqueue: JoinableQueue, counter: JoinableQueue, outgoingqu
         else:
             time.sleep(10)
 
-def updateBloom():
-    if os.path.exists("blocklists/"):
-        shutil.rmtree("blocklists/")
-    os.makedirs("blocklists/")
+def updateBloom(init=False):
+    if init:
+        if os.path.exists("blocklists/"):
+            shutil.rmtree("blocklists/")
+        os.makedirs("blocklists/")
     #os.system("rsync -zh archiveteam@88.198.2.17::bloom/*.bin blocklists")
-    os.system("rsync -av --partial --inplace --progress archiveteam@88.198.2.17::bloom/*.bin blocklists")
+        os.system("rsync -av --partial --inplace --progress archiveteam@88.198.2.17::bloom/bloom*.bin blocklists")
+    else:
+        os.system("rsync -av --partial --inplace --progress archiveteam@88.198.2.17::bloom/bloom_active.bin blocklists") # bloom_active.bin after freeze
+
+def inbloom(hash, bloom):
+    for filter in bloom:
+        if hash in filter:
+            return True
+    return False
 
 def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag: JoinableQueue, groupsize: int):
     print (f"[gpu] worker started")
@@ -210,9 +219,10 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             total = len(group_parse.index)
 
             t.join()
-            bloom = BloomFilter(max_elements=200000000, error_rate=0.05, filename=("blocklists/bloom200M.bin",-1))
+            bloom = [ BloomFilter(max_elements=200000000, error_rate=0.05, filename=(x,-1)) for x in glob("blocklists/bloom*.bin") ]
+            #bloom = BloomFilter(max_elements=200000000, error_rate=0.05, filename=("blocklists/bloom200M.bin",-1))
 
-            group_parse.loc[:,"bloom"] = group_parse.apply(lambda row: hashlib.md5((str(row.URL)+str(row.TEXT)).encode("utf-8")).hexdigest() in bloom, axis=1)
+            group_parse.loc[:,"bloom"] = group_parse.apply(lambda row: inbloom(hashlib.md5((str(row.URL)+str(row.TEXT)).encode("utf-8")).hexdigest(), bloom), axis=1)
             group_parse = group_parse[group_parse["bloom"] == False]
             group_parse.reset_index(inplace=True, drop=True)
             bloomed = len(group_parse.index)
@@ -225,7 +235,8 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             
             
             dedupe_ratio = round((duped - total) / duped, 2)
-            print(f"{Fore.GREEN}filtered {final_images} from {bloomed} bloomed from {total} deduped from {duped} (dedupe ratio {dedupe_ratio}) in {round(time.time()-start,2)} sec ({groupsize} ie {round((time.time()-start)/groupsize,2)} s/shrd){Fore.RESET}")
+            print(f"{Fore.GREEN}Got {final_images} images from {bloomed} bloomed from {total} deduped from {duped} (ratio {dedupe_ratio}) in {round(time.time()-start,2)} sec.")
+            print(f"({groupsize} shards were grouped together and average duration per shard was {round((time.time()-start)/groupsize,2)} sec){Fore.RESET}")
 
             #print (f"[gpu] upload group results to rsync target")
             # find most required upload address among the grouped shards
@@ -234,7 +245,7 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             uploadqueue.put((group_id, upload_address, shards, results))
             
             # dynamic adjustment of groupsize so we can get close to 8000 pairs per group as fast as possible
-            gradient = int((final_images-10000)/3000)
+            gradient = int((final_images-20000)/3000)
             groupsize = min( int(5 * first_groupsize) - 5 , groupsize - gradient )
             groupsize = max( groupsize - gradient, 2 )
             print (f"groupsize changed to {groupsize}")
@@ -335,6 +346,8 @@ if __name__ == "__main__":
         os.makedirs("./stats/")
     if not os.path.exists("./save/"):
         os.makedirs("./save/")
+
+    updateBloom(True)
 
     try:
 

@@ -75,10 +75,10 @@ def parse_wat(content, start, line_count):
     output: a list of tuples (url, text, license)
     """
 
-    # blocklist-domains.txt contains a list of domains to block based on previous results of CLIP filtering.
+    # clipped*.bin filters domains based on previous results of CLIP filtering.
     # the domains are not likely to pass CLIP for either bad captions or the content is almost always NSFW
 
-    # failed-domains.txt contains failed domains, i.e. domains with image links and suitable alt texts that actually
+    # failed-domains.bin contains failed domains, i.e. domains with image links and suitable alt texts that actually
     # do not produce any image. domains that mayb dissapeared, or are good at blocking scrapers. List is also learned from
     # past crawling effort
 

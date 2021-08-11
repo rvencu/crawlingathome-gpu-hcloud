@@ -37,7 +37,7 @@ clipped_active = BloomFilter(max_elements=200000000, error_rate=0.05, filename=(
 clipped.append(clipped_active)
 filesclipped = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("/home/archiveteam/filesclipped.bin",-1))
 
-time.sleep(15)
+time.sleep(5)
 counter = 0
 uniques = 0
 for file in glob("/home/archiveteam/CAH/hashes/*"):
@@ -49,9 +49,7 @@ for file in glob("/home/archiveteam/CAH/hashes/*"):
                 counter += 1
                 infilters = False
                 for filter in bloom:
-                    if line not in filter:
-                        pass
-                    else:
+                    if line in filter:
                         infilters = True
                         break
                 if not infilters:
@@ -80,9 +78,7 @@ for file in glob("/home/archiveteam/CAH/clipped/*"):
                 line = line.strip()
                 infilters = False
                 for filter in clipped:
-                    if line not in filter:
-                        pass
-                    else:
+                    if line in filter:
                         infilters = True
                         break
                 if not infilters:
@@ -100,10 +96,14 @@ df["clipped filter (5%)"]=df["clipped filter (5%)"]/1000000
 if uniques > 0:
     print(f"[{now}] added {uniques} \"from total of\" {counter} \"(i.e. {round((counter-uniques)*100/(counter+sys.float_info.epsilon),2)}% duplication in {round(time.time()-start,2)} sec) Also added \" {clipped_counter} \"clipped and\" {failed_counter} failed")
     with open('dashboard.txt', 'w') as file:
+        file.write("<h5><a href='http://cah.io.community'>Crawling at Home project</a></h5>\n")
         file.write("<h1>Bloom filters status</h1>\n")
+        file.write("<h2>All time stats</h2>\n")
+        file.write("<h5>initialized from first parquet files</h5>\n")
         file.write(str(df.sum(axis=0, numeric_only=True)).replace("\n","<br/>"))
         file.write("<br/><br/>")
         file.write("<h2>Last day stats</h2>\n")
         file.write(str(df[df.Date > datetime.now() - pd.to_timedelta("1day")].sum(axis=0, numeric_only=True)).replace("\n","<br/>"))
         file.write("<h2>Last week stats</h2>\n")
+        file.write("<h5>Last reset date: 02 August 2021</h5>\n")
         file.write(str(df[df.Date > datetime.now() - pd.to_timedelta("7day")].sum(axis=0, numeric_only=True)).replace("\n","<br/>"))
