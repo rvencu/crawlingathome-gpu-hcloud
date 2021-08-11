@@ -1,0 +1,5 @@
+*/1 * * * * /home/archiveteam/archive.sh
+*/1 * * * * /home/archiveteam/bloom.sh
+0 0 */1 * * python3 movefiles.py -e clp -d /home/archiveteam/CAH/clipped
+10 0 */1 * * python3 movefiles.py -e hsh -d /home/archiveteam/CAH/hashes
+@reboot python3 /home/archiveteam/dashboard.py &
