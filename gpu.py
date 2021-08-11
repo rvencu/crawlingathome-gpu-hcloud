@@ -246,8 +246,8 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             
             # dynamic adjustment of groupsize so we can get close to 8000 pairs per group as fast as possible
             gradient = int((final_images-20000)/3000)
-            groupsize = min( int(5 * first_groupsize) - 5 , groupsize - gradient )
-            groupsize = max( groupsize - gradient, 2 )
+            groupsize = min( int(3 * first_groupsize) - 5 , groupsize - gradient )
+            groupsize = max( groupsize - gradient, 3 )
             print (f"groupsize changed to {groupsize}")
             
             gpuflag.get()
@@ -374,7 +374,7 @@ if __name__ == "__main__":
         #initialize joinable queues to transfer messages between multiprocess processes
         # Outbound queues, we need one for each io worker
         outbound = []
-        for _ in range(int(5 * groupsize)): # we need 2x IO workers to keep GPU permanently busy
+        for _ in range(int(3 * groupsize)): # we need 2x IO workers to keep GPU permanently busy
              outbound.append(JoinableQueue())
         inbound = JoinableQueue()
         uploadqueue = JoinableQueue()
