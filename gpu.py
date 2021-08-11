@@ -137,7 +137,10 @@ def upload_worker(uploadqueue: JoinableQueue, counter: JoinableQueue, outgoingqu
             if response == 0:
                 #print (f"[io2] sending all jobs to be marked as completed")
                 for i, job, item in shards:
-                    outgoingqueue[i].put((job, results.get(job)))
+                    cnt = results.get(job)
+                    if cnt is None:
+                        cnt = 0
+                    outgoingqueue[i].put((job, cnt))
                     for file in glob((f"save/*{group_id}*")):
                         os.remove(file)
                     counter.put(1)
@@ -232,7 +235,6 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             #print (f"[gpu] sending group to CLIP filter")
             start = time.time()
             final_images, results = clip_filter.filter(group_parse, group_id, "./save/")
-            
             
             dedupe_ratio = round((duped - total) / duped, 2)
             print(f"{Fore.GREEN}Got {final_images} images from {bloomed} bloomed from {total} deduped from {duped} (ratio {dedupe_ratio}) in {round(time.time()-start,2)} sec.")
