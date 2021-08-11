@@ -40,7 +40,7 @@ filesclipped = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("/h
 time.sleep(5)
 counter = 0
 uniques = 0
-for file in glob("/home/archiveteam/CAH/hashes/*"):
+for file in glob("/home/archiveteam/CAH/hashes/*.hsh"):
     stem = Path(file).stem.strip(".")
     if stem not in filesbloom:
         with open(file,"rt") as f:
@@ -70,7 +70,7 @@ for file in glob("/home/archiveteam/CAH/bloom/*.txt"):
         filesfailed.add(stem)
 
 clipped_counter = 0
-for file in glob("/home/archiveteam/CAH/clipped/*"):
+for file in glob("/home/archiveteam/CAH/clipped/*.clp"):
     stem = Path(file).stem.strip(".")
     if stem not in filesclipped:
         with open(file,"rt") as f:

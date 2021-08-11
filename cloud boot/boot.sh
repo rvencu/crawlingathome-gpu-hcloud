@@ -4,17 +4,17 @@ sudo su root
 apt update
 yes | DEBIAN_FRONTEND=noninteractive apt upgrade
 yes | apt install python3-pip git build-essential libssl-dev libffi-dev python3-dev libwebp-dev libjpeg-dev libwebp-dev
-echo 'CAH_NICKNAME="rvencu-multicpu"' >> /etc/environment
+echo 'CAH_NICKNAME="rvencu-ecompute"' >> /etc/environment
 echo 'CLOUD="alibaba"' >> /etc/environment
 
-fallocate -l 512M /swapfile
-chmod 600 /swapfile
-mkswap /swapfile
-swapon /swapfile
-cp /etc/fstab /etc/fstab.bak
-echo "/swapfile none swap sw 0 0" >> /etc/fstab
-sysctl vm.swappiness=10
-echo "vm.swappiness=10" >> /etc/sysctl.conf
+#fallocate -l 512M /swapfile
+#chmod 600 /swapfile
+#mkswap /swapfile
+#swapon /swapfile
+#cp /etc/fstab /etc/fstab.bak
+#echo "/swapfile none swap sw 0 0" >> /etc/fstab
+#sysctl vm.swappiness=10
+#echo "vm.swappiness=10" >> /etc/sysctl.conf
 
 adduser --system --group --shell /bin/bash crawl
 echo 'crawl     ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
