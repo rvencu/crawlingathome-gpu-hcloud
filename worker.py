@@ -38,17 +38,20 @@ class Tracer(trio.abc.Instrument):
         self.imgproc_duration = 0
         self.download_duration = 0
         self.error_duration = 0
+        self.bloom = 0
 
     def task_exited(self, task):
         if task.custom_sleep_data is not None:
-            if task.custom_sleep_data[0] == 1: # this is exception
+            if task.custom_sleep_data[0] in [1, 3]: # this is exception
                 self.exceptions += 1
                 self.error_duration += task.custom_sleep_data[2]
             if task.custom_sleep_data[0] == 0: # this is image downloaded
                 self.download_duration += task.custom_sleep_data[1]
                 self.imgproc_duration += task.custom_sleep_data[2]
                 self.downloads += 1
-    
+            if task.custom_sleep_data[0] == 3:
+                self.bloom += 1
+
     def after_run(self):
         rate = round(self.exceptions / (self.exceptions + self.downloads + sys.float_info.epsilon), 2)
         avg_download = round(self.download_duration / (self.downloads + sys.float_info.epsilon), 2)
@@ -57,6 +60,7 @@ class Tracer(trio.abc.Instrument):
         print(f"[instrumentation] While scraping there were {self.exceptions} errors within {self.downloads + self.exceptions} candidates (error rate = {rate * 100} %). {self.downloads} images were downloaded.")
         print(f"[instrumentation] Cumulative image processing duration {round(self.imgproc_duration, 2)} s.")
         print(f"[instrumentation] Average downloading time {avg_download} s/img, image processing time {avg_process} s/img, exceptions processing time {avg_error} s/link")
+        print(f"[instrumentation] Localbloom catched {self.bloom} urls")
 
 
 def remove_bad_chars(text):
@@ -115,8 +119,10 @@ def parse_wat(content, start, line_count):
             if any( x in url for x in [".svg", ".gif", "data:image", "javascript:"] ):
                 continue
             # reject links found in blocked list
+            domain = "unknown"
             try:
-                if urlparse(url).netloc in blocked:
+                domain = urlparse(url).netloc
+                if domain in blocked:
                     continue
             except:
                 # cannot even parse the url
@@ -143,7 +149,7 @@ def parse_wat(content, start, line_count):
                         break
                 if clp:
                     continue
-                valid_data.append((url, alt_text, license))
+                valid_data.append((url, alt_text, license, domain))
     return ([
         t for t in {tuple(i) for i in valid_data}
     ], clpd)  # use a dict in order to remove duplicate tuples from list
@@ -189,7 +195,7 @@ def process_img_content(response, alt_text, license, sample_id):
     return [str(sample_id), out_fname, response.url, alt_text, width, height, license]
 
 
-async def request_image(datas, start_sampleid):
+async def request_image(datas, start_sampleid, localbloom):
     """
     This function initiates many parallel async connections to try download the images from provided links
     
@@ -212,25 +218,29 @@ async def request_image(datas, start_sampleid):
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     }
 
-    async def _request(data, sample_id):
+    async def _request(data, sample_id, localbloom):
         while True:
             start=time.time()
 
-            url, alt_text, license = data
+            url, alt_text, license, domain = data
             # the following 2 lines are related to Trio Instrument to capture events from multiple threads
             task = trio.lowlevel.current_task()
             try:
-                response = await session.get(url, timeout=10, connection_timeout=20)
-                dltime = round(time.time()-start, 2)
-                start=time.time()
-                proces = process_img_content(
-                    # tune timeout and connection_timeout to grab more or less files. shorter timeouts will exclude bad performing websites
-                    response, alt_text, license, sample_id
-                )
-                proctime = round(time.time()-start, 2)
-                task.custom_sleep_data = (0, dltime, proctime) # for success do not count errors
-                if proces is not None:
-                    tmp_data.append(proces)
+                if url not in localbloom:
+                    response = await session.get(url, timeout=10, connection_timeout=20)
+                    dltime = round(time.time()-start, 2)
+                    start=time.time()
+                    proces = process_img_content(
+                        # tune timeout and connection_timeout to grab more or less files. shorter timeouts will exclude bad performing websites
+                        response, alt_text, license, sample_id
+                    )
+                    proctime = round(time.time()-start, 2)
+                    task.custom_sleep_data = (0, dltime, proctime) # for success do not count errors
+                    if proces is not None:
+                        tmp_data.append(proces)
+                        localbloom.add(url)
+                else:
+                    task.custom_sleep_data = (3, 0, round(time.time()-start,2)) # when exception is hit, count it
             except Exception:
                 task.custom_sleep_data = (1, 0, round(time.time()-start,2)) # when exception is hit, count it
             return
@@ -238,7 +248,7 @@ async def request_image(datas, start_sampleid):
     async with trio.open_nursery() as n:
         for data in datas:
             async with limit:
-                n.start_soon(_request, data, start_sampleid)
+                n.start_soon(_request, data, start_sampleid, localbloom)
             start_sampleid += 1
             
     # trio makes sure at this point all async tasks were executed
@@ -248,7 +258,7 @@ async def request_image(datas, start_sampleid):
     return
 
 
-def dl_wat(valid_data, first_sample_id):
+def dl_wat(valid_data, first_sample_id, localbloom):
     """
     This function initiates download attempt of validated parsed links
     It launches multithreaded tasks by using trio module
@@ -257,13 +267,11 @@ def dl_wat(valid_data, first_sample_id):
 
     output: dataframe of downloaded images and their parameters
     """
-
-    import pandas as pd
     
     # Download every image available
     processed_samples = []
     #trio.run(request_image, valid_data, first_sample_id, instruments=[TrioProgress(len(valid_data), False)] )
-    trio.run( request_image, valid_data, first_sample_id, instruments=[Tracer()] )
+    trio.run( request_image, valid_data, first_sample_id, localbloom, instruments=[Tracer()] )
 
     for tmpf in glob(".tmp/*.json"):
         processed_samples.extend(ujson.load(open(tmpf)))
@@ -345,6 +353,7 @@ if __name__ == "__main__":
     client = cah.init(url=CRAWLINGATHOME_SERVER_URL, nickname=YOUR_NICKNAME_FOR_THE_LEADERBOARD, type="CPU")
 
     updateBloom("archiveteam@88.198.2.17::bloom", True)
+    localbloom = BloomFilter(max_elements=100000000, error_rate=0.01, filename=("/home/crawl/crawlingathome-gpu-hcloud/localbloom.bin",-1))
 
     # initialize stats variables for previous job
     last = 0
@@ -414,13 +423,13 @@ if __name__ == "__main__":
             parsed_df.to_csv(output_folder + out_fname + "_parsed.csv", index=False, sep="|")
 
             # attempt to spread out clusters of links pointing to the same domain name, improves crawling
-            random.shuffle(parsed_data) 
+            random.shuffle(parsed_data)
             
             lastlinks = len(parsed_data)
             print (f"[stats] This job has {lastlinks} candidates after removing {clpd} via bloom filters")
           
             # attempt to download validated links and save to disk for stats and blocking lists
-            dlparse_df = dl_wat( parsed_data, first_sample_id)
+            dlparse_df = dl_wat( parsed_data, first_sample_id, localbloom)
             dlparse_df.to_csv(output_folder + out_fname + ".csv", index=False, sep="|")
             dlparse_df.to_csv(output_folder + out_fname + "_unfiltered.csv", index=False, sep="|")
             print (f"[stats] pairs retained {len(dlparse_df)} in {round(time.time() - start, 2)}")
