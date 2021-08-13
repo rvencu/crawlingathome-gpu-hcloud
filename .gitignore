@@ -171,4 +171,5 @@ blocklists/*
 *.tar.gz
 hetzner.txt
 alibaba.txt
+oracle.txt
 test/

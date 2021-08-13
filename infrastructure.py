@@ -222,9 +222,14 @@ def reset_workers(cloud):
     with open(f"{cloud}.txt", "r") as f:
         for line in f.readlines():
             workers.append(line.split(" ")[0])
-    pclient = ParallelSSHClient(workers, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False )
-    output = pclient.run_command('source worker-reset.sh', sudo=True)
-    pclient.join(output)
+    if cloud in ["oracle"]:
+        pclient = ParallelSSHClient(workers, user='ubuntu', pkey="~/gpuhcloud/richard", identity_auth=False )
+        output = pclient.run_command('cd /home/crawl & source worker-reset.sh', sudo=True)
+        pclient.join(output)
+    else:
+        pclient = ParallelSSHClient(workers, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False )
+        output = pclient.run_command('source worker-reset.sh', sudo=True)
+        pclient.join(output)
 
 if __name__ == "__main__":
     command = sys.argv[1]

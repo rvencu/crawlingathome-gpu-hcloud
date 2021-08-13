@@ -37,7 +37,7 @@ write_files:
     rm -rf /home/crawl/gpuabort
     rm -rf /home/crawl/gpulocal
     rm -rf /home/crawl/*.tar.gz
-    cd crawlingathome-gpu-hcloud
+    cd /home/crawl/crawlingathome-gpu-hcloud
     rm worker.py
     wget https://raw.githubusercontent.com/rvencu/crawlingathome-gpu-hcloud/staged-clients/worker.py
     chown crawl:adm -R /home/crawl/
@@ -95,14 +95,14 @@ runcmd:
  - echo "session required pam_limits.so" >> /etc/pam.d/common-session
  - echo "fs.file-max = 2097152" >> /etc/sysctl.conf
 # secure ssh
- - sed -i -e '/^\(#\|\)PermitRootLogin/s/^.*$/PermitRootLogin no/' /etc/ssh/sshd_config
- - sed -i -e '/^\(#\|\)PasswordAuthentication/s/^.*$/PasswordAuthentication no/' /etc/ssh/sshd_config
- - sed -i -e '/^\(#\|\)X11Forwarding/s/^.*$/X11Forwarding no/' /etc/ssh/sshd_config
- - sed -i -e '/^\(#\|\)MaxAuthTries/s/^.*$/MaxAuthTries 2/' /etc/ssh/sshd_config
- - sed -i -e '/^\(#\|\)AllowTcpForwarding/s/^.*$/AllowTcpForwarding no/' /etc/ssh/sshd_config
- - sed -i -e '/^\(#\|\)AllowAgentForwarding/s/^.*$/AllowAgentForwarding no/' /etc/ssh/sshd_config
- - sed -i -e '/^\(#\|\)AuthorizedKeysFile/s/^.*$/AuthorizedKeysFile .ssh\/authorized_keys/' /etc/ssh/sshd_config
- - sed -i '$a AllowUsers crawl' /etc/ssh/sshd_config
+# - sed -i -e '/^\(#\|\)PermitRootLogin/s/^.*$/PermitRootLogin no/' /etc/ssh/sshd_config
+# - sed -i -e '/^\(#\|\)PasswordAuthentication/s/^.*$/PasswordAuthentication no/' /etc/ssh/sshd_config
+# - sed -i -e '/^\(#\|\)X11Forwarding/s/^.*$/X11Forwarding no/' /etc/ssh/sshd_config
+# - sed -i -e '/^\(#\|\)MaxAuthTries/s/^.*$/MaxAuthTries 2/' /etc/ssh/sshd_config
+# - sed -i -e '/^\(#\|\)AllowTcpForwarding/s/^.*$/AllowTcpForwarding no/' /etc/ssh/sshd_config
+# - sed -i -e '/^\(#\|\)AllowAgentForwarding/s/^.*$/AllowAgentForwarding no/' /etc/ssh/sshd_config
+# - sed -i -e '/^\(#\|\)AuthorizedKeysFile/s/^.*$/AuthorizedKeysFile .ssh\/authorized_keys/' /etc/ssh/sshd_config
+# - sed -i '$a AllowUsers crawl' /etc/ssh/sshd_config
  # install the script
  - cd /home/crawl
  - git clone https://github.com/rvencu/crawlingathome-gpu-hcloud --branch staged-clients

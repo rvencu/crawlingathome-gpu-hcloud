@@ -4,8 +4,8 @@ sudo su root
 apt update
 yes | DEBIAN_FRONTEND=noninteractive apt upgrade
 yes | apt install python3-pip git build-essential libssl-dev libffi-dev python3-dev libwebp-dev libjpeg-dev libwebp-dev
-echo 'CAH_NICKNAME="rvencu-ecompute"' >> /etc/environment
-echo 'CLOUD="alibaba"' >> /etc/environment
+echo 'CAH_NICKNAME="rvencu-oracle"' >> /etc/environment
+echo 'CLOUD="oracle"' >> /etc/environment
 
 #fallocate -l 512M /swapfile
 #chmod 600 /swapfile
@@ -31,7 +31,7 @@ echo 'rm -rf /home/crawl/gpusemaphore' >> /home/crawl/worker-reset.sh
 echo 'rm -rf /home/crawl/gpuabort' >> /home/crawl/worker-reset.sh
 echo 'rm -rf /home/crawl/gpulocal' >> /home/crawl/worker-reset.sh
 echo 'rm -rf /home/crawl/*.tar.gz' >> /home/crawl/worker-reset.sh
-echo 'cd crawlingathome-gpu-hcloud' >> /home/crawl/worker-reset.sh
+echo 'cd /home/crawl/crawlingathome-gpu-hcloud' >> /home/crawl/worker-reset.sh
 echo 'rm worker.py' >> /home/crawl/worker-reset.sh
 echo 'wget https://raw.githubusercontent.com/rvencu/crawlingathome-gpu-hcloud/staged-clients/worker.py' >> /home/crawl/worker-reset.sh
 echo 'chown crawl:adm -R /home/crawl/' >> /home/crawl/worker-reset.sh
