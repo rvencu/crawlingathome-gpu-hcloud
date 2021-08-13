@@ -360,7 +360,7 @@ if __name__ == "__main__":
     # initialize stats variables for previous job
     last = 0
 
-    while client.jobCount() > 0:
+    while True:
         try:
             lastext = f". Last job duration: {last}"
 
