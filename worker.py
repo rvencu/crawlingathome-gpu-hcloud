@@ -6,6 +6,7 @@ import trio
 import uuid
 import ftfy
 import math
+import gzip
 import ujson
 import shutil
 import random
@@ -19,6 +20,7 @@ from io import BytesIO
 from requests import get
 from threading import Thread
 import crawlingathome_client as cah
+from crawlingathome_client.temp import TempCPUWorker
 from bloom_filter2 import BloomFilter
 from urllib.parse import urljoin, urlparse
 sys.path.append('./crawlingathome-worker/')
@@ -350,16 +352,15 @@ if __name__ == "__main__":
     print (f"starting session under `{YOUR_NICKNAME_FOR_THE_LEADERBOARD}` nickname")
 
     # connect to C@H server and initialize client
-    client = cah.init(url=CRAWLINGATHOME_SERVER_URL, nickname=YOUR_NICKNAME_FOR_THE_LEADERBOARD, type="CPU")
+    client = TempCPUWorker.init(url=CRAWLINGATHOME_SERVER_URL, nickname=YOUR_NICKNAME_FOR_THE_LEADERBOARD, type="CPU")
 
     updateBloom("archiveteam@88.198.2.17::bloom", True)
     localbloom = BloomFilter(max_elements=100000000, error_rate=0.01, filename=("/home/crawl/crawlingathome-gpu-hcloud/localbloom.bin",-1))
 
     # initialize stats variables for previous job
     last = 0
-    loop = 0
 
-    while client.jobCount() > 0 and client.isAlive():
+    while client.jobCount() > 0:
         try:
             lastext = f". Last job duration: {last}"
 
@@ -376,77 +377,86 @@ if __name__ == "__main__":
             os.mkdir(img_output_folder)
             os.mkdir(".tmp")
 
-            #randomize updates
-            n = 3
-            modulo = random.randint(0, n-1)
             # get new job and download the wat file in parallel with bloom updates
-            if loop > 0 and loop % n == modulo:
-                t = Thread(target=updateBloom, args=["archiveteam@88.198.2.17::bloom"])
-                t.start()
+
+            updateBloom("archiveteam@88.198.2.17::bloom")
+
 
             client.newJob()
-            client.downloadShard()
+            #client.downloadShard()
 
-            if loop > 0 and loop % n == modulo:
-                t.join()
+            with get(client.wat, stream=True) as r:
+                r.raise_for_status()
+                with open("temp.gz", 'w+b') as f:
+                    for chunk in r.iter_content(chunk_size=8192): 
+                        f.write(chunk)
+        
+            with gzip.open('temp.gz', 'rb') as f_in:
+                with open('shard.wat', 'w+b') as f_out:
+                    shutil.copyfileobj(f_in, f_out)
             
-            loop += 1
+            time.sleep(1) # Causes errors otherwise?
+            os.remove("temp.gz")
+            result = 0
+            prefixes = []
+
+            for shardno in range(2):
+                # retrieve job details and determine what part of the wat file to parse
+                first_sample_id = int(client.shards[shardno][1].start_id)
+                last_sample_id = int(client.shards[shardno][1].end_id)
+                shard_of_chunk = client.shards[shardno][1].shard # TODO
+
+                fd = FileData('shard.wat')
+
+                if shard_of_chunk == 0:
+                    start_index = fd[0]
+                if shard_of_chunk == 1:
+                    start_index = fd[ int(len(fd)*0.5) ]
+
+                lines = int(len(fd)*0.5)
+
+                # compute output file names base
+                out_fname = f"FIRST_SAMPLE_ID_IN_SHARD_{str(first_sample_id)}_LAST_SAMPLE_ID_IN_SHARD_{str(last_sample_id)}_{shard_of_chunk}"
+                print(f"[stats {shardno}] Shard acquired in {round(time.time()-start,2)} sec (including bloom updates)")
+                start = time.time()
+
+                # parse valid links from wat file
+                with open("shard.wat", "r") as infile:
+                    parsed_data, clpd = parse_wat(infile, start_index, lines)
+                print (f"[stats {shardno}] Parsed wat in {round(time.time()-start,2)} sec")
+                start = time.time()
+
+                # convert to dataframe and save to disk (for statistics and generating blocking lists)
+                parsed_df = pd.DataFrame(parsed_data, columns=["URL","TEXT","LICENSE","DOMAIN"])
+                parsed_df = parsed_df.drop_duplicates(subset=["URL"])
+                parsed_df.to_csv(output_folder + out_fname + "_parsed.csv", index=False, sep="|")
+
+                # attempt to spread out clusters of links pointing to the same domain name, improves crawling
+                random.shuffle(parsed_data)
+                
+                lastlinks = len(parsed_data)
+                print (f"[stats {shardno}] This job has {lastlinks} candidates after removing {clpd} via bloom filters")
             
-            # retrieve job details and determine what part of the wat file to parse
-            first_sample_id = int(client.start_id)
-            last_sample_id = int(client.end_id)
-            shard_of_chunk = client.shard_piece # TODO
+                # attempt to download validated links and save to disk for stats and blocking lists
+                dlparse_df = dl_wat( parsed_data, first_sample_id, localbloom)
+                dlparse_df.to_csv(output_folder + out_fname + ".csv", index=False, sep="|")
+                dlparse_df.to_csv(output_folder + out_fname + "_unfiltered.csv", index=False, sep="|")
+                print (f"[stats {shardno}] pairs retained {len(dlparse_df)} in {round(time.time() - start, 2)}")
+                print (f"[stats {shardno}] scraping efficiency {len(dlparse_df)/(time.time() - start)} img/sec")
+                print (f"[stats {shardno}] crawling efficiency {lastlinks/(time.time() - start)} links/sec")
 
-            fd = FileData('shard.wat')
-
-            if shard_of_chunk == 0:
-                start_index = fd[0]
-            if shard_of_chunk == 1:
-                start_index = fd[ int(len(fd)*0.5) ]
-
-            lines = int(len(fd)*0.5)
-
-            # compute output file names base
-            out_fname = f"FIRST_SAMPLE_ID_IN_SHARD_{str(first_sample_id)}_LAST_SAMPLE_ID_IN_SHARD_{str(last_sample_id)}_{shard_of_chunk}"
-            print(f"[stats] Shard acquired in {round(time.time()-start,2)} sec (including bloom updates)")
-            start = time.time()
-
-            # parse valid links from wat file
-            with open("shard.wat", "r") as infile:
-                parsed_data, clpd = parse_wat(infile, start_index, lines)
-            print (f"[stats] Parsed wat in {round(time.time()-start,2)} sec")
-            start = time.time()
-
-            # convert to dataframe and save to disk (for statistics and generating blocking lists)
-            parsed_df = pd.DataFrame(parsed_data, columns=["URL","TEXT","LICENSE","DOMAIN"])
-            parsed_df = parsed_df.drop_duplicates(subset=["URL"])
-            parsed_df.to_csv(output_folder + out_fname + "_parsed.csv", index=False, sep="|")
-
-            # attempt to spread out clusters of links pointing to the same domain name, improves crawling
-            random.shuffle(parsed_data)
-            
-            lastlinks = len(parsed_data)
-            print (f"[stats] This job has {lastlinks} candidates after removing {clpd} via bloom filters")
-          
-            # attempt to download validated links and save to disk for stats and blocking lists
-            dlparse_df = dl_wat( parsed_data, first_sample_id, localbloom)
-            dlparse_df.to_csv(output_folder + out_fname + ".csv", index=False, sep="|")
-            dlparse_df.to_csv(output_folder + out_fname + "_unfiltered.csv", index=False, sep="|")
-            print (f"[stats] pairs retained {len(dlparse_df)} in {round(time.time() - start, 2)}")
-            print (f"[stats] scraping efficiency {len(dlparse_df)/(time.time() - start)} img/sec")
-            print (f"[stats] crawling efficiency {lastlinks/(time.time() - start)} links/sec")
-
-            # at this point we finishes the CPU node job, need to make the data available for GPU worker
-            prefix = uuid.uuid4().hex
-            os.mkdir(prefix)
-            os.system(f"mv save/* {prefix}/")
-            result = upload(prefix, client.type, client.upload_address)
+                # at this point we finishes the CPU node job, need to make the data available for GPU worker
+                prefix = uuid.uuid4().hex
+                prefixes.append(f"rsync {prefix}")
+                os.mkdir(prefix)
+                os.system(f"mv save/* {prefix}/")
+                result += upload(prefix, "CPU", client.upload_address)
             if result == 0:
-                client.completeJob(f"rsync {prefix}")
+                client.completeJob(prefixes)
 
             last = round(time.time() - start0)
 
-            print(f"[stats] Job completed in {last} seconds")
+            print(f"[stats] 2 jobs completed in {last} seconds")
             
         except Exception as e:
             print (e)
