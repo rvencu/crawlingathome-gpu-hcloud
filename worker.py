@@ -352,7 +352,7 @@ if __name__ == "__main__":
     print (f"starting session under `{YOUR_NICKNAME_FOR_THE_LEADERBOARD}` nickname")
 
     # connect to C@H server and initialize client
-    client = TempCPUWorker.init(url=CRAWLINGATHOME_SERVER_URL, nickname=YOUR_NICKNAME_FOR_THE_LEADERBOARD, type="CPU")
+    client = TempCPUWorker(url=CRAWLINGATHOME_SERVER_URL, nickname=YOUR_NICKNAME_FOR_THE_LEADERBOARD)
 
     updateBloom("archiveteam@88.198.2.17::bloom", True)
     localbloom = BloomFilter(max_elements=100000000, error_rate=0.01, filename=("/home/crawl/crawlingathome-gpu-hcloud/localbloom.bin",-1))
