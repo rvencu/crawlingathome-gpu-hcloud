@@ -383,17 +383,7 @@ if __name__ == "__main__":
 
 
             client.newJob()
-            #client.downloadShard()
-
-            with get(client.wat, stream=True) as r:
-                r.raise_for_status()
-                with open("temp.gz", 'w+b') as f:
-                    for chunk in r.iter_content(chunk_size=8192): 
-                        f.write(chunk)
-        
-            with gzip.open('temp.gz', 'rb') as f_in:
-                with open('shard.wat', 'w+b') as f_out:
-                    shutil.copyfileobj(f_in, f_out)
+            client.downloadShard()
             
             time.sleep(1) # Causes errors otherwise?
             os.remove("temp.gz")
