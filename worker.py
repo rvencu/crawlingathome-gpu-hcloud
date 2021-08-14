@@ -6,7 +6,6 @@ import trio
 import uuid
 import ftfy
 import math
-import gzip
 import ujson
 import shutil
 import random
@@ -21,14 +20,15 @@ from io import BytesIO
 from requests import get
 from threading import Thread
 import crawlingathome_client as cah
-from random_user_agent.user_agent import UserAgent
-from random_user_agent.params import SoftwareName, OperatingSystem
-from crawlingathome_client.temp import TempCPUWorker
 from bloom_filter2 import BloomFilter
 from urllib.parse import urljoin, urlparse
-sys.path.append('./crawlingathome-worker/')
-sys.path.append('./fake_useragent/')
 from PIL import Image, ImageFile, UnidentifiedImageError 
+
+from random_user_agent.user_agent import UserAgent
+from crawlingathome_client.temp import TempCPUWorker
+from random_user_agent.params import SoftwareName, OperatingSystem
+
+sys.path.append('./crawlingathome-worker/')
 
 import asks
 asks.init("trio")
@@ -365,6 +365,7 @@ if __name__ == "__main__":
     # connect to C@H server and initialize client
     client = TempCPUWorker(url=CRAWLINGATHOME_SERVER_URL, nickname=YOUR_NICKNAME_FOR_THE_LEADERBOARD)
 
+    # initial bloom filters upload
     updateBloom("archiveteam@88.198.2.17::bloom", True)
     localbloom = BloomFilter(max_elements=100000000, error_rate=0.01, filename=("/home/crawl/crawlingathome-gpu-hcloud/localbloom.bin",-1))
 
@@ -378,15 +379,12 @@ if __name__ == "__main__":
             start = time.time()
             start0 = start
 
-            # get new job and download the wat file in parallel with bloom updates
-
+            # updating bloom filter
             updateBloom("archiveteam@88.198.2.17::bloom")
 
 
             client.newJob()
             client.downloadWat()
-
-            print(client.shards)
             
             result = 0
             prefixes = {}
@@ -456,7 +454,7 @@ if __name__ == "__main__":
 
             last = round(time.time() - start0)
 
-            print(f"[stats] 2 jobs completed in {last} seconds")
+            print(f"[stats] WAT job completed in {last} seconds")
             
         except Exception as e:
             print (e)
