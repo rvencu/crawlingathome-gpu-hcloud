@@ -386,7 +386,7 @@ if __name__ == "__main__":
             client.newJob()
             client.downloadWat()
 
-            print(client)
+            print(client.shards)
             
             result = 0
             prefixes = {}
