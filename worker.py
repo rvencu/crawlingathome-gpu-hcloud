@@ -385,8 +385,6 @@ if __name__ == "__main__":
             client.newJob()
             client.downloadWat()
             
-            time.sleep(1) # Causes errors otherwise?
-            os.remove("temp.gz")
             result = 0
             prefixes = {}
 
