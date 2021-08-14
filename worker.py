@@ -385,9 +385,14 @@ if __name__ == "__main__":
 
             client.newJob()
             client.downloadWat()
+
+            print(client)
             
             result = 0
             prefixes = {}
+
+            fd = FileData('shard.wat')
+            lines = int(len(fd)*0.5)
 
             for shard_of_chunk in range(2):
                 # clear working folders for a new job
@@ -404,15 +409,10 @@ if __name__ == "__main__":
                 first_sample_id = np.int64(client.shards[shard_of_chunk][1]["start_id"])
                 last_sample_id = np.int64(client.shards[shard_of_chunk][1]["end_id"])
     
-
-                fd = FileData('shard.wat')
-
                 if shard_of_chunk == 0:
                     start_index = fd[0]
                 if shard_of_chunk == 1:
                     start_index = fd[ int(len(fd)*0.5) ]
-
-                lines = int(len(fd)*0.5)
 
                 # compute output file names base
                 out_fname = f"FIRST_SAMPLE_ID_IN_SHARD_{str(first_sample_id)}_LAST_SAMPLE_ID_IN_SHARD_{str(last_sample_id)}_{shard_of_chunk}"
