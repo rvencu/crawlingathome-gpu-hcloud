@@ -308,7 +308,7 @@ def updateBloom(target, initial=False):
     else:
         #overwrite only active filter
         if (os.getenv("CLOUD") in ["hetzner","alibaba"]):
-            os.system(f"rsync -av --partial --inplace --progress {target}/*_active.bin /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
+            os.system(f"rsync -av --partial --inplace --progress {target}/clipped_active.bin /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
         else:
             os.system(f'wget -m -np -c -U "Crawling@Home" --tries=15 -R "index.html*,bloom*.bin" -A "*_active.bin" "http://the-eye.eu/public/AI/cahblacklists/"')
             os.system("cp ./the-eye.eu/public/AI/cahblacklists/* /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
@@ -383,12 +383,12 @@ if __name__ == "__main__":
 
 
             client.newJob()
-            client.downloadShard()
+            client.downloadWat()
             
             time.sleep(1) # Causes errors otherwise?
             os.remove("temp.gz")
             result = 0
-            prefixes = []
+            prefixes = {}
 
             for shardno in range(2):
                 # retrieve job details and determine what part of the wat file to parse
@@ -437,7 +437,7 @@ if __name__ == "__main__":
 
                 # at this point we finishes the CPU node job, need to make the data available for GPU worker
                 prefix = uuid.uuid4().hex
-                prefixes.append(f"rsync {prefix}")
+                prefixes[str(client.shards[shardno][0])] = f"rsync {prefix}"
                 os.mkdir(prefix)
                 os.system(f"mv save/* {prefix}/")
                 result += upload(prefix, "CPU", client.upload_address)
