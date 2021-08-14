@@ -74,7 +74,8 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                     #os.mkdir("./"+ job)
                     client.downloadShard()
 
-                    if len(glob(f"{job}/*.csv")) == 0:
+                    # test for csv and for images folder
+                    if len(glob(f"{job}/*.csv")) == 0 or not os.path.exists(f"./{job}/images"):
                         client.invalidURL()
                         print (f"[io {i}] invalid job detected: {job}")
                         continue
