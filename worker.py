@@ -378,16 +378,6 @@ if __name__ == "__main__":
             start = time.time()
             start0 = start
 
-            # clear working folders for a new job
-            if os.path.exists(output_folder):
-                shutil.rmtree(output_folder, ignore_errors=True)
-            if os.path.exists(".tmp"):
-                shutil.rmtree(".tmp")
-
-            os.mkdir(output_folder)
-            os.mkdir(img_output_folder)
-            os.mkdir(".tmp")
-
             # get new job and download the wat file in parallel with bloom updates
 
             updateBloom("archiveteam@88.198.2.17::bloom")
@@ -399,11 +389,21 @@ if __name__ == "__main__":
             result = 0
             prefixes = {}
 
-            for shardno in range(2):
+            for shard_of_chunk in range(2):
+                # clear working folders for a new job
+                if os.path.exists(output_folder):
+                    shutil.rmtree(output_folder, ignore_errors=True)
+                if os.path.exists(".tmp"):
+                    shutil.rmtree(".tmp")
+
+                os.mkdir(output_folder)
+                os.mkdir(img_output_folder)
+                os.mkdir(".tmp")
+
                 # retrieve job details and determine what part of the wat file to parse
-                first_sample_id = np.int64(client.shards[shardno][1]["start_id"])
-                last_sample_id = np.int64(client.shards[shardno][1]["end_id"])
-                shard_of_chunk = client.shards[shardno][1]["shard"] # TODO
+                first_sample_id = np.int64(client.shards[shard_of_chunk][1]["start_id"])
+                last_sample_id = np.int64(client.shards[shard_of_chunk][1]["end_id"])
+    
 
                 fd = FileData('shard.wat')
 
@@ -416,13 +416,13 @@ if __name__ == "__main__":
 
                 # compute output file names base
                 out_fname = f"FIRST_SAMPLE_ID_IN_SHARD_{str(first_sample_id)}_LAST_SAMPLE_ID_IN_SHARD_{str(last_sample_id)}_{shard_of_chunk}"
-                print(f"[stats {shardno}] Shard acquired in {round(time.time()-start,2)} sec (including bloom updates)")
+                print(f"[stats {shard_of_chunk}] Shard acquired in {round(time.time()-start,2)} sec (including bloom updates)")
                 start = time.time()
 
                 # parse valid links from wat file
                 with open("shard.wat", "r") as infile:
                     parsed_data, clpd = parse_wat(infile, start_index, lines)
-                print (f"[stats {shardno}] Parsed wat in {round(time.time()-start,2)} sec")
+                print (f"[stats {shard_of_chunk}] Parsed wat in {round(time.time()-start,2)} sec")
                 start = time.time()
 
                 # convert to dataframe and save to disk (for statistics and generating blocking lists)
@@ -434,19 +434,19 @@ if __name__ == "__main__":
                 random.shuffle(parsed_data)
                 
                 lastlinks = len(parsed_data)
-                print (f"[stats {shardno}] This job has {lastlinks} candidates after removing {clpd} via bloom filters")
+                print (f"[stats {shard_of_chunk}] This job has {lastlinks} candidates after removing {clpd} via bloom filters")
             
                 # attempt to download validated links and save to disk for stats and blocking lists
                 dlparse_df = dl_wat( parsed_data, first_sample_id, localbloom)
                 dlparse_df.to_csv(output_folder + out_fname + ".csv", index=False, sep="|")
                 dlparse_df.to_csv(output_folder + out_fname + "_unfiltered.csv", index=False, sep="|")
-                print (f"[stats {shardno}] pairs retained {len(dlparse_df)} in {round(time.time() - start, 2)}")
-                print (f"[stats {shardno}] scraping efficiency {len(dlparse_df)/(time.time() - start)} img/sec")
-                print (f"[stats {shardno}] crawling efficiency {lastlinks/(time.time() - start)} links/sec")
+                print (f"[stats {shard_of_chunk}] pairs retained {len(dlparse_df)} in {round(time.time() - start, 2)}")
+                print (f"[stats {shard_of_chunk}] scraping efficiency {len(dlparse_df)/(time.time() - start)} img/sec")
+                print (f"[stats {shard_of_chunk}] crawling efficiency {lastlinks/(time.time() - start)} links/sec")
 
                 # at this point we finishes the CPU node job, need to make the data available for GPU worker
                 prefix = uuid.uuid4().hex
-                prefixes[str(client.shards[shardno][0])] = f"rsync {prefix}"
+                prefixes[str(client.shards[shard_of_chunk][0])] = f"rsync {prefix}"
                 os.mkdir(prefix)
                 os.system(f"mv save/* {prefix}/")
                 result += upload(prefix, "CPU", client.upload_address)
