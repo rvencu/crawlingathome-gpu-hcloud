@@ -1,11 +1,8 @@
-# use this file inside hourly cron on the cpu to gpu rsync target server to automatically cleanup the disk
-# folder structure is
-# /home/archiveteam/CAH/gpujobs corresponding to archiveteam@IP::gpujobs rsync target
-
 import os
-from glob import glob
-import requests
 import time
+import requests
+from glob import glob
+import os.path as path
 from datetime import datetime
 
 now = datetime.now().strftime("%Y/%m/%d_%H:%M")
@@ -19,6 +16,8 @@ all_files = []
 delete_files = []
 
 for file in list_of_files:
+    if time.time() - path.getmtime(file) < 3600:
+        continue
     uuid = file.split("/")[5].split(".")[0]
     files_batch.append(f"rsync {uuid}")
     i += 1
