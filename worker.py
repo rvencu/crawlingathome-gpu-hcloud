@@ -21,7 +21,8 @@ from io import BytesIO
 from requests import get
 from threading import Thread
 import crawlingathome_client as cah
-from fake_useragent import UserAgent
+from random_user_agent.user_agent import UserAgent
+from random_user_agent.params import SoftwareName, OperatingSystem
 from crawlingathome_client.temp import TempCPUWorker
 from bloom_filter2 import BloomFilter
 from urllib.parse import urljoin, urlparse
@@ -214,11 +215,16 @@ async def request_image(datas, start_sampleid, localbloom):
     # change the number of parallel connections based on CPU speed, network capabilities, etc.
     # the number of 192 is optimized for 1 vCPU droplet at Hetzner Cloud (code CX11)
     session = asks.Session(connections=164)
-    ua = UserAgent()
-    ua.update()
+
+    software_names = [SoftwareName.CHROME.value]
+    operating_systems = [OperatingSystem.WINDOWS.value, OperatingSystem.LINUX.value]   
+
+    user_agent_rotator = UserAgent(software_names=software_names, operating_systems=operating_systems, limit=2000)
+    user_agent = user_agent_rotator.get_random_user_agent()
+
     # try to make the bot website friendly
     session.headers = {
-        "User-Agent": ua.random,
+        "User-Agent": user_agent,
         "Accept-Language": "en-US",
         "Accept-Encoding": "gzip, deflate",
         "Referer": "https://www.google.com",

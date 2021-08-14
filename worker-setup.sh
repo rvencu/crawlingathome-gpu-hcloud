@@ -8,5 +8,5 @@ export CAH_NICKNAME=$nickname
 git clone "https://github.com/TheoCoombes/crawlingathome" crawlingathome_client
 pip3 install -r crawlingathome_client/requirements.txt --no-cache-dir
 pip3 install -r worker-requirements.txt --no-cache-dir
-pip install fake-useragent
+pip install random_user_agent
 
