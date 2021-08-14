@@ -21,7 +21,7 @@ from io import BytesIO
 from requests import get
 from threading import Thread
 import crawlingathome_client as cah
-from fake_useragent import UserAgent
+from fake-useragent import UserAgent
 from crawlingathome_client.temp import TempCPUWorker
 from bloom_filter2 import BloomFilter
 from urllib.parse import urljoin, urlparse
@@ -61,7 +61,7 @@ class Tracer(trio.abc.Instrument):
         avg_download = round(self.download_duration / (self.downloads + sys.float_info.epsilon), 2)
         avg_process = round(self.imgproc_duration / (self.downloads + sys.float_info.epsilon), 2)
         avg_error = round(self.error_duration / (self.exceptions + sys.float_info.epsilon), 2)
-        print(f"[instrumentation] While scraping there were {self.exceptions} errors within {self.downloads + self.exceptions} candidates (error rate = {rate * 100} %). {self.downloads} images were downloaded.")
+        print(f"[instrumentation] While scraping there were {self.exceptions} errors within {self.downloads + self.exceptions} candidates (error rate = {round(rate * 100,2)} %). {self.downloads} images were downloaded.")
         print(f"[instrumentation] Cumulative image processing duration {round(self.imgproc_duration, 2)} s.")
         print(f"[instrumentation] Average downloading time {avg_download} s/img, image processing time {avg_process} s/img, exceptions processing time {avg_error} s/link")
         print(f"[instrumentation] Localbloom catched {self.bloom} urls")
