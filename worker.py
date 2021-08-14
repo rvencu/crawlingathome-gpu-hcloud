@@ -214,7 +214,7 @@ async def request_image(datas, start_sampleid, localbloom):
     session = asks.Session(connections=164)
     # try to make the bot website friendly
     session.headers = {
-        "User-Agent": "Robert Vance - checking pics for my AI project (2021)",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:73.0) Gecko/20100101 Firefox/73.0",
         "Accept-Language": "en-US",
         "Accept-Encoding": "gzip, deflate",
         "Referer": "https://www.google.com",
