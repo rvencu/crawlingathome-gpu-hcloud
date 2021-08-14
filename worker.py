@@ -26,6 +26,7 @@ from crawlingathome_client.temp import TempCPUWorker
 from bloom_filter2 import BloomFilter
 from urllib.parse import urljoin, urlparse
 sys.path.append('./crawlingathome-worker/')
+sys.path.append('./fake_useragent/')
 from PIL import Image, ImageFile, UnidentifiedImageError 
 
 import asks
