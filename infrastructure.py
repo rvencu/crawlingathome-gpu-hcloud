@@ -192,11 +192,11 @@ def exists_remote(host, path, silent=False):
     if status == 1 or status == 255:
         return False
 
-async def wait_for_infrastructure (workers):
+async def wait_for_infrastructure (workers): # here workers is a list of IPs
     print(f"[swarm] Waiting for {len(workers)} nodes to become ready. Polling starts after 4 minutes...")
     time.sleep(240)
     ready = []
-    pclient = ParallelSSHClient(workers[0], user='crawl', pkey="~/.ssh/id_cah", identity_auth=False )
+    pclient = ParallelSSHClient(workers, user='crawl', pkey="~/.ssh/id_cah", identity_auth=False )
     while len(ready) < len(workers):
         print(".", end = "", flush=True)
         ready = []
