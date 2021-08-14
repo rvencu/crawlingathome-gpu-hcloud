@@ -21,7 +21,7 @@ from io import BytesIO
 from requests import get
 from threading import Thread
 import crawlingathome_client as cah
-from fake-useragent import UserAgent
+from fake_useragent import UserAgent
 from crawlingathome_client.temp import TempCPUWorker
 from bloom_filter2 import BloomFilter
 from urllib.parse import urljoin, urlparse
