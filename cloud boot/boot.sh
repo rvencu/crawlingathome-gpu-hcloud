@@ -72,19 +72,18 @@ echo "sleep 1" >> /home/crawl/crawl.sh
 echo "done" >> /home/crawl/crawl.sh
 chmod 744 /home/crawl/crawl.sh
 mkdir /home/crawl/.ssh
-echo 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQCc7pu7rHD7SYUh2LLiy5So0pHcSYMSGD8j+mvmgN0c3XX+YEzfHiv1jj5qqnv/VreOzsUSiMNkNenFsbR+6UV/ZSDX3L/df0iMD1SUhOUMh/AJDrA4OzmJUcs3mGeQc22FEBNw+fYii5DNeCtwvKi+ToFQ+uI9iibEldIKC7oOhcFO9lRfK4QZe2cEhIldSL3n/jfrEaRbvj5XmVvpXa0Z4c1yfuekJM0osSjAgfbFIoQ/T3Hn/spN0osaxhbxpdeoGRtbqpUWrtUIA0JBDdWBvNzkSMyHJNUbKA+rGJmaJyCeXIb7MKzbInmuh+pZ8BdZQLpWhq/LrjHxPa19lbDabl40l/0fLjs+u1G6F4sMY/ZtKXhCZGeT5quHnDeJH/a3gCmNJD/yvftlPTN3i+nyg3YxTvs846Ge4IkGI7fsq1KmLxEA9N2RwFOekjMqxXagnZasOscreUjNwlzQiXA/vOIXNpCTJ6cOT/EWHjg2eiGbaaScs+V4GNlJHSkVRSTfoB5RSY8qFUOE3urBjLm2yur9Y1ZG1DDNKsC7rCxFXgFl7F3JEeDN3PRso0Tlv2FGOoWEjjwSeGOmamYP+Wdj30PZemeYjqRDvehTP1xRHEHByxqpeYeCQPgoYWzD+VQNWnMUMw1ajgf23M2xf5fVwGiuG1C66X+z0diGyLFgLQ== rvencu@bigai' >> /home/crawl/.ssh/authorized_keys
+echo 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDWDVWfBVJcJqiJdS4b45M/nF/JKD91bENYJS5mOlrX775KW92FvZrrCWdSORdEzEK3dOPPcTBU/wlXZLLVgJgM48p/ZO6ya+bb49TFR43+CGXUvd6PGLF3xCjiL3+hfwXGGuBJph/BdwG7Ki/kEKiRZZPPnlDGmMj9ddntSHHWw7+ZssSU8IcIeQcE8YgoMja0tebzCy4s6G2te8IGBXv1bdEyzE2xhO4K8I2MPWLLmJlSwmu6hJ9QL6vbYTI0zwM46Xwu65lG4M7zUMUjwfXGsKDUySlonugAqWUb5BcrVypnFSJnDBSirW948ie+TeYd2lzVH7vnB7oyomCRLC9sBb5gpO5QWV2fU5sYEZfLCqnd15nhrW1tCjPD6IslwmnbiswBhcoV36v5nIK/zvr23lEX6N+vnI9ULRdvtuUvIwp26swWRH94GB8DiFhD+XKF+P72kTeBNiT5VgkPDOYqoeL/HR77jtbGkDNM78zAk5eFB1noqL/vsOLlrG9pAYaKhYSxYFsAtgDxR5/w6sb8EK71yYAL2YbJOtGbiUzSKysiT/HBy+VKiwfEq9FuAIlUrSkr1CAEfQEXtVdlOEvtb0gmlAk+f9WCHN4iiFLDw/AJFrhH3tDoXABgMEr/QI9Gt3Qej4NcNLGVfy5sarFbfuhVc/sYmSEbD1N/A9A//Q==' >> /home/crawl/.ssh/authorized_keys
 
 chown crawl:crawl -R /home/crawl/
 
 sudo -u crawl -i
 
-git clone https://github.com/rvencu/crawlingathome-gpu-hcloud --branch staged-clients
+git clone https://github.com/rvencu/crawlingathome-gpu-hcloud --branch full-wat
 cd crawlingathome-gpu-hcloud
 git clone "https://github.com/TheoCoombes/crawlingathome" crawlingathome_client
 pip3 install -r crawlingathome_client/requirements.txt --no-cache-dir
 pip3 install -r worker-requirements.txt --no-cache-dir
-yes | pip uninstall pillow
-CC="cc -mavx2" pip install -U --force-reinstall pillow-simd
+pip install random_user_agent
 
 exit
 

@@ -105,13 +105,12 @@ runcmd:
 # - sed -i '$a AllowUsers crawl' /etc/ssh/sshd_config
  # install the script
  - cd /home/crawl
- - git clone https://github.com/rvencu/crawlingathome-gpu-hcloud --branch staged-clients
+ - git clone https://github.com/rvencu/crawlingathome-gpu-hcloud --branch full-wat
  - cd crawlingathome-gpu-hcloud
  - git clone "https://github.com/TheoCoombes/crawlingathome" crawlingathome_client
  - pip3 install -r crawlingathome_client/requirements.txt --no-cache-dir
  - pip3 install -r worker-requirements.txt --no-cache-dir
- - yes | pip uninstall pillow
- - CC="cc -mavx2" pip install -U --force-reinstall pillow-simd
+ - pip install random_user_agent
  # make the script run as a service at startup
  - systemctl daemon-reload
  - systemctl enable crawl.service
