@@ -12,6 +12,7 @@ import shutil
 import random
 import hashlib
 import tarfile
+import numpy as np
 import pandas as pd
 import pycld2 as cld2
 from glob import glob
@@ -390,9 +391,9 @@ if __name__ == "__main__":
 
             for shardno in range(2):
                 # retrieve job details and determine what part of the wat file to parse
-                first_sample_id = int(client.shards[shardno][1].start_id)
-                last_sample_id = int(client.shards[shardno][1].end_id)
-                shard_of_chunk = client.shards[shardno][1].shard # TODO
+                first_sample_id = np.int64(client.shards[shardno][1]["start_id"])
+                last_sample_id = np.int64(client.shards[shardno][1]["end_id"])
+                shard_of_chunk = client.shards[shardno][1]["shard"] # TODO
 
                 fd = FileData('shard.wat')
 
