@@ -415,7 +415,7 @@ if __name__ == "__main__":
                     start_index = fd[ int(len(fd)*0.5) ]
 
                 # compute output file names base
-                out_fname = f"FIRST_SAMPLE_ID_IN_SHARD_{str(first_sample_id)}_LAST_SAMPLE_ID_IN_SHARD_{str(last_sample_id)}_{shard}"
+                out_fname = f"FIRST_SAMPLE_ID_IN_SHARD_{str(first_sample_id)}_LAST_SAMPLE_ID_IN_SHARD_{str(last_sample_id)}_{shard}_rvencu_full_wat"
                 print(f"[stats {shard_of_chunk}] Shard acquired in {round(time.time()-start,2)} sec (including bloom updates)")
                 start = time.time()
 

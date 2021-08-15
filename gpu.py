@@ -6,6 +6,7 @@ import uuid
 import shutil
 import curses
 import hashlib
+import fileinput
 import threading
 import clip_filter
 import pandas as pd
@@ -83,6 +84,16 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                         os.system(f"mv {file} stats/")
                     for file in glob(f"{job}/*_unfiltered.csv"):
                         os.system(f"mv {file} stats/")
+                    for file in glob(f"{job}/*.csv"):
+                        # Read in the file
+                        with open(file, 'rt') as f :
+                            filedata = f.read()
+                        # Replace the target string
+                        filedata = filedata.replace('\n|', '|')
+                        # Write the file out again
+                        with open(file, 'wt') as f:
+                            f.write(filedata)
+                    
                     #print (f"[io] job sent to GPU: {job}")
                     incomingqueue.put((i, job, client.upload_address))
                     
