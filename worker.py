@@ -217,7 +217,7 @@ async def request_image(datas, start_sampleid, localbloom):
     session = asks.Session(connections=164)
 
     software_names = [SoftwareName.CHROME.value]
-    operating_systems = [OperatingSystem.WINDOWS.value, OperatingSystem.LINUX.value]   
+    operating_systems = [OperatingSystem.LINUX.value]   
 
     user_agent_rotator = UserAgent(software_names=software_names, operating_systems=operating_systems, limit=2000)
     user_agent = user_agent_rotator.get_random_user_agent()
@@ -225,9 +225,10 @@ async def request_image(datas, start_sampleid, localbloom):
     # try to make the bot website friendly
     session.headers = {
         "User-Agent": user_agent,
-        "Accept-Language": "en-US",
+        "Accept-Language": "en-US,en;q=0.5",
         "Accept-Encoding": "gzip, deflate",
-        "Referer": "https://www.google.com",
+        "Referer": "https://google.com",
+        "DNT": "1",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     }
 
