@@ -12,6 +12,7 @@ import clip_filter
 import pandas as pd
 from glob import glob
 from tqdm import tqdm
+from PIL import Image
 from pathlib import Path
 from colorama import Fore
 from statistics import mode
@@ -93,6 +94,19 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                         # Write the file out again
                         with open(file, 'wt') as f:
                             f.write(filedata)
+                    # search for corrupt images
+                    for file in glob(f"{job}/*.csv"):
+                        df = pd.read_csv(file, sep="|")
+                        df["PATH"] = df.PATH.apply(lambda x: re.sub(r"^(.*)./save/[-]?[1-9][0-9]?[0-9]?/(.*)$", r"save/\2", x))
+                        df["PATH"] = df.apply(lambda x: "./" + job + "/" + x["PATH"].strip("save/"), axis=1)
+                        for index, row in df.iterrows():
+                            try:
+                                im = Image.open(row["PATH"])
+                                im.close()
+                            except:
+                                df = df.drop(index)
+                        df.to_csv(file, sep="|", index=False)
+                        del df
                     
                     #print (f"[io] job sent to GPU: {job}")
                     incomingqueue.put((i, job, client.upload_address))
@@ -190,6 +204,7 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
     while True:
         #print (f"[gpu] testing incoming queue size")
         if incomingqueue.qsize() >= groupsize:
+            start = time.time()
             t = threading.Thread(target=updateBloom)
             t.start()
             gpuflag.put(1)
@@ -216,8 +231,8 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             for i, job, item in shards:
                 dlparse_df = pd.read_csv(job + "/" + item + ".csv", sep="|")
                 
-                dlparse_df["PATH"] = dlparse_df.PATH.apply(lambda x: re.sub(r"^(.*)./save/[-]?[1-9][0-9]?[0-9]?/(.*)$", r"save/\2", x))
-                dlparse_df["PATH"] = dlparse_df.apply(lambda x: "./" + job + "/" + x["PATH"].strip("save/"), axis=1)
+                #dlparse_df["PATH"] = dlparse_df.PATH.apply(lambda x: re.sub(r"^(.*)./save/[-]?[1-9][0-9]?[0-9]?/(.*)$", r"save/\2", x))
+                #dlparse_df["PATH"] = dlparse_df.apply(lambda x: "./" + job + "/" + x["PATH"].strip("save/"), axis=1)
                 if group_parse is None:
                     group_parse = dlparse_df
                 else:
@@ -246,14 +261,13 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
 
             group_parse.to_csv("./stats/" + group_id + "_beforeclip.csv", index=False, sep="|") # I am using these to find out domains to filter from scraping
 
-            #print (f"[gpu] sending group to CLIP filter")
+            print (f"{Fore.YELLOW}[gpu] preparation done in {round(time.time()-start, 2)} sec.{Fore.RESET}")
             start = time.time()
             final_images, results = clip_filter.filter(group_parse, group_id, "./save/")
             
-            dedupe_ratio = round((duped - total) / duped, 2)
-            print(f"{Fore.GREEN}Got {final_images} images from {bloomed} bloomed from {total} deduped from {duped} (ratio {dedupe_ratio}) in {round(time.time()-start,2)} sec.")
+            dedupe_ratio = round((duped - total) / duped, 4)
+            print(f"{Fore.GREEN}[gpu] got {final_images} images from {bloomed} bloomed from {total} deduped from {duped} (ratio {dedupe_ratio}) in {round(time.time()-start, 2)} sec.")
             print(f"({groupsize} shards were grouped together and average duration per shard was {round((time.time()-start)/groupsize,2)} sec){Fore.RESET}")
-
             #print (f"[gpu] upload group results to rsync target")
             # find most required upload address among the grouped shards
             upload_address = mode(addresses)
@@ -262,9 +276,11 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             
             # dynamic adjustment of groupsize so we can get close to 8000 pairs per group as fast as possible
             gradient = int((final_images-20000)/7000)
+            oldgroupsize = groupsize
             groupsize = min( int(3 * first_groupsize) - 5 , groupsize - gradient )
             groupsize = max( groupsize - gradient, 3 )
-            print (f"groupsize changed to {groupsize}")
+            if groupsize != oldgroupsize:
+                print (f"{Fore.YELLOW}[gpu] groupsize changed to {groupsize}{Fore.RESET}")
             
             gpuflag.get()
             gpuflag.task_done()
