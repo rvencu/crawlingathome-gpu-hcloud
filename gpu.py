@@ -21,6 +21,16 @@ from bloom_filter2 import BloomFilter
 sys.path.append('./crawlingathome-worker/')
 from multiprocessing import JoinableQueue, Process
 
+import sentry_sdk
+sentry_sdk.init(
+    "https://78667479988545ec9fa78fba79638986@o576504.ingest.sentry.io/5909507",
+
+    # Set traces_sample_rate to 1.0 to capture 100%
+    # of transactions for performance monitoring.
+    # We recommend adjusting this value in production.
+    traces_sample_rate=1.0
+)
+
 '''
 GPU workflow:
     GPU workflow is divided in 3 processes to provide enough parallelism and ensure maximal GPU utilization
@@ -218,11 +228,15 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
 
                 all_csv_files = []
                 for path, subdir, files in os.walk(job):
-                    for file in glob(os.path.join(path, "*.csv")):
-                        all_csv_files.append(file)
+                    for file in files:
+                        if file.endswith(".csv"):
+                            all_csv_files.append(file)
                 # get name of csv file
                 out_path = all_csv_files[0]
-                shards.append((i, job, Path(out_path).stem.strip("_unfiltered").strip("_parsed").strip(".")))
+                print(out_path)
+                out_path = Path(out_path).stem
+                print(out_path)
+                shards.append((i, job, out_path))
                 addresses.append(address)
 
                 incomingqueue.task_done()
@@ -381,49 +395,50 @@ if __name__ == "__main__":
 
     updateBloom(True)
 
-    try:
+    #try:
 
-        # initial cleanup - delete all working files in case of crash recovery
-        reg_compile = re.compile(r"^\d{1,3}-\d{1,3}-\d{1,3}-\d{1,3}$")
-        for root, dirnames, filenames in os.walk("."):
-            for filename in filenames:
-                if filename.startswith("gpujob.zip_"):
-                    os.remove(filename)
-            for dir in dirnames:
-                if reg_compile.match(dir):
-                    shutil.rmtree(dir)
-        re_uuid = re.compile(r'[0-9a-f]{32}', re.I)
-        for root, dirnames, filenames in os.walk("."):
-            for dir in dirnames:
-                if re_uuid.match(dir):
-                    shutil.rmtree(dir)
-        re_gz = re.compile(r'.*.tar.gz.*', re.I)
-        for root, dirnames, filenames in os.walk("."):
-            for file in filenames:
-                if re_gz.match(file):
-                    os.remove(file)
-        
-        #initialize joinable queues to transfer messages between multiprocess processes
-        # Outbound queues, we need one for each io worker
-        outbound = []
-        for _ in range(int(3 * groupsize)): # we need 2x IO workers to keep GPU permanently busy
-             outbound.append(JoinableQueue())
-        inbound = JoinableQueue()
-        uploadqueue = JoinableQueue()
-        counter = JoinableQueue()
-        inpsize = JoinableQueue() # use this to communicate number of jobs downloading now
-        gpuflag = JoinableQueue() # use this to flag that gpu is processing
-        #errors = JoinableQueue() # use this to capture errors and warnings and route them to curses display
+    # initial cleanup - delete all working files in case of crash recovery
+    reg_compile = re.compile(r"^\d{1,3}-\d{1,3}-\d{1,3}-\d{1,3}$")
+    for root, dirnames, filenames in os.walk("."):
+        for filename in filenames:
+            if filename.startswith("gpujob.zip_"):
+                os.remove(filename)
+        for dir in dirnames:
+            if reg_compile.match(dir):
+                shutil.rmtree(dir)
+    re_uuid = re.compile(r'[0-9a-f]{32}', re.I)
+    for root, dirnames, filenames in os.walk("."):
+        for dir in dirnames:
+            if re_uuid.match(dir):
+                shutil.rmtree(dir)
+    re_gz = re.compile(r'.*.tar.gz.*', re.I)
+    for root, dirnames, filenames in os.walk("."):
+        for file in filenames:
+            if re_gz.match(file):
+                os.remove(file)
+    
+    #initialize joinable queues to transfer messages between multiprocess processes
+    # Outbound queues, we need one for each io worker
+    outbound = []
+    for _ in range(int(3 * groupsize)): # we need 2x IO workers to keep GPU permanently busy
+            outbound.append(JoinableQueue())
+    inbound = JoinableQueue()
+    uploadqueue = JoinableQueue()
+    counter = JoinableQueue()
+    inpsize = JoinableQueue() # use this to communicate number of jobs downloading now
+    gpuflag = JoinableQueue() # use this to flag that gpu is processing
+    #errors = JoinableQueue() # use this to capture errors and warnings and route them to curses display
 
-        # launch separate processes with specialized workers
-        io = Process(target=io_worker, args=[inbound, outbound, groupsize, YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL], daemon=True).start()
-        upd = Process(target=upload_worker, args=[uploadqueue, counter, outbound], daemon=True).start()
+    # launch separate processes with specialized workers
+    io = Process(target=io_worker, args=[inbound, outbound, groupsize, YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL], daemon=True).start()
+    upd = Process(target=upload_worker, args=[uploadqueue, counter, outbound], daemon=True).start()
 
-        #monitor = Process(target=monitor, args=[groupsize, inbound, outbound, counter, inpsize]).start()
-        #curses.wrapper(monitor2(nodes, inbound, outbound, counter, inpsize, stdscr, errors, gpuflag))        
-        
-        gpu_worker(inbound, uploadqueue, gpuflag, groupsize)
+    #monitor = Process(target=monitor, args=[groupsize, inbound, outbound, counter, inpsize]).start()
+    #curses.wrapper(monitor2(nodes, inbound, outbound, counter, inpsize, stdscr, errors, gpuflag))        
+    
+    gpu_worker(inbound, uploadqueue, gpuflag, groupsize)
 
+    '''
     except KeyboardInterrupt:
         print ("Keyboard interrupt")
         #curses.nocbreak()
@@ -434,3 +449,4 @@ if __name__ == "__main__":
     except Exception as e:
         print (f"general exception: {e}")
         sys.exit()
+    '''

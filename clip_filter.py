@@ -142,8 +142,8 @@ def df_tfrecords(df, output_fname):
                 str(df_image["SAMPLE_ID"]).encode("utf_8"),
                 image_data,
                 file_type.encode("utf_8"),
-                df_image["HEIGHT"],
-                df_image["WIDTH"],
+                int(df_image["HEIGHT"]),
+                int(df_image["WIDTH"]),
                 df_image["TEXT"].encode("utf_8"),
             )
             tfrecord_writer.write(example.SerializeToString())
