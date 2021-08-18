@@ -69,8 +69,12 @@ def parse_wat(content, start, line_count, want_update, bloom_processing, i):
     # failed-domains.txt contains failed domains, i.e. domains with image links and suitable alt texts that actually
     # do not produce any image. domains that mayb dissapeared, or are good at blocking scrapers. List is also learned from
     # past crawling effort
+    print(f"[multicpu {i}] I want to define filter objects")
+    bloom_processing.put(1) # value does not matter
     clipped = [BloomFilter(max_elements=200000000, error_rate=0.05, filename=(x,-1)) for x in glob("/home/crawl/crawlingathome-gpu-hcloud/blocklists/clipped*")]
-    blocked = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/failed-domains.bin",-1))    
+    blocked = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/failed-domains.bin",-1))
+    bloom_processing.get()
+    bloom_processing.task_done()
 
     clpd = 0
     valid_data = []
@@ -394,14 +398,6 @@ def proc_worker(i: int, want_update: JoinableQueue, bloom_processing: JoinableQu
 
             fd = FileData(tmp_folder + 'shard.wat')
             lines = int(len(fd)*0.5)
-
-            print(f"[multicpu {i}] I want to define filter objects")
-            bloom_processing.put(1) # value does not matter
-            bloom = BloomFilter(max_elements=200000000, error_rate=0.05, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/bloom200M.bin",-1))
-            clipped = BloomFilter(max_elements=200000000, error_rate=0.05, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/clipped.bin",-1))
-            blocked = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/failed-domains.bin",-1))
-            bloom_processing.get()
-            bloom_processing.task_done()
 
             for shard_of_chunk in range(2):
 
