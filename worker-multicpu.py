@@ -305,7 +305,7 @@ def updateBloom(want_update: JoinableQueue, queues: JoinableQueue, target ):
         os.system(f"rsync -av --partial --inplace --progress {target}/clipped*.bin /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
         os.system(f"rsync -av --partial --inplace --progress {target}/failed*.bin /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
     else:
-        os.system(f'wget -q --show-progress -m -np -c -U "Crawling@Home" --tries=15 -R "index.html*,bloom*.bin" "http://the-eye.eu/public/AI/cahblacklists/"')
+        os.system(f'wget -q -m -np -c -U "Crawling@Home" --tries=15 -R "index.html*,bloom*.bin" "http://the-eye.eu/public/AI/cahblacklists/"')
         os.system("mv ./the-eye.eu/public/AI/cahblacklists/* /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
 
     while True:
@@ -320,7 +320,7 @@ def updateBloom(want_update: JoinableQueue, queues: JoinableQueue, target ):
             if (os.getenv("CLOUD") in ["hetzner","alibaba"]):
                 os.system(f"rsync -av --partial --inplace --progress {target}/clipped_active.bin /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
             else:
-                os.system(f'wget -q --show-progress -m -np -c -U "Crawling@Home" --tries=15 -R "index.html*,bloom*.bin" -A "*_active.bin" "http://the-eye.eu/public/AI/cahblacklists/"')
+                os.system(f'wget -q -m -np -c -U "Crawling@Home" --tries=15 -R "index.html*,bloom*.bin" -A "*_active.bin" "http://the-eye.eu/public/AI/cahblacklists/"')
                 os.system("cp ./the-eye.eu/public/AI/cahblacklists/* /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
                 os.system("rm -rf ./the-eye.eu/public/AI/cahblacklists/*")
             print(f"[multicpu bloom] Updated bloom filters in {round(time.time()-start, 2)} sec")
