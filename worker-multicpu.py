@@ -47,12 +47,48 @@ asks.init("trio")
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True  # https://stackoverflow.com/a/47958486
 
+class Tracer(trio.abc.Instrument, i=""):
+
+    def __init__(self):
+        self.exceptions = 0
+        self.requests = 0
+        self.downloads = 0
+        self.imgproc_duration = 0
+        self.download_duration = 0
+        self.error_duration = 0
+        self.bloom = 0
+        self.i = i
+
+    def task_exited(self, task):
+        if task.custom_sleep_data is not None:
+            if task.custom_sleep_data[0] in [1, 3]: # this is exception
+                self.exceptions += 1
+                self.error_duration += task.custom_sleep_data[2]
+            if task.custom_sleep_data[0] == 0: # this is image downloaded
+                self.download_duration += task.custom_sleep_data[1]
+                self.imgproc_duration += task.custom_sleep_data[2]
+                self.downloads += 1
+            if task.custom_sleep_data[0] == 3:
+                self.bloom += 1
+
+    def after_run(self):
+        rate = round(self.exceptions / (self.exceptions + self.downloads + sys.float_info.epsilon), 2)
+        avg_download = round(self.download_duration / (self.downloads + sys.float_info.epsilon), 2)
+        avg_process = round(self.imgproc_duration / (self.downloads + sys.float_info.epsilon), 2)
+        avg_error = round(self.error_duration / (self.exceptions + sys.float_info.epsilon), 2)
+        print(f"[{self.i} instrumentation] While scraping there were {self.exceptions} errors within {self.downloads + self.exceptions} candidates (error rate = {round(rate * 100,2)} %). {self.downloads} images were downloaded.")
+        print(f"[{self.i} instrumentation] Cumulative image processing duration {round(self.imgproc_duration, 2)} s.")
+        print(f"[{self.i} instrumentation] Average downloading time {avg_download} s/img, image processing time {avg_process} s/img, exceptions processing time {avg_error} s/link")
+        print(f"[{self.i} instrumentation] Localbloom catched {self.bloom} urls")
+
+
+
 def remove_bad_chars(text):
     # cleanup text so language can be detected
     return "".join(c for c in text if c.isprintable())
 
 
-def parse_wat(content, start, line_count, want_update, bloom_processing, i):
+def parse_wat(content, start, line_count, i):
     """
     This function checks the wat file content and attempts to extract valid candidates of image urls and alt texts
 
@@ -69,24 +105,16 @@ def parse_wat(content, start, line_count, want_update, bloom_processing, i):
     # failed-domains.txt contains failed domains, i.e. domains with image links and suitable alt texts that actually
     # do not produce any image. domains that mayb dissapeared, or are good at blocking scrapers. List is also learned from
     # past crawling effort
-    print(f"[multicpu {i}] I want to define filter objects")
-    bloom_processing.put(1) # value does not matter
+    print(f"[multicpu {i}] defining filter objects")
     clipped = [BloomFilter(max_elements=200000000, error_rate=0.05, filename=(x,-1)) for x in glob("/home/crawl/crawlingathome-gpu-hcloud/blocklists/clipped*")]
     blocked = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/failed-domains.bin",-1))
-    bloom_processing.get()
-    bloom_processing.task_done()
-
+    
     clpd = 0
     valid_data = []
     content.seek(start)
 
-    #wait while bloom filters are updating
-    while want_update.qsize() > 0:
-        print(f"[multicpu {i}] waiting for bloom to release workers filtering")
-        time.sleep(5)
     #block updates for a little while
-    print(f"[multicpu {i}] I want to parse wat with bloom filters")
-    bloom_processing.put(1) # value does not matter
+    print(f"[multicpu {i}] parsing wat with bloom filters")
 
     for _ in range(line_count):
         line = content.readline()
@@ -145,8 +173,6 @@ def parse_wat(content, start, line_count, want_update, bloom_processing, i):
                 if clp:
                     continue
                 valid_data.append((url, alt_text, license, domain))    
-    bloom_processing.get()
-    bloom_processing.task_done()
     return ([
         t for t in {tuple(i) for i in valid_data}
     ], clpd)  # use a dict in order to remove duplicate tuples from list
@@ -266,7 +292,7 @@ async def request_image(datas, start_sampleid, img_output_folder, localbloom, tm
     return ujson.load(open(f"{tmp_folder}/{fn}.json"))
 
 
-def dl_wat(valid_data, first_sample_id, img_output_folder, localbloom, tmp_folder):
+def dl_wat(valid_data, first_sample_id, img_output_folder, localbloom, tmp_folder, i):
     """
     This function initiates download attempt of validated parsed links
     It launches multithreaded tasks by using trio module
@@ -279,7 +305,7 @@ def dl_wat(valid_data, first_sample_id, img_output_folder, localbloom, tmp_folde
     # Download every image available
     processed_samples = []
     #trio.run(request_image, valid_data, first_sample_id, instruments=[TrioProgress(len(valid_data), False)] )
-    result = trio.run( request_image, valid_data, first_sample_id, img_output_folder, localbloom, tmp_folder)
+    result = trio.run( request_image, valid_data, first_sample_id, img_output_folder, localbloom, tmp_folder, instruments=[Tracer(i)])
     processed_samples.extend(result)
     return pd.DataFrame(
         processed_samples,
@@ -297,7 +323,7 @@ def upload(source: str, clientType: str, target: str):
         shutil.rmtree(f"/home/crawl/{source}", ignore_errors=True)
     return result
 
-def updateBloom(want_update: JoinableQueue, queues: JoinableQueue, target ):
+def updateBloom(target ):
     if os.path.exists("/home/crawl/crawlingathome-gpu-hcloud/blocklists/"):
         shutil.rmtree("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
     os.makedirs("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
@@ -309,28 +335,16 @@ def updateBloom(want_update: JoinableQueue, queues: JoinableQueue, target ):
         os.system("mv ./the-eye.eu/public/AI/cahblacklists/* /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
 
     while True:
-        flag = 0
         print(f"[multicpu bloom] I want to update bloom filters")
-        want_update.put(1) # the value does not matter
-
-        for queue in queues:
-            flag += queue.qsize()
-        if flag==0:
-            start = time.time()
-            if (os.getenv("CLOUD") in ["hetzner","alibaba"]):
-                os.system(f"rsync -av --partial --inplace --progress {target}/clipped_active.bin /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
-            else:
-                os.system(f'wget -q -m -np -c -U "Crawling@Home" --tries=15 -R "index.html*,bloom*.bin" -A "*_active.bin" "http://the-eye.eu/public/AI/cahblacklists/"')
-                os.system("cp ./the-eye.eu/public/AI/cahblacklists/* /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
-                os.system("rm -rf ./the-eye.eu/public/AI/cahblacklists/*")
-            print(f"[multicpu bloom] Updated bloom filters in {round(time.time()-start, 2)} sec")
-            want_update.get()
-            want_update.task_done()
-            time.sleep(300)
+        start = time.time()
+        if (os.getenv("CLOUD") in ["hetzner","alibaba"]):
+            os.system(f"rsync -av --partial --inplace --progress {target}/clipped_active.bin /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
         else:
-            print("[multicpu bloom] waiting for workers to release the filters update...")
-            time.sleep(10)
-
+            os.system(f'wget -q -m -np -c -U "Crawling@Home" --tries=15 -R "index.html*,bloom*.bin" -A "*_active.bin" "http://the-eye.eu/public/AI/cahblacklists/"')
+            os.system("cp ./the-eye.eu/public/AI/cahblacklists/* /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
+            os.system("rm -rf ./the-eye.eu/public/AI/cahblacklists/*")
+        print(f"[multicpu bloom] Updated bloom filters in {round(time.time()-start, 2)} sec")
+        time.sleep(200)
 
 class FileData:
     """
@@ -353,7 +367,7 @@ class FileData:
     def __len__(self):
         return self._length
 
-def proc_worker(i: int, want_update: JoinableQueue, bloom_processing: JoinableQueue, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVER_URL):
+def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVER_URL):
     # initialize working folders
     output_folder = f"./{i}/save/"
     img_output_folder = output_folder + "images/"
@@ -389,7 +403,7 @@ def proc_worker(i: int, want_update: JoinableQueue, bloom_processing: JoinableQu
             
             #wait while bloom filters are updating
             while want_update.qsize() > 0:
-                print(f"[multicpu {i}] waiting for bloom to release workers filtering")
+                print(f"[{i} multicpu] waiting for bloom to release workers filtering")
                 time.sleep(5)
             #block updates for a little while
 
@@ -418,15 +432,15 @@ def proc_worker(i: int, want_update: JoinableQueue, bloom_processing: JoinableQu
 
                 # compute output file names base
                 out_fname = f"FIRST_SAMPLE_ID_IN_SHARD_{str(first_sample_id)}_LAST_SAMPLE_ID_IN_SHARD_{str(last_sample_id)}_{shard}"
-                print(f"[multicpu {i}] shard {out_fname} acquired in {round(time.time()-start,2)} sec (including bloom updates)")
+                print(f"[{i} multicpu] shard {out_fname} acquired in {round(time.time()-start,2)} sec (including bloom updates)")
  
-                print (f"[multicpu {i}] sync filters in {round(time.time()-start,2)} sec")         
+                print (f"[{i} multicpu] sync filters in {round(time.time()-start,2)} sec")         
                 start = time.time()
                 
                 # parse valid links from wat file
                 with open(tmp_folder + "shard.wat", "r") as infile:
-                    parsed_data, clpd = parse_wat(infile, start_index, lines, want_update, bloom_processing, i)
-                print (f"[multicpu {i}] parsed wat in {round(time.time()-start,2)}")
+                    parsed_data, clpd = parse_wat(infile, start_index, lines, i)
+                print (f"[{i} multicpu] parsed wat in {round(time.time()-start,2)}")
                 start = time.time()
 
                 # convert to dataframe and save to disk (for statistics and generating blocking lists)
@@ -438,17 +452,17 @@ def proc_worker(i: int, want_update: JoinableQueue, bloom_processing: JoinableQu
                 random.shuffle(parsed_data) 
             
                 lastlinks = len(parsed_data)
-                print (f"[multicpu {i}] this job has {lastlinks} links left after removing {clpd} already clipped")
+                print (f"[{i} multicpu] this job has {lastlinks} links left after removing {clpd} already clipped")
             
                 start = time.time()            
                 # attempt to download validated links and save to disk for stats and blocking lists
-                dlparse_df = dl_wat( parsed_data, first_sample_id, img_output_folder, localbloom, tmp_folder)
+                dlparse_df = dl_wat( parsed_data, first_sample_id, img_output_folder, localbloom, tmp_folder, i )
                 dlparse_df["PATH"] = dlparse_df.PATH.apply(lambda x: re.sub(r"^./save/\d{1,2}/(.*)$", r"save/\1", x))
                 dlparse_df.to_csv(output_folder + out_fname + ".csv", index=False, sep="|")
                 dlparse_df.to_csv(output_folder + out_fname + "_unfiltered.csv", index=False, sep="|")
-                print (f"[stats {i} {shard_of_chunk}] pairs retained {len(dlparse_df)} in {round(time.time() - start, 2)}")
-                print (f"[stats {i} {shard_of_chunk}] scraping efficiency {len(dlparse_df)/(time.time() - start)} img/sec")
-                print (f"[stats {i} {shard_of_chunk}] crawling efficiency {lastlinks/(time.time() - start)} links/sec")
+                print (f"[{i} stats shard {shard_of_chunk}] pairs retained {len(dlparse_df)} in {round(time.time() - start, 2)}")
+                print (f"[{i} stats shard {shard_of_chunk}] scraping efficiency {len(dlparse_df)/(time.time() - start)} img/sec")
+                print (f"[{i} stats shard {shard_of_chunk}] crawling efficiency {lastlinks/(time.time() - start)} links/sec")
 
                 # at this point we finishes the CPU node job, need to make the data available for GPU worker
                 prefix = uuid.uuid4().hex
@@ -462,11 +476,11 @@ def proc_worker(i: int, want_update: JoinableQueue, bloom_processing: JoinableQu
 
             last = round(time.time() - start0)
 
-            print(f"[stats {i}] WAT job completed in {last} seconds")
+            print(f"[{i} stats] WAT job completed in {last} seconds")
            
         except Exception as e:
             print (e)
-            print ("[multicpu {i}] Worker crashed")
+            print ("[{i} multicpu] worker crashed")
             time.sleep(60)
 
 if __name__ == "__main__":
@@ -483,27 +497,17 @@ if __name__ == "__main__":
 
     print (f"starting session under `{YOUR_NICKNAME_FOR_THE_LEADERBOARD}` nickname")
 
-
     procs = cpu_count() - 2
     if len(sys.argv) > 1:
-        procs = min(int(sys.argv[1]), cpu_count() -2)
+        procs = min(int(sys.argv[1]), cpu_count() - 5)
     
-
-    if not os.path.exists(".tmp"):
-        os.mkdir(".tmp")
-    
-    #use a queue where bloom updating process announces its intention. if something is in queue, then updating, if removed from queue then free to process at all workers
-    want_update = JoinableQueue()
 
     workers = []
-    queues = []
     for i in range ( procs ):
         #use this queue to annount that bloom is currently processing and please do not update filters. if queue is not empty please wait, if queue is empty you may update filters
-        bloom_processing = JoinableQueue()
-        queues.append(bloom_processing)
-        workers.append(Process(target=proc_worker, args= [i, want_update, bloom_processing, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVER_URL], daemon=True))
+        workers.append(Process(target=proc_worker, args= [i, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVER_URL], daemon=True))
 
-    Process(target=updateBloom, args= [want_update, queues, "archiveteam@88.198.2.17::bloom"], daemon=True).start()
+    Process(target=updateBloom, args= ["archiveteam@88.198.2.17::bloom"], daemon=True).start()
 
     for worker in workers:
         worker.start()
