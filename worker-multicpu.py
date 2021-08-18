@@ -351,7 +351,7 @@ def updateBloom(target ):
             os.system("cp ./the-eye.eu/public/AI/cahblacklists/* /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
             os.system("rm -rf ./the-eye.eu/public/AI/cahblacklists/*")
         print(f"[bloom] Updated bloom filters in {round(time.time()-start, 2)} sec")
-        time.sleep(200)
+        time.sleep(10000)
 
 class FileData:
     """
