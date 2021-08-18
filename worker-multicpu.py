@@ -105,7 +105,7 @@ def parse_wat(content, start, line_count, i):
     # failed-domains.txt contains failed domains, i.e. domains with image links and suitable alt texts that actually
     # do not produce any image. domains that mayb dissapeared, or are good at blocking scrapers. List is also learned from
     # past crawling effort
-    print [f"[{i} multicpu start parsing]"]
+    print (f"[{i} multicpu start parsing]")
     while True:
         try:
             clipped = [BloomFilter(max_elements=200000000, error_rate=0.05, filename=(x,-1)) for x in glob("/home/crawl/crawlingathome-gpu-hcloud/blocklists/clipped*")]
@@ -113,7 +113,7 @@ def parse_wat(content, start, line_count, i):
             break
         except:
             time.sleep(10)
-    print [f"[{i} bloom filters initialized]"]
+    print (f"[{i} bloom filters initialized]")
     clpd = 0
     valid_data = []
     content.seek(start)
@@ -175,7 +175,7 @@ def parse_wat(content, start, line_count, i):
                 if clp:
                     continue
                 valid_data.append((url, alt_text, license, domain))
-    print [f"[{i} parsed {len(valid_data)} preparing to return]"]
+    print (f"[{i} parsed {len(valid_data)} preparing to return]")
     return ([
         t for t in {tuple(i) for i in valid_data}
     ], clpd)  # use a dict in order to remove duplicate tuples from list
