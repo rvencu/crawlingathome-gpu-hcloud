@@ -399,13 +399,7 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
 
             # get new job and download the wat file
             client.newJob()
-            client.downloadWat(tmp_folder) # alter function ****************************************************
-            
-            #wait while bloom filters are updating
-            while want_update.qsize() > 0:
-                print(f"[{i} multicpu] waiting for bloom to release workers filtering")
-                time.sleep(5)
-            #block updates for a little while
+            client.downloadWat(tmp_folder)
 
             result = 0
             prefixes = {}
