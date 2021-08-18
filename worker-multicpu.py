@@ -105,16 +105,17 @@ def parse_wat(content, start, line_count, i):
     # failed-domains.txt contains failed domains, i.e. domains with image links and suitable alt texts that actually
     # do not produce any image. domains that mayb dissapeared, or are good at blocking scrapers. List is also learned from
     # past crawling effort
-    print(f"[multicpu {i}] defining filter objects")
-    clipped = [BloomFilter(max_elements=200000000, error_rate=0.05, filename=(x,-1)) for x in glob("/home/crawl/crawlingathome-gpu-hcloud/blocklists/clipped*")]
-    blocked = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/failed-domains.bin",-1))
+    while True:
+        try:
+            clipped = [BloomFilter(max_elements=200000000, error_rate=0.05, filename=(x,-1)) for x in glob("/home/crawl/crawlingathome-gpu-hcloud/blocklists/clipped*")]
+            blocked = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/failed-domains.bin",-1))
+            break
+        except:
+            time.sleep(10)
     
     clpd = 0
     valid_data = []
     content.seek(start)
-
-    #block updates for a little while
-    print(f"[multicpu {i}] parsing wat with bloom filters")
 
     for _ in range(line_count):
         line = content.readline()
