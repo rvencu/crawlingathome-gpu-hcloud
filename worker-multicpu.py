@@ -31,6 +31,7 @@ import pycld2 as cld2
 from glob import glob
 from uuid import uuid1
 from io import BytesIO
+from datetime import datetime
 import crawlingathome_client as cah
 from bloom_filter2 import BloomFilter
 from urllib.parse import urljoin, urlparse
@@ -105,7 +106,7 @@ def parse_wat(content, start, line_count, i):
     # failed-domains.txt contains failed domains, i.e. domains with image links and suitable alt texts that actually
     # do not produce any image. domains that mayb dissapeared, or are good at blocking scrapers. List is also learned from
     # past crawling effort
-    print (f"[{i} multicpu start parsing]")
+    print (f"[{i} parser] start parsing")
     while True:
         try:
             clipped = [BloomFilter(max_elements=200000000, error_rate=0.05, filename=(x,-1)) for x in glob("/home/crawl/crawlingathome-gpu-hcloud/blocklists/clipped*")]
@@ -113,69 +114,72 @@ def parse_wat(content, start, line_count, i):
             break
         except:
             time.sleep(10)
-    print (f"[{i} bloom filters initialized]")
+    print (f"[{i} parser] bloom filters initialized")
     clpd = 0
     valid_data = []
     content.seek(start)
 
-    for _ in range(line_count):
-        line = content.readline()
-        if "IMG@" not in line:
-            continue
-        line_str = line.strip()
-        data = ujson.loads(line_str)
-        # find all links inside the line
-        linklist = data["Envelope"]["Payload-Metadata"]["HTTP-Response-Metadata"][
-            "HTML-Metadata"
-        ]["Links"]
-        # get base url
-        base_url = os.path.dirname(
-            data["Envelope"]["WARC-Header-Metadata"]["WARC-Target-URI"]
-        )
-        license = "?"
-        for e in linklist:
-            if "url" in e and "creativecommons.org/licenses/" in e["url"]:
-                license = e["url"]
-            # reject links if ALT tag is not present
-            if "alt" not in e:
+    try:
+        for _ in range(line_count):
+            line = content.readline()
+            if "IMG@" not in line:
                 continue
-            url = e["url"]
-            # reject links of svg, gif or scripted images content
-            if any( x in url for x in [".svg", ".gif", "data:image", "javascript:"] ):
-                continue
-            # reject links found in blocked list
-            domain = "unknown"
-            try:
-                domain = urlparse(url).netloc
-                if domain in blocked:
+            line_str = line.strip()
+            data = ujson.loads(line_str)
+            # find all links inside the line
+            linklist = data["Envelope"]["Payload-Metadata"]["HTTP-Response-Metadata"][
+                "HTML-Metadata"
+            ]["Links"]
+            # get base url
+            base_url = os.path.dirname(
+                data["Envelope"]["WARC-Header-Metadata"]["WARC-Target-URI"]
+            )
+            license = "?"
+            for e in linklist:
+                if "url" in e and "creativecommons.org/licenses/" in e["url"]:
+                    license = e["url"]
+                # reject links if ALT tag is not present
+                if "alt" not in e:
                     continue
-            except:
-                # cannot even parse the url
-                continue
-            # detect ALT text language, we want to retain only English captions
-            alt_text = ftfy.fix_text(e["alt"].replace("\n", " ")).strip()
-            try:
-                _, _, details = cld2.detect(alt_text)
-            except Exception as e:
-                alt_text = remove_bad_chars(alt_text)
-                _, _, details = cld2.detect(alt_text)
-            # keep pair if we made it so far
-            if details[0][1] == "en":
-                if not url.startswith("http"):
-                    url = urljoin(base_url, url)
-                # reject if pair is a duplicate
-                #concat = str(hash(url + alt_text))
-                concat = hashlib.md5((url + alt_text).encode("utf-8")).hexdigest()
-                clp = False
-                for filter in clipped:
-                    if concat in filter: #duplicates:
-                        clpd += 1
-                        clp = True
-                        break
-                if clp:
+                url = e["url"]
+                # reject links of svg, gif or scripted images content
+                if any( x in url for x in [".svg", ".gif", "data:image", "javascript:"] ):
                     continue
-                valid_data.append((url, alt_text, license, domain))
-    print (f"[{i} parsed {len(valid_data)} preparing to return]")
+                # reject links found in blocked list
+                domain = "unknown"
+                try:
+                    domain = urlparse(url).netloc
+                    if domain in blocked:
+                        continue
+                except:
+                    # cannot even parse the url
+                    continue
+                # detect ALT text language, we want to retain only English captions
+                alt_text = ftfy.fix_text(e["alt"].replace("\n", " ")).strip()
+                try:
+                    _, _, details = cld2.detect(alt_text)
+                except Exception as e:
+                    alt_text = remove_bad_chars(alt_text)
+                    _, _, details = cld2.detect(alt_text)
+                # keep pair if we made it so far
+                if details[0][1] == "en":
+                    if not url.startswith("http"):
+                        url = urljoin(base_url, url)
+                    # reject if pair is a duplicate
+                    #concat = str(hash(url + alt_text))
+                    concat = hashlib.md5((url + alt_text).encode("utf-8")).hexdigest()
+                    clp = False
+                    for filter in clipped:
+                        if concat in filter: #duplicates:
+                            clpd += 1
+                            clp = True
+                            break
+                    if clp:
+                        continue
+                    valid_data.append((url, alt_text, license, domain))
+    except Exception as e:
+        print(e)
+    print (f"[{i} parser] parsed {len(valid_data)} preparing to return")
     return ([
         t for t in {tuple(i) for i in valid_data}
     ], clpd)  # use a dict in order to remove duplicate tuples from list
@@ -395,6 +399,7 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
     while True:
         try:
             lastext = f". Last job duration: {last}"
+            print(f"[{i} multicpu] clock is {datetime.now().strftime('%H:%M:%S')}")
 
             start = time.time()
             start0 = start
@@ -430,6 +435,7 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
                 out_fname = f"FIRST_SAMPLE_ID_IN_SHARD_{str(first_sample_id)}_LAST_SAMPLE_ID_IN_SHARD_{str(last_sample_id)}_{shard}"
                 print(f"[{i} multicpu] shard {out_fname} acquired in {round(time.time()-start,2)} sec (including bloom updates)")
                 
+                start = time.time()
                 # parse valid links from wat file
                 with open(tmp_folder + "shard.wat", "r") as infile:
                     parsed_data, clpd = parse_wat(infile, start_index, lines, i)
@@ -502,9 +508,11 @@ if __name__ == "__main__":
 
     Process(target=updateBloom, args= ["archiveteam@88.198.2.17::bloom"], daemon=True).start()
 
+    time.sleep(20)
+
     for worker in workers:
         worker.start()
-        time.sleep(1)
+        time.sleep(8)
     
     while True:
         #keep main process alive
