@@ -105,6 +105,7 @@ def parse_wat(content, start, line_count, i):
     # failed-domains.txt contains failed domains, i.e. domains with image links and suitable alt texts that actually
     # do not produce any image. domains that mayb dissapeared, or are good at blocking scrapers. List is also learned from
     # past crawling effort
+    print [f"[{i} multicpu start parsing]"]
     while True:
         try:
             clipped = [BloomFilter(max_elements=200000000, error_rate=0.05, filename=(x,-1)) for x in glob("/home/crawl/crawlingathome-gpu-hcloud/blocklists/clipped*")]
@@ -112,7 +113,7 @@ def parse_wat(content, start, line_count, i):
             break
         except:
             time.sleep(10)
-    
+    print [f"[{i} bloom filters initialized]"]
     clpd = 0
     valid_data = []
     content.seek(start)
@@ -173,7 +174,8 @@ def parse_wat(content, start, line_count, i):
                         break
                 if clp:
                     continue
-                valid_data.append((url, alt_text, license, domain))    
+                valid_data.append((url, alt_text, license, domain))
+    print [f"[{i} parsed {len(valid_data)} preparing to return]"]
     return ([
         t for t in {tuple(i) for i in valid_data}
     ], clpd)  # use a dict in order to remove duplicate tuples from list
@@ -316,7 +318,6 @@ def dl_wat(valid_data, first_sample_id, img_output_folder, localbloom, tmp_folde
 def upload(source: str, clientType: str, target: str):
     with tarfile.open(f"{source}.tar.gz", "w:gz") as tar:
         tar.add(source, arcname=os.path.basename(source))
-    print(f"client type is {clientType}")
     result = os.system(f"rsync -av {source}.tar.gz {target}")
     if os.path.exists(f"/home/crawl/{source}.tar.gz"):
         os.remove(f"/home/crawl/{source}.tar.gz")
@@ -336,7 +337,7 @@ def updateBloom(target ):
         os.system("mv ./the-eye.eu/public/AI/cahblacklists/* /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
 
     while True:
-        print(f"[multicpu bloom] I want to update bloom filters")
+        print(f"[bloom] I want to update bloom filters")
         start = time.time()
         if (os.getenv("CLOUD") in ["hetzner","alibaba"]):
             os.system(f"rsync -av --partial --inplace --progress {target}/clipped_active.bin /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
@@ -344,7 +345,7 @@ def updateBloom(target ):
             os.system(f'wget -q -m -np -c -U "Crawling@Home" --tries=15 -R "index.html*,bloom*.bin" -A "*_active.bin" "http://the-eye.eu/public/AI/cahblacklists/"')
             os.system("cp ./the-eye.eu/public/AI/cahblacklists/* /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
             os.system("rm -rf ./the-eye.eu/public/AI/cahblacklists/*")
-        print(f"[multicpu bloom] Updated bloom filters in {round(time.time()-start, 2)} sec")
+        print(f"[bloom] Updated bloom filters in {round(time.time()-start, 2)} sec")
         time.sleep(200)
 
 class FileData:
@@ -428,9 +429,6 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
                 # compute output file names base
                 out_fname = f"FIRST_SAMPLE_ID_IN_SHARD_{str(first_sample_id)}_LAST_SAMPLE_ID_IN_SHARD_{str(last_sample_id)}_{shard}"
                 print(f"[{i} multicpu] shard {out_fname} acquired in {round(time.time()-start,2)} sec (including bloom updates)")
- 
-                print (f"[{i} multicpu] sync filters in {round(time.time()-start,2)} sec")         
-                start = time.time()
                 
                 # parse valid links from wat file
                 with open(tmp_folder + "shard.wat", "r") as infile:
@@ -475,7 +473,7 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
            
         except Exception as e:
             print (e)
-            print ("[{i} multicpu] worker crashed")
+            print (f"[{i} multicpu] worker crashed")
             time.sleep(60)
 
 if __name__ == "__main__":
