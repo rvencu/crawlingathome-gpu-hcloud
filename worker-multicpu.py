@@ -438,7 +438,7 @@ def proc_worker(i: int, want_update: JoinableQueue, bloom_processing: JoinableQu
                 random.shuffle(parsed_data) 
             
                 lastlinks = len(parsed_data)
-                print (f"[multicpu {i}] this job has {lastlinks} links left; deduped {deduped} and already clipped {clpd}")
+                print (f"[multicpu {i}] this job has {lastlinks} links left after removing {clpd} already clipped")
             
                 start = time.time()            
                 # attempt to download validated links and save to disk for stats and blocking lists
