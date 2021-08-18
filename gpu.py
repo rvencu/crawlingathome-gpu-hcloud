@@ -107,13 +107,16 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                     # search for corrupt images
                     for file in glob(f"{job}/*.csv"):
                         df = pd.read_csv(file, sep="|")
-                        df["PATH"] = df.PATH.apply(lambda x: re.sub(r"^(.*)./save/[-]?[1-9][0-9]?[0-9]?/(.*)$", r"save/\2", x))
+                        df["PATH"] = df.PATH.apply(lambda x: re.sub(r"^(.*)./save/[-]?[1-9][0-9]?[0-9]?/(.*)$", r"save/\2", x)) # when path is like /save/12/images/name.jpg
+                        df["PATH"] = df.PATH.apply(lambda x: re.sub(r"^(.*)./[-]?[1-9][0-9]?[0-9]?/save/(.*)$", r"save/\2", x)) # when path is like /12/save/images/name.jpg
                         df["PATH"] = df.apply(lambda x: "./" + job + "/" + x["PATH"].strip("save/"), axis=1)
                         for index, row in df.iterrows():
                             try:
                                 im = Image.open(row["PATH"])
                                 im.close()
-                            except:
+                            except Exception as e:
+                                if index < 10:
+                                    print (f"[io {i}] invalid image {row['PATH']} because {e}")
                                 df = df.drop(index)
                         df.to_csv(file, sep="|", index=False)
                         del df
@@ -128,11 +131,15 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                             if pairs >= 0:
                                 #print (f"[io {i}] mark job as complete: {job}")
                                 # cleanup temp storage now
+                                if pairs == 0:
+                                    pairs = 1
                                 try:
                                     client.completeJob(int(pairs))
                                 except:
+                                    print(f"[io {i}] invalid trying to complete with {pairs} pairs")
                                     client.invalidURL()
                             else:
+                                print(f"[io {i}] invalid with negative {pairs} pairs?")
                                 client.invalidURL()
                             if os.path.exists("./"+ job):
                                 shutil.rmtree("./"+ job)
