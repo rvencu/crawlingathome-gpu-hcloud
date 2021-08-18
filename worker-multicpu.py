@@ -351,8 +351,17 @@ class FileData:
 
 def proc_worker(i: int, want_update: JoinableQueue, bloom_processing: JoinableQueue, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVER_URL):
     # initialize working folders
-    output_folder = f"./save/{i}/"
+    output_folder = f"./{i}/save/"
     img_output_folder = output_folder + "images/"
+    tmp_folder = f"./{i}/.tmp/"
+
+    if os.path.exists(output_folder):
+        shutil.rmtree(output_folder, ignore_errors=True)
+    if os.path.exists(tmp_folder):
+        shutil.rmtree(tmp_folder)
+
+    os.makedirs(img_output_folder)
+    os.makedirs(tmp_folder)
 
     # connect to C@H server and initialize client
     client = TempCPUWorker(url=CRAWLINGATHOME_SERVER_URL, nickname=YOUR_NICKNAME_FOR_THE_LEADERBOARD)
@@ -370,11 +379,9 @@ def proc_worker(i: int, want_update: JoinableQueue, bloom_processing: JoinableQu
             start = time.time()
             start0 = start
 
-           
-
             # get new job and download the wat file
             client.newJob()
-            client.downloadWat(output_folder) # alter function ****************************************************
+            client.downloadWat(tmp_folder) # alter function ****************************************************
             
             #wait while bloom filters are updating
             while want_update.qsize() > 0:
@@ -385,9 +392,7 @@ def proc_worker(i: int, want_update: JoinableQueue, bloom_processing: JoinableQu
             result = 0
             prefixes = {}
 
-
-
-            fd = FileData(output_folder+'shard.wat')
+            fd = FileData(tmp_folder + 'shard.wat')
             lines = int(len(fd)*0.5)
 
             print(f"[multicpu {i}] I want to define filter objects")
@@ -403,7 +408,6 @@ def proc_worker(i: int, want_update: JoinableQueue, bloom_processing: JoinableQu
                 # clear working folders for a new job
                 if os.path.exists(output_folder):
                     shutil.rmtree(output_folder, ignore_errors=True)
-
                 os.makedirs(img_output_folder)
 
                 # retrieve job details and determine what part of the wat file to parse
@@ -424,11 +428,9 @@ def proc_worker(i: int, want_update: JoinableQueue, bloom_processing: JoinableQu
                 start = time.time()
                 
                 # parse valid links from wat file
-                with open(output_folder+"shard.wat", "r") as infile:
+                with open(tmp_folder + "shard.wat", "r") as infile:
                     parsed_data, deduped, clpd = parse_wat(infile, start_index, lines, blocked, bloom, clipped, want_update, bloom_processing, i)
                 print (f"[multicpu {i}] parsed wat in {round(time.time()-start,2)}")
-                os.remove(output_folder+"shard.wat")
-
                 start = time.time()
 
                 # convert to dataframe and save to disk (for statistics and generating blocking lists)
