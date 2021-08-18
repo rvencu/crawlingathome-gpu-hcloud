@@ -26,6 +26,7 @@ import random
 import hashlib
 import tarfile
 import pandas as pd
+import numpy as np
 import pycld2 as cld2
 from glob import glob
 from uuid import uuid1
