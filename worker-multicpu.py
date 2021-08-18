@@ -47,9 +47,9 @@ asks.init("trio")
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True  # https://stackoverflow.com/a/47958486
 
-class Tracer(trio.abc.Instrument, i=""):
+class Tracer(trio.abc.Instrument):
 
-    def __init__(self):
+    def __init__(self, i=""):
         self.exceptions = 0
         self.requests = 0
         self.downloads = 0
