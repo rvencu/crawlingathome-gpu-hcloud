@@ -189,7 +189,7 @@ def process_img_content(response, alt_text, license, sample_id, img_output_folde
     return [str(sample_id), out_fname, response.url, alt_text, width, height, license]
 
 
-async def request_image(datas, start_sampleid, img_output_folder, localbloom):
+async def request_image(datas, start_sampleid, img_output_folder, localbloom, tmp_folder):
     """
     This function initiates many parallel async connections to try download the images from provided links
     
@@ -220,7 +220,7 @@ async def request_image(datas, start_sampleid, img_output_folder, localbloom):
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     }
 
-    async def _request(data, sample_id, localbloom):
+    async def _request(data, sample_id, localbloom, img_output_folder):
         start=time.time()
         url, alt_text, license, domain = data
         # the following 2 lines are related to Trio Instrument to capture events from multiple threads
@@ -234,7 +234,7 @@ async def request_image(datas, start_sampleid, img_output_folder, localbloom):
                 start=time.time()
                 proces = process_img_content(
                     # tune timeout and connection_timeout to grab more or less files. shorter timeouts will exclude bad performing websites
-                    response, alt_text, license, sample_id
+                    response, alt_text, license, sample_id, img_output_folder
                 )
                 proctime = round(time.time()-start, 2)
                 task.custom_sleep_data = (0, dltime, proctime) # for success do not count errors
@@ -251,18 +251,18 @@ async def request_image(datas, start_sampleid, img_output_folder, localbloom):
     async with trio.open_nursery() as n:
         for data in datas:
             async with limit:
-                n.start_soon(_request, data, start_sampleid, localbloom)
+                n.start_soon(_request, data, start_sampleid, localbloom, img_output_folder)
             start_sampleid += 1
 
     fn = uuid1()
     # trio makes sure at this point all async tasks were executed
-    with open(f".tmp/{fn}.json", "w") as f:
+    with open(f"{tmp_folder}/{fn}.json", "w") as f:
         ujson.dump(tmp_data, f)
     gc.collect()
-    return ujson.load(open(f".tmp/{fn}.json"))
+    return ujson.load(open(f"{tmp_folder}/{fn}.json"))
 
 
-def dl_wat(valid_data, first_sample_id, img_output_folder, localbloom):
+def dl_wat(valid_data, first_sample_id, img_output_folder, localbloom, tmp_folder):
     """
     This function initiates download attempt of validated parsed links
     It launches multithreaded tasks by using trio module
@@ -275,7 +275,7 @@ def dl_wat(valid_data, first_sample_id, img_output_folder, localbloom):
     # Download every image available
     processed_samples = []
     #trio.run(request_image, valid_data, first_sample_id, instruments=[TrioProgress(len(valid_data), False)] )
-    result = trio.run( request_image, valid_data, first_sample_id, img_output_folder, localbloom )
+    result = trio.run( request_image, valid_data, first_sample_id, img_output_folder, localbloom, tmp_folder)
     processed_samples.extend(result)
     return pd.DataFrame(
         processed_samples,
@@ -429,7 +429,7 @@ def proc_worker(i: int, want_update: JoinableQueue, bloom_processing: JoinableQu
                 
                 # parse valid links from wat file
                 with open(tmp_folder + "shard.wat", "r") as infile:
-                    parsed_data, deduped, clpd = parse_wat(infile, start_index, lines, blocked, bloom, clipped, want_update, bloom_processing, i)
+                    parsed_data, deduped, clpd = parse_wat(infile, start_index, lines, want_update, bloom_processing, i)
                 print (f"[multicpu {i}] parsed wat in {round(time.time()-start,2)}")
                 start = time.time()
 
@@ -446,7 +446,7 @@ def proc_worker(i: int, want_update: JoinableQueue, bloom_processing: JoinableQu
             
                 start = time.time()            
                 # attempt to download validated links and save to disk for stats and blocking lists
-                dlparse_df = dl_wat( parsed_data, first_sample_id, img_output_folder, localbloom)
+                dlparse_df = dl_wat( parsed_data, first_sample_id, img_output_folder, localbloom, tmp_folder)
                 dlparse_df["PATH"] = dlparse_df.PATH.apply(lambda x: re.sub(r"^./save/\d{1,2}/(.*)$", r"save/\1", x))
                 dlparse_df.to_csv(output_folder + out_fname + ".csv", index=False, sep="|")
                 dlparse_df.to_csv(output_folder + out_fname + "_unfiltered.csv", index=False, sep="|")
