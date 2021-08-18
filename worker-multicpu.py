@@ -425,7 +425,7 @@ def proc_worker(i: int, want_update: JoinableQueue, bloom_processing: JoinableQu
                 
                 # parse valid links from wat file
                 with open(tmp_folder + "shard.wat", "r") as infile:
-                    parsed_data, deduped, clpd = parse_wat(infile, start_index, lines, want_update, bloom_processing, i)
+                    parsed_data, clpd = parse_wat(infile, start_index, lines, want_update, bloom_processing, i)
                 print (f"[multicpu {i}] parsed wat in {round(time.time()-start,2)}")
                 start = time.time()
 
