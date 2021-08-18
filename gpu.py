@@ -233,9 +233,9 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
                             all_csv_files.append(file)
                 # get name of csv file
                 out_path = all_csv_files[0]
-                print(out_path)
+                #print(out_path)
                 out_path = Path(out_path).stem
-                print(out_path)
+                #print(out_path)
                 shards.append((i, job, out_path))
                 addresses.append(address)
 

@@ -308,26 +308,24 @@ def updateBloom(want_update: JoinableQueue, queues: JoinableQueue, target ):
         print(f"[multicpu bloom] I want to update bloom filters")
         want_update.put(1) # the value does not matter
 
-        while True:
-            for queue in queues:
-                flag += queue.qsize()
-            if flag==0:
-                start = time.time()
-                if (os.getenv("CLOUD") in ["hetzner","alibaba"]):
-                    os.system(f"rsync -av --partial --inplace --progress {target}/clipped_active.bin /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
-                else:
-                    os.system(f'wget -m -np -c -U "Crawling@Home" --tries=15 -R "index.html*,bloom*.bin" -A "*_active.bin" "http://the-eye.eu/public/AI/cahblacklists/"')
-                    os.system("cp ./the-eye.eu/public/AI/cahblacklists/* /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
-                    os.system("rm -rf ./the-eye.eu/public/AI/cahblacklists/*")
-                print(f"[multicpu bloom] Updated bloom filters in {round(time.time()-start, 2)} sec")
-                want_update.get()
-                want_update.task_done()
-                break
+        for queue in queues:
+            flag += queue.qsize()
+        if flag==0:
+            start = time.time()
+            if (os.getenv("CLOUD") in ["hetzner","alibaba"]):
+                os.system(f"rsync -av --partial --inplace --progress {target}/clipped_active.bin /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
             else:
-                print("[multicpu bloom] waiting for workers to release the filters update...")
-                time.sleep(10)
+                os.system(f'wget -m -np -c -U "Crawling@Home" --tries=15 -R "index.html*,bloom*.bin" -A "*_active.bin" "http://the-eye.eu/public/AI/cahblacklists/"')
+                os.system("cp ./the-eye.eu/public/AI/cahblacklists/* /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
+                os.system("rm -rf ./the-eye.eu/public/AI/cahblacklists/*")
+            print(f"[multicpu bloom] Updated bloom filters in {round(time.time()-start, 2)} sec")
+            want_update.get()
+            want_update.task_done()
+            time.sleep(300)
+        else:
+            print("[multicpu bloom] waiting for workers to release the filters update...")
+            time.sleep(10)
 
-        time.sleep(300)
 
 class FileData:
     """
