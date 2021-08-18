@@ -112,7 +112,8 @@ def parse_wat(content, start, line_count, i):
             clipped = [BloomFilter(max_elements=200000000, error_rate=0.05, filename=(x,-1)) for x in glob("/home/crawl/crawlingathome-gpu-hcloud/blocklists/clipped*")]
             blocked = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/failed-domains.bin",-1))
             break
-        except:
+        except Exception as e:
+            print(f"[{i} parser] bloom exception: {e}")
             time.sleep(10)
     print (f"[{i} parser] bloom filters initialized")
     clpd = 0
@@ -178,7 +179,7 @@ def parse_wat(content, start, line_count, i):
                         continue
                     valid_data.append((url, alt_text, license, domain))
     except Exception as e:
-        print(e)
+        print(f"[{i} parser] parser exception: {e}")
     print (f"[{i} parser] parsed {len(valid_data)} preparing to return")
     return ([
         t for t in {tuple(i) for i in valid_data}
