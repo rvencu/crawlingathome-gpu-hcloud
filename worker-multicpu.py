@@ -369,7 +369,8 @@ def upload(source: str, clientType: str, target: str):
         shutil.rmtree(f"/home/crawl/{source}", ignore_errors=True)
     return result
 
-def updateBloom(target ):
+def updateBloom(updatingBloom: Queue, target ):
+    updatingBloom.put(1)
     if os.path.exists("/home/crawl/crawlingathome-gpu-hcloud/blocklists/"):
         shutil.rmtree("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
     os.makedirs("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
@@ -379,8 +380,10 @@ def updateBloom(target ):
     else:
         os.system(f'wget -q -m -np -c -U "Crawling@Home" --tries=15 -R "index.html*,bloom*.bin" "http://the-eye.eu/public/AI/cahblacklists/"')
         os.system("mv ./the-eye.eu/public/AI/cahblacklists/* /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
-
+    updatingBloom.get_nowait()
+    time.sleep(300)
     while True:
+        updatingBloom.put(1)
         print(f"[bloom] I want to update bloom filters")
         start = time.time()
         if (os.getenv("CLOUD") in ["hetzner","alibaba"]):
@@ -389,6 +392,7 @@ def updateBloom(target ):
             os.system(f'wget -q -m -np -c -U "Crawling@Home" --tries=15 -R "index.html*,bloom*.bin" -A "*_active.bin" "http://the-eye.eu/public/AI/cahblacklists/"')
             os.system("cp ./the-eye.eu/public/AI/cahblacklists/* /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
             os.system("rm -rf ./the-eye.eu/public/AI/cahblacklists/*")
+        updatingBloom.get_nowait()
         print(f"[bloom] Updated bloom filters in {round(time.time()-start, 2)} sec")
         time.sleep(300)
 
@@ -591,14 +595,16 @@ if __name__ == "__main__":
     procs = cpu_count() - 2
     if len(sys.argv) > 1:
         procs = min(int(sys.argv[1]), cpu_count() - 5)
-    
+
+    update = Queue()
 
     workers = []
     for i in range ( procs ):
         #use this queue to annount that bloom is currently processing and please do not update filters. if queue is not empty please wait, if queue is empty you may update filters
         workers.append(Process(target=proc_worker, args= [i, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVER_URL], daemon=True))
 
-    Process(target=updateBloom, args= ["archiveteam@88.198.2.17::bloom"], daemon=True).start()
+    Process(target=updateBloom, args= [update, "archiveteam@88.198.2.17::bloom"], daemon=True).start()
+    Process(target=bloomServer, args= [update], daemon=True).start()
 
     time.sleep(20)
 
