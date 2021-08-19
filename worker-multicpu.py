@@ -117,8 +117,8 @@ def parse_wat(content, start, line_count, i, updatingBloom):
         print("[bloom] pending bloom updating")
         time.sleep(10)
 
-    clipped = [BloomFilter(max_elements=200000000, error_rate=0.05, filename=(x,-1)) for x in glob("/home/crawl/crawlingathome-gpu-hcloud/blocklists/clipped*")]
-    blocked = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/failed-domains.bin",-1))
+    clipped = [BloomFilter(max_elements=200000000, error_rate=0.05, filename=(x,-1)) for x in glob("/home/crawl/{i}/.bloom/clipped*")]
+    blocked = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("/home/crawl/{i}/.bloom/failed-domains.bin",-1))
 
 
     clpd = 0
