@@ -51,19 +51,6 @@ asks.init("trio")
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True  # https://stackoverflow.com/a/47958486
 
-class MultiDimensionalArrayEncoder(json.JSONEncoder):
-    def encode(self, obj):
-        def hint_tuples(item):
-            if isinstance(item, tuple):
-                return {'__tuple__': True, 'items': item}
-            if isinstance(item, list):
-                return [hint_tuples(e) for e in item]
-            if isinstance(item, dict):
-                return {key: hint_tuples(value) for key, value in item.items()}
-            else:
-                return item
-
-        return super(MultiDimensionalArrayEncoder, self).encode(hint_tuples(obj))
 class Tracer(trio.abc.Instrument):
 
     def __init__(self, i=""):
@@ -99,33 +86,12 @@ class Tracer(trio.abc.Instrument):
         print(f"[{self.i} instrumentation] Localbloom catched {self.bloom} urls")
 
 
-def hinted_tuple_hook(obj):
-    if '__tuple__' in obj:
-        return tuple(obj['items'])
-    else:
-        return obj
-
-def queryBloom(ClientSocket, hash, bloom):
-    
-    enc = MultiDimensionalArrayEncoder()
-    jsonstring =  enc.encode([(hash, bloom)])
-
-    while True:
-        ClientSocket.send(str.encode(jsonstring))
-        Response = ClientSocket.recv(1024)
-        resp = Response.decode('utf-8')
-        if resp != "-1":
-            break
-        print (f"[bloom client] pending bloom updates")
-        time.sleep(10)
-    return resp
-
 def remove_bad_chars(text):
     # cleanup text so language can be detected
     return "".join(c for c in text if c.isprintable())
 
 
-def parse_wat(content, start, line_count, i):
+def parse_wat(content, start, line_count, i, updatingBloom):
     """
     This function checks the wat file content and attempts to extract valid candidates of image urls and alt texts
 
@@ -144,15 +110,16 @@ def parse_wat(content, start, line_count, i):
     # past crawling effort
     print (f"[{i} parser] start parsing")
 
-    ClientSocket = socket.socket()
-    host = '127.0.0.1'
-    port = 6000
+    while True:
+        if updatingBloom.qsize() == 0:
+            os.system(f"cp /home/crawl/crawlingathome-gpu-hcloud/blocklists/* /home/crawl/{i}/.bloom/")
+            break
+        print("[bloom] pending bloom updating")
+        time.sleep(10)
 
-    print(f'[{i} bloom socket] Waiting for connection')
-    try:
-        ClientSocket.connect((host, port))
-    except socket.error as e:
-        print(f"[{i} bloom socket] exception: {str(e)}")
+    clipped = [BloomFilter(max_elements=200000000, error_rate=0.05, filename=(x,-1)) for x in glob("/home/crawl/crawlingathome-gpu-hcloud/blocklists/clipped*")]
+    blocked = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/failed-domains.bin",-1))
+
 
     clpd = 0
     valid_data = []
@@ -188,7 +155,7 @@ def parse_wat(content, start, line_count, i):
                 domain = "unknown"
                 try:
                     domain = urlparse(url).netloc
-                    if queryBloom(ClientSocket, domain, "blocked") == "1":
+                    if domain in blocked:
                         continue
                 except:
                     # cannot even parse the url
@@ -206,16 +173,17 @@ def parse_wat(content, start, line_count, i):
                         url = urljoin(base_url, url)
                     # reject if pair is a duplicate
                     concat = hashlib.md5((url + alt_text).encode("utf-8")).hexdigest()
-                    if queryBloom(ClientSocket, concat, "clipped") == "1":
-                        clpd += 1
+                    clp = False
+                    for filter in clipped:
+                        if concat in filter:
+                            clpd += 1
+                            clp = True
+                            break
+                    if clp:
                         continue
                     valid_data.append((url, alt_text, license, domain))
     except Exception as e:
         print(f"[{i} parser] parser exception: {e}")
-
-    # send server thread closing command
-    queryBloom(ClientSocket, "close", "connection")
-    ClientSocket.close()
 
     print (f"[{i} parser] parsed {len(valid_data)} preparing to return")
     return ([
@@ -393,61 +361,6 @@ def updateBloom(updatingBloom: Queue, target ):
         updatingBloom.get_nowait()
         print(f"[bloom] Updated bloom filters in {round(time.time()-start, 2)} sec")
         time.sleep(300)
-
-def bloomServer(updatingBloom: Queue):
-    ServerSocket = socket.socket()
-    host = '127.0.0.1'
-    port = 6000
-    ThreadCount = 0
-    try:
-        ServerSocket.bind((host, port))
-    except socket.error as e:
-        print(f"[bloom server] exception: {str(e)}")
-
-    print('[bloom server] Waiting for connections...')
-    ServerSocket.listen(5)
-
-    def threaded_client(connection):
-        clipped = [BloomFilter(max_elements=200000000, error_rate=0.05, filename=(x,-1)) for x in glob("/home/crawl/crawlingathome-gpu-hcloud/blocklists/clipped*")]
-        blocked = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/failed-domains.bin",-1))
-        pending_updates = 0
-        while True:            
-            if pending_updates == 1 and updatingBloom.qsize() == 0:
-                # update finished, reload filters
-                clipped = [BloomFilter(max_elements=200000000, error_rate=0.05, filename=(x,-1)) for x in glob("/home/crawl/crawlingathome-gpu-hcloud/blocklists/clipped*")]
-                blocked = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/failed-domains.bin",-1))
-                pending_updates = 0
-            data = connection.recv(2048)
-            if not data:
-                print(f"[bloom server] break no data")
-                break
-            reply = "0"
-            hash, bloom = json.loads(data.decode('utf-8'), object_hook=hinted_tuple_hook)[0]
-            if updatingBloom.qsize() > 0:
-                pending_updates = 1
-                reply = "-1" # send -1 to wait 10s then retry
-            elif bloom == "clipped":
-                for filter in clipped:
-                    if hash in filter:
-                        reply = "1"
-                        break
-            elif bloom == "blocked":
-                if hash in blocked:
-                    reply = "1"
-            else:
-                break
-            connection.sendall(str.encode(reply))
-        print(f"[bloom server] thread closing connection")
-        connection.close()
-
-    while True:
-        Client, address = ServerSocket.accept()
-        print('[bloom server] Connected to: ' + address[0] + ':' + str(address[1]))
-        start_new_thread(threaded_client, (Client, ))
-        ThreadCount += 1
-        print('[bloom server] Thread Number: ' + str(ThreadCount))
-
-    ServerSocket.close()
 class FileData:
     """
     Helper class to easily find wat file size, mid position, etc
@@ -469,19 +382,23 @@ class FileData:
     def __len__(self):
         return self._length
 
-def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVER_URL):
+def proc_worker(i: int, updatingBloom: Queue, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVER_URL):
     # initialize working folders
     output_folder = f"./{i}/save/"
     img_output_folder = output_folder + "images/"
     tmp_folder = f"./{i}/.tmp/"
+    bloom_folder = f"./{i}/.bloom/"
 
     if os.path.exists(output_folder):
         shutil.rmtree(output_folder, ignore_errors=True)
     if os.path.exists(tmp_folder):
         shutil.rmtree(tmp_folder)
+    if os.path.exists(bloom_folder):
+        shutil.rmtree(bloom_folder)
 
     os.makedirs(img_output_folder)
     os.makedirs(tmp_folder)
+    os.makedirs(bloom_folder)
 
     # connect to C@H server and initialize client
     client = TempCPUWorker(url=CRAWLINGATHOME_SERVER_URL, nickname=YOUR_NICKNAME_FOR_THE_LEADERBOARD)
@@ -534,7 +451,7 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
                 start = time.time()
                 # parse valid links from wat file
                 with open(tmp_folder + "shard.wat", "r") as infile:
-                    parsed_data, clpd = parse_wat(infile, start_index, lines, i)
+                    parsed_data, clpd = parse_wat(infile, start_index, lines, i, updatingBloom)
                 print (f"[{i} multicpu] parsed wat in {round(time.time()-start,2)}")
                 start = time.time()
 
@@ -601,10 +518,9 @@ if __name__ == "__main__":
     workers = []
     for i in range ( procs ):
         #use this queue to annount that bloom is currently processing and please do not update filters. if queue is not empty please wait, if queue is empty you may update filters
-        workers.append(Process(target=proc_worker, args= [i, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVER_URL], daemon=True))
+        workers.append(Process(target=proc_worker, args= [i, update, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVER_URL], daemon=True))
 
     Process(target=updateBloom, args= [update, "archiveteam@88.198.2.17::bloom"], daemon=True).start()
-    Process(target=bloomServer, args= [update], daemon=True).start()
 
     time.sleep(20)
 
