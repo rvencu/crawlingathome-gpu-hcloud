@@ -114,7 +114,6 @@ def queryBloom(ClientSocket, hash, bloom):
         ClientSocket.send(str.encode(jsonstring))
         Response = ClientSocket.recv(1024)
         resp = Response.decode('utf-8')
-        #print(f"[debug] queryBloom response: {resp}")
         if resp != "-1":
             break
         print (f"[bloom client] pending bloom updates")
@@ -189,11 +188,8 @@ def parse_wat(content, start, line_count, i):
                 domain = "unknown"
                 try:
                     domain = urlparse(url).netloc
-                    #print (f"[debug] query for blocked")
-                    #start = time.time()
                     if queryBloom(ClientSocket, domain, "blocked") == "1":
                         continue
-                    #print (f"[debug] queried for blocked in {round(time.time()-start,4)} sec")
                 except:
                     # cannot even parse the url
                     continue
@@ -209,7 +205,6 @@ def parse_wat(content, start, line_count, i):
                     if not url.startswith("http"):
                         url = urljoin(base_url, url)
                     # reject if pair is a duplicate
-                    #concat = str(hash(url + alt_text))
                     concat = hashlib.md5((url + alt_text).encode("utf-8")).hexdigest()
                     if queryBloom(ClientSocket, concat, "clipped") == "1":
                         clpd += 1
@@ -413,12 +408,9 @@ def bloomServer(updatingBloom: Queue):
     ServerSocket.listen(5)
 
     def threaded_client(connection):
-        print(f"[debug] starting server thread")
         clipped = [BloomFilter(max_elements=200000000, error_rate=0.05, filename=(x,-1)) for x in glob("/home/crawl/crawlingathome-gpu-hcloud/blocklists/clipped*")]
         blocked = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/failed-domains.bin",-1))
         pending_updates = 0
-        print(f"[debug] after first bloom declaration")
-        print(f"[debug] starting loop")
         while True:            
             if pending_updates == 1 and updatingBloom.qsize() == 0:
                 # update finished, reload filters
@@ -426,13 +418,11 @@ def bloomServer(updatingBloom: Queue):
                 blocked = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/failed-domains.bin",-1))
                 pending_updates = 0
             data = connection.recv(2048)
-            #print(f"[debug] data received")
             if not data:
-                print(f"[debug] break no data")
+                print(f"[bloom server] break no data")
                 break
             reply = "0"
             hash, bloom = json.loads(data.decode('utf-8'), object_hook=hinted_tuple_hook)[0]
-            #print(f"[debug] hash {hash} and bloom {bloom}")
             if updatingBloom.qsize() > 0:
                 pending_updates = 1
                 reply = "-1" # send -1 to wait 10s then retry
@@ -445,10 +435,9 @@ def bloomServer(updatingBloom: Queue):
                 if hash in blocked:
                     reply = "1"
             else:
-                print(f"[debug] break message not recognized {bloom}")
                 break
             connection.sendall(str.encode(reply))
-        print(f"[debug] server thread closing connection")
+        print(f"[bloom server] thread closing connection")
         connection.close()
 
     while True:
