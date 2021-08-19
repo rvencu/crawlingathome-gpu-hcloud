@@ -20,15 +20,18 @@ import trio
 import uuid
 import math
 import ftfy
+import json
 import ujson
+import socket
 import shutil
 import random
 import hashlib
 import tarfile
-import pandas as pd
 import numpy as np
+import pandas as pd
 import pycld2 as cld2
 from glob import glob
+from _thread import *
 from uuid import uuid1
 from io import BytesIO
 from datetime import datetime
@@ -36,7 +39,7 @@ import crawlingathome_client as cah
 from bloom_filter2 import BloomFilter
 from urllib.parse import urljoin, urlparse
 sys.path.append('./crawlingathome-worker/')
-from multiprocessing import Process, cpu_count, JoinableQueue
+from multiprocessing import Process, cpu_count, Queue
 from PIL import Image, ImageFile, UnidentifiedImageError 
 
 from random_user_agent.user_agent import UserAgent
@@ -48,6 +51,19 @@ asks.init("trio")
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True  # https://stackoverflow.com/a/47958486
 
+class MultiDimensionalArrayEncoder(json.JSONEncoder):
+    def encode(self, obj):
+        def hint_tuples(item):
+            if isinstance(item, tuple):
+                return {'__tuple__': True, 'items': item}
+            if isinstance(item, list):
+                return [hint_tuples(e) for e in item]
+            if isinstance(item, dict):
+                return {key: hint_tuples(value) for key, value in item.items()}
+            else:
+                return item
+
+        return super(MultiDimensionalArrayEncoder, self).encode(hint_tuples(obj))
 class Tracer(trio.abc.Instrument):
 
     def __init__(self, i=""):
@@ -83,6 +99,27 @@ class Tracer(trio.abc.Instrument):
         print(f"[{self.i} instrumentation] Localbloom catched {self.bloom} urls")
 
 
+def hinted_tuple_hook(obj):
+    if '__tuple__' in obj:
+        return tuple(obj['items'])
+    else:
+        return obj
+
+def queryBloom(ClientSocket, hash, bloom):
+    
+    enc = MultiDimensionalArrayEncoder()
+    jsonstring =  enc.encode([(hash, bloom)])
+
+    Response = ClientSocket.recv(1024)
+    while True:
+        ClientSocket.send(str.encode(jsonstring))
+        Response = ClientSocket.recv(1024)
+        resp = Response.decode('utf-8')
+        if resp != "-1":
+            break
+        print (f"[bloom client] pending bloom updates")
+        time.sleep(10)
+    return resp
 
 def remove_bad_chars(text):
     # cleanup text so language can be detected
@@ -107,15 +144,17 @@ def parse_wat(content, start, line_count, i):
     # do not produce any image. domains that mayb dissapeared, or are good at blocking scrapers. List is also learned from
     # past crawling effort
     print (f"[{i} parser] start parsing")
-    while True:
-        try:
-            clipped = [BloomFilter(max_elements=200000000, error_rate=0.05, filename=(x,-1)) for x in glob("/home/crawl/crawlingathome-gpu-hcloud/blocklists/clipped*")]
-            blocked = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/failed-domains.bin",-1))
-            break
-        except Exception as e:
-            print(f"[{i} parser] bloom exception: {e}")
-            time.sleep(10)
-    print (f"[{i} parser] bloom filters initialized")
+
+    ClientSocket = socket.socket()
+    host = '127.0.0.1'
+    port = 6000
+
+    print(f'[{i} bloom socket] Waiting for connection')
+    try:
+        ClientSocket.connect((host, port))
+    except socket.error as e:
+        print(f"[{i} bloom socket] exception: {str(e)}")
+
     clpd = 0
     valid_data = []
     content.seek(start)
@@ -150,7 +189,7 @@ def parse_wat(content, start, line_count, i):
                 domain = "unknown"
                 try:
                     domain = urlparse(url).netloc
-                    if domain in blocked:
+                    if queryBloom(ClientSocket, domain, "blocked") == "1":
                         continue
                 except:
                     # cannot even parse the url
@@ -169,17 +208,17 @@ def parse_wat(content, start, line_count, i):
                     # reject if pair is a duplicate
                     #concat = str(hash(url + alt_text))
                     concat = hashlib.md5((url + alt_text).encode("utf-8")).hexdigest()
-                    clp = False
-                    for filter in clipped:
-                        if concat in filter: #duplicates:
-                            clpd += 1
-                            clp = True
-                            break
-                    if clp:
+                    if queryBloom(ClientSocket, concat, "clipped") == "1":
+                        clpd += 1
                         continue
                     valid_data.append((url, alt_text, license, domain))
     except Exception as e:
         print(f"[{i} parser] parser exception: {e}")
+
+    # send server thread closing command
+    queryBloom("close", "connection")
+    ClientSocket.close()
+
     print (f"[{i} parser] parsed {len(valid_data)} preparing to return")
     return ([
         t for t in {tuple(i) for i in valid_data}
@@ -351,8 +390,60 @@ def updateBloom(target ):
             os.system("cp ./the-eye.eu/public/AI/cahblacklists/* /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
             os.system("rm -rf ./the-eye.eu/public/AI/cahblacklists/*")
         print(f"[bloom] Updated bloom filters in {round(time.time()-start, 2)} sec")
-        time.sleep(10000)
+        time.sleep(300)
 
+def bloomServer(updatingBloom: Queue):
+    ServerSocket = socket.socket()
+    host = '127.0.0.1'
+    port = 6000
+    ThreadCount = 0
+    try:
+        ServerSocket.bind((host, port))
+    except socket.error as e:
+        print(f"[bloom server] exception: {str(e)}")
+
+    print('[bloom server] Waiting for connections...')
+    ServerSocket.listen(5)
+
+    def threaded_client(connection):
+        clipped = [BloomFilter(max_elements=200000000, error_rate=0.05, filename=(x,-1)) for x in glob("/home/crawl/crawlingathome-gpu-hcloud/blocklists/clipped*")]
+        blocked = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/failed-domains.bin",-1))
+        pending_updates = 0
+        while True:
+            if pending_updates == 1 and updatingBloom.qsize() == 0:
+                # update finished, reload filters
+                clipped = [BloomFilter(max_elements=200000000, error_rate=0.05, filename=(x,-1)) for x in glob("/home/crawl/crawlingathome-gpu-hcloud/blocklists/clipped*")]
+                blocked = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/failed-domains.bin",-1))
+                pending_updates = 0
+            data = connection.recv(2048)
+            if not data:
+                break
+            reply = "0"
+            hash, bloom = json.loads(data.decode('utf-8'), object_hook=hinted_tuple_hook)[0]
+            if updatingBloom.qsize() > 0:
+                pending_updates = 1
+                reply = "-1" # send -1 to wait 10s then retry
+            elif bloom == "clipped":
+                for filter in clipped:
+                    if hash in filter:
+                        reply = "1"
+                        break
+            elif bloom == "blocked":
+                if hash in blocked:
+                    reply = "1"
+            else:
+                 break
+            connection.sendall(str.encode(reply))
+        connection.close()
+
+    while True:
+        Client, address = ServerSocket.accept()
+        print('[bloom server] Connected to: ' + address[0] + ':' + str(address[1]))
+        start_new_thread(threaded_client, (Client, ))
+        ThreadCount += 1
+        print('[bloom server] Thread Number: ' + str(ThreadCount))
+
+    ServerSocket.close()
 class FileData:
     """
     Helper class to easily find wat file size, mid position, etc
