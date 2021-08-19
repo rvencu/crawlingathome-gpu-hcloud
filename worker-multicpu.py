@@ -219,7 +219,7 @@ def parse_wat(content, start, line_count, i):
         print(f"[{i} parser] parser exception: {e}")
 
     # send server thread closing command
-    queryBloom("close", "connection")
+    queryBloom(ClientSocket, "close", "connection")
     ClientSocket.close()
 
     print (f"[{i} parser] parsed {len(valid_data)} preparing to return")
