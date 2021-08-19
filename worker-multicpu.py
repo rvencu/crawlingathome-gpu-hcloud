@@ -115,6 +115,7 @@ def queryBloom(ClientSocket, hash, bloom):
         ClientSocket.send(str.encode(jsonstring))
         Response = ClientSocket.recv(1024)
         resp = Response.decode('utf-8')
+        print(f"[debug] queryBloom response: {resp}")
         if resp != "-1":
             break
         print (f"[bloom client] pending bloom updates")
@@ -421,6 +422,7 @@ def bloomServer(updatingBloom: Queue):
                 pending_updates = 0
             data = connection.recv(2048)
             if not data:
+                print(f"[debug] break no data")
                 break
             reply = "0"
             hash, bloom = json.loads(data.decode('utf-8'), object_hook=hinted_tuple_hook)[0]
@@ -438,6 +440,7 @@ def bloomServer(updatingBloom: Queue):
             else:
                  break
             connection.sendall(str.encode(reply))
+        print(f"[debug] server thread closing connection")
         connection.close()
 
     while True:
@@ -529,7 +532,7 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
 
                 # compute output file names base
                 out_fname = f"FIRST_SAMPLE_ID_IN_SHARD_{str(first_sample_id)}_LAST_SAMPLE_ID_IN_SHARD_{str(last_sample_id)}_{shard}"
-                print(f"[{i} multicpu] shard {out_fname} acquired in {round(time.time()-start,2)} sec (including bloom updates)")
+                print(f"[{i} multicpu] shard {out_fname} acquired in {round(time.time()-start,2)} sec")
                 
                 start = time.time()
                 # parse valid links from wat file
