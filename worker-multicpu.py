@@ -189,11 +189,11 @@ def parse_wat(content, start, line_count, i):
                 domain = "unknown"
                 try:
                     domain = urlparse(url).netloc
-                    print (f"[debug] query for blocked")
-                    start = time.time()
+                    #print (f"[debug] query for blocked")
+                    #start = time.time()
                     if queryBloom(ClientSocket, domain, "blocked") == "1":
                         continue
-                    print (f"[debug] queried for blocked in {round(time.time()-start,4)} sec")
+                    #print (f"[debug] queried for blocked in {round(time.time()-start,4)} sec")
                 except:
                     # cannot even parse the url
                     continue
@@ -418,21 +418,21 @@ def bloomServer(updatingBloom: Queue):
         blocked = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/failed-domains.bin",-1))
         pending_updates = 0
         print(f"[debug] after first bloom declaration")
-        while True:
-            print(f"[debug] starting loop")
+        print(f"[debug] starting loop")
+        while True:            
             if pending_updates == 1 and updatingBloom.qsize() == 0:
                 # update finished, reload filters
                 clipped = [BloomFilter(max_elements=200000000, error_rate=0.05, filename=(x,-1)) for x in glob("/home/crawl/crawlingathome-gpu-hcloud/blocklists/clipped*")]
                 blocked = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/failed-domains.bin",-1))
                 pending_updates = 0
             data = connection.recv(2048)
-            print(f"[debug] data received")
+            #print(f"[debug] data received")
             if not data:
                 print(f"[debug] break no data")
                 break
             reply = "0"
             hash, bloom = json.loads(data.decode('utf-8'), object_hook=hinted_tuple_hook)[0]
-            print(f"[debug] hash {hash} and bloom {bloom}")
+            #print(f"[debug] hash {hash} and bloom {bloom}")
             if updatingBloom.qsize() > 0:
                 pending_updates = 1
                 reply = "-1" # send -1 to wait 10s then retry
