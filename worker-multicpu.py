@@ -114,7 +114,7 @@ def queryBloom(ClientSocket, hash, bloom):
         ClientSocket.send(str.encode(jsonstring))
         Response = ClientSocket.recv(1024)
         resp = Response.decode('utf-8')
-        print(f"[debug] queryBloom response: {resp}")
+        #print(f"[debug] queryBloom response: {resp}")
         if resp != "-1":
             break
         print (f"[bloom client] pending bloom updates")
