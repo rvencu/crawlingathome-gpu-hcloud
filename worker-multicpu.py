@@ -110,7 +110,6 @@ def queryBloom(ClientSocket, hash, bloom):
     enc = MultiDimensionalArrayEncoder()
     jsonstring =  enc.encode([(hash, bloom)])
 
-    Response = ClientSocket.recv(1024)
     while True:
         ClientSocket.send(str.encode(jsonstring))
         Response = ClientSocket.recv(1024)
@@ -190,8 +189,11 @@ def parse_wat(content, start, line_count, i):
                 domain = "unknown"
                 try:
                     domain = urlparse(url).netloc
+                    print (f"[debug] query for blocked")
+                    start = time.time()
                     if queryBloom(ClientSocket, domain, "blocked") == "1":
                         continue
+                    print (f"[debug] queried for blocked in {round(time.time()-start,4)} sec")
                 except:
                     # cannot even parse the url
                     continue
