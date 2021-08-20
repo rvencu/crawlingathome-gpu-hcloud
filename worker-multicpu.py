@@ -20,13 +20,12 @@ import trio
 import uuid
 import math
 import ftfy
-import json
 import ujson
-import socket
 import shutil
 import random
 import hashlib
 import tarfile
+import dns_cache
 import numpy as np
 import pandas as pd
 import pycld2 as cld2
@@ -48,6 +47,8 @@ from random_user_agent.params import SoftwareName, OperatingSystem
 
 import asks
 asks.init("trio")
+
+dns_cache.override_system_resolver(min_ttl = dns_cache.NO_EXPIRY)
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True  # https://stackoverflow.com/a/47958486
 
