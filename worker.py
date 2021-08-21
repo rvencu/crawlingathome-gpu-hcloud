@@ -149,33 +149,33 @@ def parse_wat(content, start, line_count):
                 hash = hashlib.md5((url + alt_text).encode("utf-8")).hexdigest()
                 valid_data.append((url, alt_text, license, domain, hash))
             
-        print(f"[debug] lenght of pairs to filter {len(valid_data)}")
-        s = time.time()
+    print(f"[debug] lenght of pairs to filter {len(valid_data)}")
+    s = time.time()
 
-        # remove from valid_data elements rejected by clipped bloom server
-        with open('hash.txt', 'w') as f:
-            for item in valid_data:
-                f.write(item[-1]+"\n")
-        post = {
-            'file': ('hash.txt', open('hash.txt', 'rb')),
-            'key': (None, 'clipped'),
-        }
-        response = requests.post(f'http://{bloomip}:8000/deduplicate/', files=post)
-        if response.status_code != 200:
-            print(f"crash, cannot contact the bloom server, please fix")
-            sys.exit() # maybe fallback to file based filters? too depressing...
-
-        valid_hashes = response.content.decode("utf-8").split("\n")
-        print(f"[debug] bloom server returned {len(valid_hashes)} in {round(time.time()-s,3)} sec")
-
+    # remove from valid_data elements rejected by clipped bloom server
+    with open('hash.txt', 'w') as f:
         for item in valid_data:
-            if item[-1] not in valid_hashes:
-                valid_data.remove(item)
-                clpd += 1
-            else:
-                del item[-1] # remove the concat from every item in the list
+            f.write(item[-1]+"\n")
+    post = {
+        'file': ('hash.txt', open('hash.txt', 'rb')),
+        'key': (None, 'clipped'),
+    }
+    response = requests.post(f'http://{bloomip}:8000/deduplicate/', files=post)
+    if response.status_code != 200:
+        print(f"crash, cannot contact the bloom server, please fix")
+        sys.exit() # maybe fallback to file based filters? too depressing...
 
-        print(f"[debug] lenght of pairs to return {len(valid_data)}")
+    valid_hashes = response.content.decode("utf-8").split("\n")
+    print(f"[debug] bloom server returned {len(valid_hashes)} in {round(time.time()-s,3)} sec")
+
+    for item in valid_data:
+        if item[-1] not in valid_hashes:
+            valid_data.remove(item)
+            clpd += 1
+        else:
+            del item[-1] # remove the concat from every item in the list
+
+    print(f"[debug] lenght of pairs to return {len(valid_data)}")
 
     return ([
         t for t in {tuple(i) for i in valid_data}
