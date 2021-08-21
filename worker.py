@@ -163,8 +163,17 @@ def parse_wat(content, start, line_count):
         'file': ('hash.txt', open('hash.txt', 'rb')),
         'key': (None, 'clipped'),
     }
-    response = requests.post(f'http://{bloomip}:8000/deduplicate/', files=post)
-    if response.status_code != 200:
+    
+    failure = True
+    for _ in range(5):
+        response = requests.post(f'http://{bloomip}:8000/deduplicate/', files=post)
+        if response.status_code != 200:
+            print(f"bloom server error, retrying...")
+            time.sleep(1)            
+        else:
+            failure = False
+            break
+    if failure:
         print(f"crash, cannot contact the bloom server, please fix")
         sys.exit() # maybe fallback to file based filters? too depressing...
 
