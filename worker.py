@@ -180,9 +180,11 @@ def parse_wat(content, start, line_count):
 
     print(f"[debug] lenght of pairs to return {len(valid_data)}")
 
-    return ([
-        t for t in {tuple(i) for i in valid_data}
-    ], clpd)  # use a dict in order to remove duplicate tuples from list
+    valid_data = [t for t in {tuple(i) for i in valid_data}]
+
+    print(f"[debug] lenght of deduplicated pairs to return {len(valid_data)}")
+
+    return (valid_data, clpd)  # use a dict in order to remove duplicate tuples from list
 
 
 def process_img_content(response, alt_text, license, sample_id):
