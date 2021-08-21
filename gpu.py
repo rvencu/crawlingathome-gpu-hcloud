@@ -261,6 +261,7 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
                 'key': (None, 'main'),
             }
             response = requests.post(f'http://{bloomip}:8000/deduplicate/', files=post)
+            os.remove('hash.txt')
             if response.status_code != 200:
                 print(f"crash, cannot contact the bloom server, please fix")
                 sys.exit()

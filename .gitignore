@@ -169,8 +169,8 @@ parquet/
 blocklists/*
 *.tar
 *.tar.gz
+hash.txt
 hetzner.txt
 alibaba.txt
 oracle.txt
 test/
-hash.txt

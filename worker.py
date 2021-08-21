@@ -98,7 +98,6 @@ def parse_wat(content, start, line_count):
     #clipped = [BloomFilter(max_elements=200000000, error_rate=0.05, filename=(x,-1)) for x in glob("/home/crawl/crawlingathome-gpu-hcloud/blocklists/clipped*")]
     blocked = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/failed-domains.bin",-1))    
 
-    deduped = 0
     clpd = 0
     valid_data = []
     content.seek(start)
@@ -147,38 +146,37 @@ def parse_wat(content, start, line_count):
             if details[0][1] == "en":
                 if not url.startswith("http"):
                     url = urljoin(base_url, url)
-                # reject if pair is a duplicate
-                #concat = str(hash(url + alt_text))
-                concat = hashlib.md5((url + alt_text).encode("utf-8")).hexdigest()
-                valid_data.append((url, alt_text, license, domain, concat))
+                hash = hashlib.md5((url + alt_text).encode("utf-8")).hexdigest()
+                valid_data.append((url, alt_text, license, domain, hash))
             
-            print(f"[debug] lenght of pairs to filter {len(valid_data)}")
-            s = time.time()
+        print(f"[debug] lenght of pairs to filter {len(valid_data)}")
+        s = time.time()
 
-            # remove from valid_data elements rejected by clipped bloom server
-            with open('hash.txt', 'w') as f:
-                for item in valid_data:
-                    f.write(item[-1]+"\n")
-            post = {
-                'file': ('hash.txt', open('hash.txt', 'rb')),
-                'key': (None, 'clipped'),
-            }
-            response = requests.post(f'http://{bloomip}:8000/deduplicate/', files=post)
-            if response.status_code != 200:
-                print(f"crash, cannot contact the bloom server, please fix")
-                sys.exit() # maybe fallback to file based filters? too depressing...
-
-            valid_hashes = response.content.decode("utf-8").split("\n")
-            print(f"[debug] bloom server returned {len(valid_hashes)} in {round(time.time()-s,3)} sec")
-
+        # remove from valid_data elements rejected by clipped bloom server
+        with open('hash.txt', 'w') as f:
             for item in valid_data:
-                if item[-1] not in valid_hashes:
-                    valid_data.remove(item)
-                    clpd += 1
-                else:
-                    del item[-1] # remove the concat from every item in the list
+                f.write(item[-1]+"\n")
+        post = {
+            'file': ('hash.txt', open('hash.txt', 'rb')),
+            'key': (None, 'clipped'),
+        }
+        response = requests.post(f'http://{bloomip}:8000/deduplicate/', files=post)
+        if response.status_code != 200:
+            print(f"crash, cannot contact the bloom server, please fix")
+            sys.exit() # maybe fallback to file based filters? too depressing...
 
-            print(f"[debug] lenght of pairs to return {len(valid_data)}")
+        valid_hashes = response.content.decode("utf-8").split("\n")
+        print(f"[debug] bloom server returned {len(valid_hashes)} in {round(time.time()-s,3)} sec")
+
+        for item in valid_data:
+            if item[-1] not in valid_hashes:
+                valid_data.remove(item)
+                clpd += 1
+            else:
+                del item[-1] # remove the concat from every item in the list
+
+        print(f"[debug] lenght of pairs to return {len(valid_data)}")
+
     return ([
         t for t in {tuple(i) for i in valid_data}
     ], clpd)  # use a dict in order to remove duplicate tuples from list
@@ -335,19 +333,10 @@ def updateBloom(target, initial=False):
             shutil.rmtree("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
         os.makedirs("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
         if (os.getenv("CLOUD") in ["hetzner","alibaba"]):
-            os.system(f"rsync -av --partial --inplace --progress {target}/clipped*.bin /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
             os.system(f"rsync -av --partial --inplace --progress {target}/failed*.bin /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
         else:
-            os.system(f'wget -m -np -c -U "Crawling@Home" --tries=15 -R "index.html*,bloom*.bin" "http://the-eye.eu/public/AI/cahblacklists/"')
+            os.system(f'wget -m -np -c -U "Crawling@Home" --tries=15 -R "index.html*,bloom*.bin,clipped*.bin" "http://the-eye.eu/public/AI/cahblacklists/"')
             os.system("mv ./the-eye.eu/public/AI/cahblacklists/* /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
-    else:
-        #overwrite only active filter
-        if (os.getenv("CLOUD") in ["hetzner","alibaba"]):
-            os.system(f"rsync -av --partial --inplace --progress {target}/clipped_active.bin /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
-        else:
-            os.system(f'wget -m -np -c -U "Crawling@Home" --tries=15 -R "index.html*,bloom*.bin" -A "*_active.bin" "http://the-eye.eu/public/AI/cahblacklists/"')
-            os.system("cp ./the-eye.eu/public/AI/cahblacklists/* /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
-            os.system("rm -rf ./the-eye.eu/public/AI/cahblacklists/*")
 
     print(f"Updated bloom filters in {round(time.time()-start, 2)} sec")
 
@@ -402,10 +391,6 @@ if __name__ == "__main__":
 
             start = time.time()
             start0 = start
-
-            # updating bloom filter
-            updateBloom("archiveteam@88.198.2.17::bloom")
-
 
             client.newJob()
             client.downloadWat()
