@@ -25,7 +25,6 @@ import shutil
 import random
 import hashlib
 import tarfile
-#import dns_cache
 import numpy as np
 import pandas as pd
 import pycld2 as cld2
@@ -39,16 +38,14 @@ from bloom_filter2 import BloomFilter
 from urllib.parse import urljoin, urlparse
 sys.path.append('./crawlingathome-worker/')
 from multiprocessing import Process, cpu_count, Queue
+from crawlingathome_client.temp import TempCPUWorker
 from PIL import Image, ImageFile, UnidentifiedImageError 
 
 from random_user_agent.user_agent import UserAgent
-from crawlingathome_client.temp import TempCPUWorker
 from random_user_agent.params import SoftwareName, OperatingSystem
 
 import asks
 asks.init("trio")
-
-#dns_cache.override_system_resolver(min_ttl = dns_cache.NO_EXPIRY)
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True  # https://stackoverflow.com/a/47958486
 

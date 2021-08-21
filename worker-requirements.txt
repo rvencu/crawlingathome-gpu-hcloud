@@ -6,4 +6,4 @@ ujson
 asks
 bloom-filter2
 pillow
-dns-cache
+glances
