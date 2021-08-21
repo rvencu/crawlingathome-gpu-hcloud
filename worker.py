@@ -100,6 +100,7 @@ def parse_wat(content, start, line_count):
 
     clpd = 0
     valid_data = []
+    check_flag = set() # track urls and make them unique
     content.seek(start)
     for _ in range(line_count):
         line = content.readline()
@@ -147,7 +148,9 @@ def parse_wat(content, start, line_count):
                 if not url.startswith("http"):
                     url = urljoin(base_url, url)
                 hash = hashlib.md5((url + alt_text).encode("utf-8")).hexdigest()
-                valid_data.append((url, alt_text, license, domain, hash))
+                if url not in check_flag:
+                    valid_data.append((url, alt_text, license, domain, hash))
+                    check_flag.add(url)
             
     print(f"[debug] lenght of pairs to filter {len(valid_data)}")
     s = time.time()
