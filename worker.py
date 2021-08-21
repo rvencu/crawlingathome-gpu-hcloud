@@ -172,8 +172,6 @@ def parse_wat(content, start, line_count):
         if item[-1] not in valid_hashes:
             valid_data.remove(item)
             clpd += 1
-        else:
-            del item[-1] # remove the concat from every item in the list
 
     print(f"[debug] lenght of pairs to return {len(valid_data)}")
 
@@ -257,7 +255,7 @@ async def request_image(datas, start_sampleid, localbloom):
         while True:
             start=time.time()
 
-            url, alt_text, license, domain = data
+            url, alt_text, license, domain, hash = data
             # the following 2 lines are related to Trio Instrument to capture events from multiple threads
             task = trio.lowlevel.current_task()
             try:
@@ -434,7 +432,7 @@ if __name__ == "__main__":
                 start = time.time()
 
                 # convert to dataframe and save to disk (for statistics and generating blocking lists)
-                parsed_df = pd.DataFrame(parsed_data, columns=["URL","TEXT","LICENSE","DOMAIN"])
+                parsed_df = pd.DataFrame(parsed_data, columns=["URL","TEXT","LICENSE","DOMAIN","HASH"])
                 parsed_df = parsed_df.drop_duplicates(subset=["URL"])
                 parsed_df.to_csv(output_folder + out_fname + "_parsed.csv", index=False, sep="|")
 
