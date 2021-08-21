@@ -170,6 +170,8 @@ def parse_wat(content, start, line_count):
 
     valid_hashes = response.content.decode("utf-8").split("\n")
     print(f"[debug] bloom server returned {len(valid_hashes)} in {round(time.time()-s,3)} sec")
+    valid_hashes = set(valid_hashes)
+    print(f"[debug] deduplicated bloom valid list has {len(valid_hashes)} items")
 
     for item in valid_data:
         if item[-1] not in valid_hashes:
@@ -425,7 +427,7 @@ if __name__ == "__main__":
 
                 # compute output file names base
                 out_fname = f"FIRST_SAMPLE_ID_IN_SHARD_{str(first_sample_id)}_LAST_SAMPLE_ID_IN_SHARD_{str(last_sample_id)}_{shard}_rvencu_full_wat"
-                print(f"[stats {shard_of_chunk}] Shard acquired in {round(time.time()-start,2)} sec (including bloom updates)")
+                print(f"[stats {shard_of_chunk}] Shard acquired in {round(time.time()-start,2)} sec")
                 start = time.time()
 
                 # parse valid links from wat file
