@@ -11,6 +11,7 @@ import shutil
 import random
 import hashlib
 import tarfile
+import requests
 import numpy as np
 import pandas as pd
 import pycld2 as cld2
@@ -85,6 +86,8 @@ def parse_wat(content, start, line_count):
     output: a list of tuples (url, text, license)
     """
 
+    bloomip = "116.202.162.146"
+
     # clipped*.bin filters domains based on previous results of CLIP filtering.
     # the domains are not likely to pass CLIP for either bad captions or the content is almost always NSFW
 
@@ -92,7 +95,7 @@ def parse_wat(content, start, line_count):
     # do not produce any image. domains that mayb dissapeared, or are good at blocking scrapers. List is also learned from
     # past crawling effort
 
-    clipped = [BloomFilter(max_elements=200000000, error_rate=0.05, filename=(x,-1)) for x in glob("/home/crawl/crawlingathome-gpu-hcloud/blocklists/clipped*")]
+    #clipped = [BloomFilter(max_elements=200000000, error_rate=0.05, filename=(x,-1)) for x in glob("/home/crawl/crawlingathome-gpu-hcloud/blocklists/clipped*")]
     blocked = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/failed-domains.bin",-1))    
 
     deduped = 0
@@ -147,15 +150,35 @@ def parse_wat(content, start, line_count):
                 # reject if pair is a duplicate
                 #concat = str(hash(url + alt_text))
                 concat = hashlib.md5((url + alt_text).encode("utf-8")).hexdigest()
-                clp = False
-                for filter in clipped:
-                    if concat in filter: #duplicates:
-                        clpd += 1
-                        clp = True
-                        break
-                if clp:
-                    continue
-                valid_data.append((url, alt_text, license, domain))
+                valid_data.append((url, alt_text, license, domain, concat))
+            
+            print(f"[debug] lenght of pairs to filter {len(valid_data)}")
+            s = time.time()
+
+            # remove from valid_data elements rejected by clipped bloom server
+            with open('hash.txt', 'w') as f:
+                for item in valid_data:
+                    f.write(item[-1]+"\n")
+            post = {
+                'file': ('hash.txt', open('hash.txt', 'rb')),
+                'key': (None, 'clipped'),
+            }
+            response = requests.post(f'http://{bloomip}:8000/deduplicate/', files=post)
+            if response.status_code != 200:
+                print(f"crash, cannot contact the bloom server, please fix")
+                sys.exit() # maybe fallback to file based filters? too depressing...
+
+            valid_hashes = response.content.decode("utf-8").split("\n")
+            print(f"[debug] bloom server returned {len(valid_hashes)} in {round(time.time()-s,3)} sec")
+
+            for item in valid_data:
+                if item[-1] not in valid_hashes:
+                    valid_data.remove(item)
+                    clpd += 1
+                else:
+                    del item[-1] # remove the concat from every item in the list
+
+            print(f"[debug] lenght of pairs to return {len(valid_data)}")
     return ([
         t for t in {tuple(i) for i in valid_data}
     ], clpd)  # use a dict in order to remove duplicate tuples from list

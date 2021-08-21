@@ -6,7 +6,7 @@ import uuid
 import shutil
 import curses
 import hashlib
-import fileinput
+import requests
 import threading
 import clip_filter
 import pandas as pd
@@ -198,32 +198,16 @@ def upload_worker(uploadqueue: JoinableQueue, counter: JoinableQueue, outgoingqu
         else:
             time.sleep(10)
 
-def updateBloom(init=False):
-    if init:
-        if os.path.exists("blocklists/"):
-            shutil.rmtree("blocklists/")
-        os.makedirs("blocklists/")
-    #os.system("rsync -zh archiveteam@88.198.2.17::bloom/*.bin blocklists")
-        os.system("rsync -av --partial --inplace --progress archiveteam@88.198.2.17::bloom/bloom*.bin blocklists")
-    else:
-        os.system("rsync -av --partial --inplace --progress archiveteam@88.198.2.17::bloom/bloom_active.bin blocklists") # bloom_active.bin after freeze
-
-def inbloom(hash, bloom):
-    for filter in bloom:
-        if hash in filter:
-            return True
-    return False
-
 def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag: JoinableQueue, groupsize: int):
     print (f"[gpu] worker started")
     first_groupsize = groupsize
+    bloomip = "116.202.162.146"
     # watch for the incoming queue, when it is big enough we can trigger processing    
     while True:
         #print (f"[gpu] testing incoming queue size")
         if incomingqueue.qsize() >= groupsize:
             start = time.time()
-            t = threading.Thread(target=updateBloom)
-            t.start()
+
             gpuflag.put(1)
             shards = []
             addresses = []
@@ -252,8 +236,6 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             for i, job, item in shards:
                 dlparse_df = pd.read_csv(job + "/" + item + ".csv", sep="|")
                 
-                #dlparse_df["PATH"] = dlparse_df.PATH.apply(lambda x: re.sub(r"^(.*)./save/[-]?[1-9][0-9]?[0-9]?/(.*)$", r"save/\2", x))
-                #dlparse_df["PATH"] = dlparse_df.apply(lambda x: "./" + job + "/" + x["PATH"].strip("save/"), axis=1)
                 if group_parse is None:
                     group_parse = dlparse_df
                 else:
@@ -265,18 +247,29 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             
             #print (f"[gpu] saving stats")
 
-            #group_parse.to_csv("./stats/" + group_id + "_groupduped.csv", index=False, sep="|") # I am using these to find out domains to filter from scraping
             duped = len(group_parse.index)
             group_parse.drop_duplicates(subset=["URL","TEXT"], keep='last', inplace=True)
             group_parse.reset_index(inplace=True, drop=True)
             total = len(group_parse.index)
+            
+            group_parse.loc[:,"hash"] = group_parse.apply(lambda row: hashlib.md5((str(row.URL)+str(row.TEXT)).encode("utf-8")).hexdigest(), axis=1)
+            
+            with open('hash.txt', 'w') as f:
+                f.write(group_parse['hash'].str.cat(sep='\n'))
+            post = {
+                'file': ('hash.txt', open('hash.txt', 'rb')),
+                'key': (None, 'main'),
+            }
+            response = requests.post(f'http://{bloomip}:8000/deduplicate/', files=post)
+            if response.status_code != 200:
+                print(f"crash, cannot contact the bloom server, please fix")
+                sys.exit()
 
-            t.join()
-            bloom = [ BloomFilter(max_elements=200000000, error_rate=0.05, filename=(x,-1)) for x in glob("blocklists/bloom*.bin") ]
-            #bloom = BloomFilter(max_elements=200000000, error_rate=0.05, filename=("blocklists/bloom200M.bin",-1))
+            valid_hashes = response.content.decode("utf-8").split("\n")
+            print(f"bloom server has validated {len(valid_hashes)} pairs")
+            group_parse.loc[:,"bloom"] = group_parse.apply(lambda row: str(row.hash) in valid_hashes, axis=1)
 
-            group_parse.loc[:,"bloom"] = group_parse.apply(lambda row: inbloom(hashlib.md5((str(row.URL)+str(row.TEXT)).encode("utf-8")).hexdigest(), bloom), axis=1)
-            group_parse = group_parse[group_parse["bloom"] == False]
+            group_parse = group_parse[group_parse["bloom"] == True] # if True than row is valid
             group_parse.reset_index(inplace=True, drop=True)
             bloomed = len(group_parse.index)
 
@@ -391,7 +384,7 @@ if __name__ == "__main__":
     print(
         f"[GPU] starting session under `{YOUR_NICKNAME_FOR_THE_LEADERBOARD}` nickname")
 
-    time.sleep(20)
+    time.sleep(10)
 
     groupsize = 20 # how many shards to group for CLIP
 
@@ -399,10 +392,6 @@ if __name__ == "__main__":
         os.makedirs("./stats/")
     if not os.path.exists("./save/"):
         os.makedirs("./save/")
-
-    updateBloom(True)
-
-    #try:
 
     # initial cleanup - delete all working files in case of crash recovery
     reg_compile = re.compile(r"^\d{1,3}-\d{1,3}-\d{1,3}-\d{1,3}$")

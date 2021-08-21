@@ -12,14 +12,20 @@
 #   active filters: filter_active.bin
 #
 #
-
-from bloom_filter2 import BloomFilter
-from pathlib import Path
-import pandas as pd
-from glob import glob
-from datetime import datetime
 import sys
 import time
+import requests
+import pandas as pd
+from glob import glob
+from pathlib import Path
+from datetime import datetime
+from bloom_filter2 import BloomFilter
+
+# update the bloom server filters too
+bloomip = "116.202.162.146"
+
+serverbloom = BloomFilter(max_elements=10000000, error_rate=0.01, filename=(f"/home/archiveteam/bloom-{bloomip}.bin",-1))
+serverclip = BloomFilter(max_elements=10000000, error_rate=0.01, filename=(f"/home/archiveteam/clip-{bloomip}.bin",-1))
 
 start = time.time()
 now = datetime.now().strftime("%Y/%m/%d_%H:%M")
@@ -56,6 +62,14 @@ for file in glob("/home/archiveteam/CAH/hashes/*.hsh"):
                     bloom_active.add(line)
                     uniques += 1
         filesbloom.add(stem)
+    if stem not in serverbloom:
+        post = {
+            'file': (stem, open(file, 'rb')),
+            'key': (None, 'main'),
+        }
+        response = requests.post(f'http://{bloomip}:8000/add/', files=post)
+        if response.status_code == 200:
+            serverbloom.add(stem)
 
 failed_counter = 0
 for file in glob("/home/archiveteam/CAH/bloom/*.txt"):
@@ -85,6 +99,14 @@ for file in glob("/home/archiveteam/CAH/clipped/*.clp"):
                     clipped_active.add(line)
                     clipped_counter += 1
         filesclipped.add(stem)
+    if stem not in serverclip:
+        post = {
+            'file': (stem, open(file, 'rb')),
+            'key': (None, 'clipped'),
+        }
+        response = requests.post(f'http://{bloomip}:8000/add/', files=post)
+        if response.status_code == 200:
+            serverclip.add(stem)
 
 pd.set_option('precision', 2)
 df = pd.read_csv("bloom.log", sep=" ",header=None, names=["Date", "a", "unique pairs (5%)", "b", "total including duplicates","c","clipped filter (5%)","d","failed filter","e"])
@@ -107,3 +129,6 @@ if uniques > 0:
         file.write("<h2>Last week stats</h2>\n")
         file.write("<h5>Last reset date: 02 August 2021</h5>\n")
         file.write(str(df[df.Date > datetime.now() - pd.to_timedelta("7day")].sum(axis=0, numeric_only=True)).replace("\n","<br/>"))
+
+
+    
