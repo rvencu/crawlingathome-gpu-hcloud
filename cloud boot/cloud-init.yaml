@@ -19,6 +19,11 @@ packages:
  - libwebp-dev
  - libjpeg-dev
  - libwebp-dev
+ - bind9
+ - bind9utils 
+ - bind9-dnsutils 
+ - bind9-doc 
+ - bind9-host
 write_files:
 - path: /etc/environment
   content: |
@@ -94,6 +99,11 @@ runcmd:
  # take care of max open files
  - echo "session required pam_limits.so" >> /etc/pam.d/common-session
  - echo "fs.file-max = 2097152" >> /etc/sysctl.conf
+ - sed '3i        max-cache-size 2000m;' /etc/bind/named.conf.options
+ - sed '3i        resolver-query-timeout 30000;' /etc/bind/named.conf.options
+ - sed '3i        max-clients-per-query 10000;' /etc/bind/named.conf.options
+ - sed '3i        recursive-clients 10000;' /etc/bind/named.conf.options
+ - echo "DNS=127.0.0.1" >> /etc/systemd/resolved.conf
 # secure ssh
 # - sed -i -e '/^\(#\|\)PermitRootLogin/s/^.*$/PermitRootLogin no/' /etc/ssh/sshd_config
 # - sed -i -e '/^\(#\|\)PasswordAuthentication/s/^.*$/PasswordAuthentication no/' /etc/ssh/sshd_config
