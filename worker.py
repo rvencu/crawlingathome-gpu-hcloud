@@ -158,7 +158,7 @@ def parse_wat(content, start, line_count):
     # remove from valid_data elements rejected by clipped bloom server
     with open('hash.txt', 'w') as f:
         for item in valid_data:
-            f.write(item[-1]+"\n")
+            f.write(item[-1].strip()+"\n")
     post = {
         'file': ('hash.txt', open('hash.txt', 'rb')),
         'key': (None, 'clipped'),
@@ -183,7 +183,7 @@ def parse_wat(content, start, line_count):
     print(f"[debug] deduplicated bloom valid list has {len(valid_hashes)} items")
 
     for item in valid_data:
-        if item[-1] not in valid_hashes:
+        if item[-1].strip() not in valid_hashes:
             valid_data.remove(item)
             clpd += 1
 
