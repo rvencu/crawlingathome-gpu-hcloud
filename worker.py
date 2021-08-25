@@ -181,19 +181,17 @@ def parse_wat(content, start, line_count):
     print(f"[debug] bloom server returned {len(valid_hashes)} in {round(time.time()-s,3)} sec")
 
     valid_data = [t for t in {tuple(i) for i in valid_data}]
-    kept_hashes = []
+    kept_data = []
+    clpd = len(valid_data)
 
     for item in valid_data:
-        if item[-1].strip() not in valid_hashes or item[-1].strip() in kept_hashes:
-            valid_data.remove(item)
-            clpd += 1
-        else:
-            kept_hashes.append(item[-1].strip())
+        if item[-1].strip() in valid_hashes:
+            kept_data.append(item)
+            clpd -= 1
 
+    print(f"[debug] lenght of deduplicated pairs to return {len(kept_data)}")
 
-    print(f"[debug] lenght of deduplicated pairs to return {len(valid_data)}")
-
-    return (valid_data, clpd)  # use a dict in order to remove duplicate tuples from list
+    return (kept_data, clpd)  # use a dict in order to remove duplicate tuples from list
 
 
 def process_img_content(response, alt_text, license, sample_id):
