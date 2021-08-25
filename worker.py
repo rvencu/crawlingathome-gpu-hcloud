@@ -182,14 +182,12 @@ def parse_wat(content, start, line_count):
     valid_hashes = set(valid_hashes)
     print(f"[debug] deduplicated bloom valid list has {len(valid_hashes)} items")
 
+    valid_data = [t for t in {tuple(i) for i in valid_data}]
+
     for item in valid_data:
         if item[-1].strip() not in valid_hashes:
             valid_data.remove(item)
             clpd += 1
-
-    print(f"[debug] lenght of pairs to return {len(valid_data)}")
-
-    valid_data = [t for t in {tuple(i) for i in valid_data}]
 
     print(f"[debug] lenght of deduplicated pairs to return {len(valid_data)}")
 
