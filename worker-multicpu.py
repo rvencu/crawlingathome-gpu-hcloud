@@ -25,6 +25,7 @@ import shutil
 import random
 import hashlib
 import tarfile
+import requests
 import numpy as np
 import pandas as pd
 import pycld2 as cld2
@@ -89,7 +90,7 @@ def remove_bad_chars(text):
     return "".join(c for c in text if c.isprintable())
 
 
-def parse_wat(content, start, line_count, i, updatingBloom):
+def parse_wat(content, start, line_count, i):
     """
     This function checks the wat file content and attempts to extract valid candidates of image urls and alt texts
 
@@ -106,22 +107,16 @@ def parse_wat(content, start, line_count, i, updatingBloom):
     # failed-domains.txt contains failed domains, i.e. domains with image links and suitable alt texts that actually
     # do not produce any image. domains that mayb dissapeared, or are good at blocking scrapers. List is also learned from
     # past crawling effort
+    bloomip = "116.202.162.146"
+
     print (f"[{i} parser] start parsing")
 
-    while True:
-        if updatingBloom.qsize() == 0:
-            os.system(f"cp /home/crawl/crawlingathome-gpu-hcloud/blocklists/* /home/crawl/{i}/.bloom/")
-            break
-        print("[bloom] pending bloom updating")
-        time.sleep(10)
-
-    clipped = [BloomFilter(max_elements=200000000, error_rate=0.05, filename=(x,-1)) for x in glob(f"/home/crawl/{i}/.bloom/clipped*")]
     blocked = BloomFilter(max_elements=10000000, error_rate=0.01, filename=(f"/home/crawl/{i}/.bloom/failed-domains.bin",-1))
-
 
     clpd = 0
     valid_data = []
     content.seek(start)
+    check_flag = set() # track urls and make them unique
 
     try:
         for _ in range(line_count):
@@ -169,25 +164,53 @@ def parse_wat(content, start, line_count, i, updatingBloom):
                 if details[0][1] == "en":
                     if not url.startswith("http"):
                         url = urljoin(base_url, url)
-                    # reject if pair is a duplicate
-                    concat = hashlib.md5((url + alt_text).encode("utf-8")).hexdigest()
-                    clp = False
-                    for filter in clipped:
-                        if concat in filter:
-                            clpd += 1
-                            clp = True
-                            break
-                    if clp:
-                        continue
-                    valid_data.append((url, alt_text, license, domain))
+                    hash = hashlib.md5((url + alt_text).encode("utf-8")).hexdigest()
+                    if url not in check_flag:
+                        valid_data.append((url, alt_text, license, domain, hash))
+                        check_flag.add(url)
+
     except Exception as e:
         print(f"[{i} parser] parser exception: {e}")
+    
+    print(f"[debug] lenght of pairs to filter {len(valid_data)}")
+    s = time.time()
 
-    print (f"[{i} parser] parsed {len(valid_data)} preparing to return")
-    return ([
-        t for t in {tuple(i) for i in valid_data}
-    ], clpd)  # use a dict in order to remove duplicate tuples from list
+    # remove from valid_data elements rejected by clipped bloom server
+    with open('hash.txt', 'w') as f:
+        for item in valid_data:
+            f.write(item[-1].strip()+"\n")
+    post = {
+        'file': ('hash.txt', open('hash.txt', 'rb')),
+        'key': (None, 'clipped'),
+    }
+    
+    failure = True
+    for _ in range(5):
+        response = requests.post(f'http://{bloomip}:8000/deduplicate/', files=post)
+        if response.status_code != 200:
+            print(f"bloom server error, retrying...")
+            time.sleep(1)            
+        else:
+            failure = False
+            break
+    if failure:
+        print(f"crash, cannot contact the bloom server, please fix")
+        sys.exit() # maybe fallback to file based filters? too depressing...
 
+    valid_hashes = response.content.decode("utf-8").split("\n")
+    print(f"[debug] bloom server returned {len(valid_hashes)} in {round(time.time()-s,3)} sec")
+
+    valid_data = [t for t in {tuple(i) for i in valid_data}]
+    kept_data = []
+    clpd = len(valid_data)
+
+    for item in valid_data:
+        if item[-1].strip() in valid_hashes:
+            kept_data.append(item)
+            clpd -= 1
+
+    print (f"[{i} parser] parsed {len(kept_data)} preparing to return")
+    return (kept_data, clpd)  # use a dict in order to remove duplicate tuples from list
 
 
 def process_img_content(response, alt_text, license, sample_id, img_output_folder):
@@ -332,33 +355,6 @@ def upload(source: str, clientType: str, target: str):
     if os.path.exists(f"/home/crawl/{source}"):
         shutil.rmtree(f"/home/crawl/{source}", ignore_errors=True)
     return result
-
-def updateBloom(updatingBloom: Queue, target ):
-    updatingBloom.put(1)
-    if os.path.exists("/home/crawl/crawlingathome-gpu-hcloud/blocklists/"):
-        shutil.rmtree("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
-    os.makedirs("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
-    if (os.getenv("CLOUD") in ["hetzner","alibaba"]):
-        os.system(f"rsync -av --partial --inplace --progress {target}/clipped*.bin /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
-        os.system(f"rsync -av --partial --inplace --progress {target}/failed*.bin /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
-    else:
-        os.system(f'wget -q -m -np -c -U "Crawling@Home" --tries=15 -R "index.html*,bloom*.bin" "http://the-eye.eu/public/AI/cahblacklists/"')
-        os.system("mv ./the-eye.eu/public/AI/cahblacklists/* /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
-    updatingBloom.get_nowait()
-    time.sleep(300)
-    while True:
-        updatingBloom.put(1)
-        print(f"[bloom] I want to update bloom filters")
-        start = time.time()
-        if (os.getenv("CLOUD") in ["hetzner","alibaba"]):
-            os.system(f"rsync -av --partial --inplace --progress {target}/clipped_active.bin /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
-        else:
-            os.system(f'wget -q -m -np -c -U "Crawling@Home" --tries=15 -R "index.html*,bloom*.bin" -A "*_active.bin" "http://the-eye.eu/public/AI/cahblacklists/"')
-            os.system("cp ./the-eye.eu/public/AI/cahblacklists/* /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
-            os.system("rm -rf ./the-eye.eu/public/AI/cahblacklists/*")
-        updatingBloom.get_nowait()
-        print(f"[bloom] Updated bloom filters in {round(time.time()-start, 2)} sec")
-        time.sleep(300)
 class FileData:
     """
     Helper class to easily find wat file size, mid position, etc
@@ -380,7 +376,7 @@ class FileData:
     def __len__(self):
         return self._length
 
-def proc_worker(i: int, updatingBloom: Queue, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVER_URL):
+def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVER_URL):
     # initialize working folders
     output_folder = f"./{i}/save/"
     img_output_folder = output_folder + "images/"
@@ -449,7 +445,7 @@ def proc_worker(i: int, updatingBloom: Queue, YOUR_NICKNAME_FOR_THE_LEADERBOARD,
                 start = time.time()
                 # parse valid links from wat file
                 with open(tmp_folder + "shard.wat", "r") as infile:
-                    parsed_data, clpd = parse_wat(infile, start_index, lines, i, updatingBloom)
+                    parsed_data, clpd = parse_wat(infile, start_index, lines, i)
                 print (f"[{i} multicpu] parsed wat in {round(time.time()-start,2)}")
                 start = time.time()
 
@@ -511,16 +507,18 @@ if __name__ == "__main__":
     if len(sys.argv) > 1:
         procs = min(int(sys.argv[1]), cpu_count() - 5)
 
-    update = Queue()
-
     workers = []
     for i in range ( procs ):
         #use this queue to annount that bloom is currently processing and please do not update filters. if queue is not empty please wait, if queue is empty you may update filters
-        workers.append(Process(target=proc_worker, args= [i, update, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVER_URL], daemon=True))
+        workers.append(Process(target=proc_worker, args= [i, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVER_URL], daemon=True))
 
-    Process(target=updateBloom, args= [update, "archiveteam@88.198.2.17::bloom"], daemon=True).start()
+    if os.path.exists("/home/crawl/crawlingathome-gpu-hcloud/blocklists/"):
+        shutil.rmtree("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
+    os.makedirs("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
+    os.system(f'wget -m -np -c -U "Crawling@Home" --tries=15 -R "index.html*,bloom*.bin,clipped*.bin" "http://the-eye.eu/public/AI/cahblacklists/"')
+    os.system("mv ./the-eye.eu/public/AI/cahblacklists/* /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
 
-    time.sleep(20)
+    time.sleep(10)
 
     for worker in workers:
         worker.start()
