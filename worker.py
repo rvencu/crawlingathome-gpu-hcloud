@@ -179,15 +179,17 @@ def parse_wat(content, start, line_count):
 
     valid_hashes = response.content.decode("utf-8").split("\n")
     print(f"[debug] bloom server returned {len(valid_hashes)} in {round(time.time()-s,3)} sec")
-    valid_hashes = set(valid_hashes)
-    print(f"[debug] deduplicated bloom valid list has {len(valid_hashes)} items")
 
     valid_data = [t for t in {tuple(i) for i in valid_data}]
+    kept_hashes = []
 
     for item in valid_data:
-        if item[-1].strip() not in valid_hashes:
+        if item[-1].strip() not in valid_hashes and item[-1].strip() not in kept_hashes:
             valid_data.remove(item)
             clpd += 1
+        else:
+            kept_hashes.append(item[-1].strip())
+
 
     print(f"[debug] lenght of deduplicated pairs to return {len(valid_data)}")
 
