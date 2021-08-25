@@ -184,7 +184,7 @@ def parse_wat(content, start, line_count):
     kept_hashes = []
 
     for item in valid_data:
-        if item[-1].strip() not in valid_hashes and item[-1].strip() not in kept_hashes:
+        if item[-1].strip() not in valid_hashes or item[-1].strip() in kept_hashes:
             valid_data.remove(item)
             clpd += 1
         else:
