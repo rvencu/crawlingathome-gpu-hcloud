@@ -233,6 +233,7 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
                 incomingqueue.task_done()
             #print (f"[gpu] adjusted image paths")
 
+
             for i, job, item in shards:
                 dlparse_df = pd.read_csv(job + "/" + item + ".csv", sep="|")
                 
@@ -245,13 +246,11 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
                 for i, job, item in shards:
                     f.write(item + "\n")
             
-            #print (f"[gpu] saving stats")
-
             duped = len(group_parse.index)
             group_parse.drop_duplicates(subset=["URL","TEXT"], keep='last', inplace=True)
             group_parse.reset_index(inplace=True, drop=True)
             total = len(group_parse.index)
-            
+
             group_parse.loc[:,"hash"] = group_parse.apply(lambda row: hashlib.md5((str(row.URL)+str(row.TEXT)).encode("utf-8")).hexdigest(), axis=1)
             
             with open('hash.txt', 'w') as f:
@@ -268,15 +267,17 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
 
             valid_hashes = response.content.decode("utf-8").split("\n")
             print(f"bloom server has validated {len(valid_hashes)} pairs")
-            group_parse.loc[:,"bloom"] = group_parse.apply(lambda row: str(row.hash) in valid_hashes, axis=1)
 
-            group_parse = group_parse[group_parse["bloom"] == True] # if True than row is valid
+            group_parse = group_parse[group_parse.hash.isin(valid_hashes)]
+
             group_parse.reset_index(inplace=True, drop=True)
+
             bloomed = len(group_parse.index)
 
             group_parse.to_csv("./stats/" + group_id + "_beforeclip.csv", index=False, sep="|") # I am using these to find out domains to filter from scraping
 
             print (f"{Fore.YELLOW}[gpu] preparation done in {round(time.time()-start, 2)} sec.{Fore.RESET}")
+
             start = time.time()
             final_images, results = clip_filter.filter(group_parse, group_id, "./save/")
             
