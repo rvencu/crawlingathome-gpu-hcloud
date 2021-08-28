@@ -151,7 +151,7 @@ def df_tfrecords(df, output_fname):
 
 def filter(df, out_fname, output_folder):
     # save hashes
-    df.loc[:,"hash"] = df.apply(lambda row: hashlib.md5((str(row.URL)+str(row.TEXT)).encode("utf-8")).hexdigest(), axis=1)
+    # df.loc[:,"hash"] = df.apply(lambda row: hashlib.md5((str(row.URL)+str(row.TEXT)).encode("utf-8")).hexdigest(), axis=1) # seems already set from gpu.py
     with open(f"{output_folder}hashes-{out_fname}.clp", "wt") as f:
         for item in df["hash"]:
             f.write(item + "\n")

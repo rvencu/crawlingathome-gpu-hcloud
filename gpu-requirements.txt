@@ -5,4 +5,4 @@ tfr_image
 trio
 ujson
 colorama
-bloom-filter2
+dashing

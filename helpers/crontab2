@@ -1,1 +1,1 @@
-0 */1 * * * /home/archiveteam/cleanup.sh
+0 */1 * * * flock -n clean.lock /home/archiveteam/cleanup.sh

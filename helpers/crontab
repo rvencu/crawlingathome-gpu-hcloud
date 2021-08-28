@@ -1,5 +1,7 @@
-*/1 * * * * /home/archiveteam/archive.sh
-*/1 * * * * /home/archiveteam/bloom.sh
-0 0 */1 * * python3 movefiles.py -e clp -d /home/archiveteam/CAH/clipped
-10 0 */1 * * python3 movefiles.py -e hsh -d /home/archiveteam/CAH/hashes
+*/1 * * * * flock -n archive.lock /home/archiveteam/archive.sh
+*/1 * * * * flock -n bloom.lock /home/archiveteam/bloom.sh
+0 0 */1 * * flock -n clpmove.lock python3 movefiles.py -e clp -d /home/archiveteam/CAH/clipped
+10 0 */1 * * flock -n hshmove.lock python3 movefiles.py -e hsh -d /home/archiveteam/CAH/hashes
+*/10 * * * * flock -n parquet.lock python3 releasefiles.py -e parquet -d /home/archiveteam/CAH/releasing -r laion400m
+*/10 * * * * flock -n tar.lock python3 releasefiles.py -e tar -d /home/archiveteam/CAH/releasing -r laion400m
 @reboot python3 /home/archiveteam/dashboard.py &
