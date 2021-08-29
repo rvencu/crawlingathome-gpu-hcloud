@@ -290,7 +290,7 @@ async def request_image(datas, start_sampleid, img_output_folder, localbloom, tm
 
     async def _request(data, sample_id, localbloom, img_output_folder):
         start=time.time()
-        url, alt_text, license, domain = data
+        url, alt_text, license, domain, hash = data
         # the following 2 lines are related to Trio Instrument to capture events from multiple threads
         # task = trio.lowlevel.current_task()
         # task.custom_sleep_data = None # custom_sleep_data can transport information from thread to main thread
