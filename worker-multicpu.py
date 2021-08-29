@@ -87,7 +87,7 @@ class Tracer(trio.abc.Instrument):
 
 def log(string):
     with open("errors.txt","a") as f:
-        f.write(str + "\n")
+        f.write(string + "\n")
 
 def remove_bad_chars(text):
     # cleanup text so language can be detected
