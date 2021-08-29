@@ -455,7 +455,7 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
                 start = time.time()
 
                 # convert to dataframe and save to disk (for statistics and generating blocking lists)
-                parsed_df = pd.DataFrame(parsed_data, columns=["URL","TEXT","LICENSE","DOMAIN"])
+                parsed_df = pd.DataFrame(parsed_data, columns=["URL","TEXT","LICENSE","DOMAIN","HASH"])
                 parsed_df = parsed_df.drop_duplicates(subset=["URL"])
                 parsed_df.to_csv(output_folder+out_fname + "_parsed.csv", index=False, sep="|")
 
