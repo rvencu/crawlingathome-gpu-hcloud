@@ -85,9 +85,9 @@ class Tracer(trio.abc.Instrument):
         print(f"[{self.i} instrumentation] Localbloom catched {self.bloom} urls")
 
 
-def log(string):
+def log(e):
     with open("errors.txt","a") as f:
-        f.write(string + "\n")
+        f.write(str(e.__class__.__name__) + " " + str(e) + "\n")
 
 def remove_bad_chars(text):
     # cleanup text so language can be detected
@@ -312,7 +312,7 @@ async def request_image(datas, start_sampleid, img_output_folder, localbloom, tm
             else:
                 task.custom_sleep_data = (3, 0, round(time.time()-start,2)) # when exception is hit, count it
         except Exception as e:
-            log(str(e))
+            log(e)
             task.custom_sleep_data = (1, 0, round(time.time()-start,2)) # when exception is hit, count it
         return
 
