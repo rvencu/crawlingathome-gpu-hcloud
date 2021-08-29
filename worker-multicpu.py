@@ -85,6 +85,10 @@ class Tracer(trio.abc.Instrument):
         print(f"[{self.i} instrumentation] Localbloom catched {self.bloom} urls")
 
 
+def log(string):
+    with open("errors.txt","a") as f:
+        f.write(str + "\n")
+
 def remove_bad_chars(text):
     # cleanup text so language can be detected
     return "".join(c for c in text if c.isprintable())
@@ -281,7 +285,7 @@ async def request_image(datas, start_sampleid, img_output_folder, localbloom, tm
         "Accept-Encoding": "gzip, deflate",
         "Referer": "https://google.com",
         "DNT": "1",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept": "text/html,application/xhtml+xml,application/xml,image/;q=0.9,*/*;q=0.8",
     }
 
     async def _request(data, sample_id, localbloom, img_output_folder):
@@ -307,7 +311,8 @@ async def request_image(datas, start_sampleid, img_output_folder, localbloom, tm
                     localbloom.add(url)
             else:
                 task.custom_sleep_data = (3, 0, round(time.time()-start,2)) # when exception is hit, count it
-        except Exception:
+        except Exception as e:
+            log(str(e))
             task.custom_sleep_data = (1, 0, round(time.time()-start,2)) # when exception is hit, count it
         return
 
@@ -503,7 +508,7 @@ if __name__ == "__main__":
 
     print (f"starting session under `{YOUR_NICKNAME_FOR_THE_LEADERBOARD}` nickname")
 
-    procs = cpu_count() - 2
+    procs = cpu_count() - 16
     if len(sys.argv) > 1:
         procs = min(int(sys.argv[1]), cpu_count() - 5)
 
