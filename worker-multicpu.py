@@ -245,7 +245,7 @@ def process_img_content(response, alt_text, license, sample_id, img_output_folde
                 ratio = math.sqrt(width * height / 8294400)
                 width = int(width/ratio)
                 height = int(height/ratio)
-                im = im.resize((width, height))
+                im = im.resize((width, height), resample=Image.LANCZOS)
             im_format = im.format
             out_fname = f"{img_output_folder}{str(sample_id)}.{im_format.lower()}"
             # reject if format is not in this list
