@@ -1,4 +1,4 @@
-<mxfile host="app.diagrams.net" modified="2021-08-30T04:05:53.053Z" agent="5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.159 Safari/537.36 Edg/92.0.902.78" etag="5rURhB6G9LEihXUUciRb" version="15.0.3" type="github">
+<mxfile host="app.diagrams.net" modified="2021-08-30T04:07:54.760Z" agent="5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.159 Safari/537.36 Edg/92.0.902.78" etag="Y_CCPiX6jZVkMHosXiXk" version="15.0.3" type="github">
   <diagram id="HWF6cFD_o7p9VQBaK8Nd" name="Page-1">
     <mxGraphModel dx="1422" dy="850" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" background="#949494" math="0" shadow="0">
       <root>
@@ -74,7 +74,7 @@
         <mxCell id="32pcUigWsBj-OOpQZ1Kn-17" value="IMG2DATASET" style="aspect=fixed;html=1;points=[];align=left;image;fontSize=12;image=img/lib/mscae/Cloud_Service.svg;labelPosition=right;verticalLabelPosition=middle;verticalAlign=middle;labelBackgroundColor=none;fontColor=#FFFFFF;" parent="1" vertex="1">
           <mxGeometry x="694" y="440" width="50" height="42" as="geometry" />
         </mxCell>
-        <mxCell id="32pcUigWsBj-OOpQZ1Kn-20" value="THE-EYE.EU" style="whiteSpace=wrap;html=1;aspect=fixed;dashed=1;rounded=1;fillColor=none;strokeColor=#FFFFFF;" parent="1" vertex="1">
+        <mxCell id="32pcUigWsBj-OOpQZ1Kn-20" value="THE-EYE.EU" style="whiteSpace=wrap;html=1;aspect=fixed;dashed=1;rounded=1;fillColor=none;strokeColor=#FFFFFF;fontColor=#FFFFFF;" parent="1" vertex="1">
           <mxGeometry x="403" y="356" width="210" height="210" as="geometry" />
         </mxCell>
       </root>
