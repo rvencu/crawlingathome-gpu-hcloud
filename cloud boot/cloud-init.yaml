@@ -19,6 +19,9 @@ packages:
  - libwebp-dev
  - libjpeg-dev
  - libwebp-dev
+ - libtiff-dev 
+ - libopenjp2-7-dev 
+ - zlib1g-dev
  - bind9
  - bind9utils 
  - bind9-dnsutils 

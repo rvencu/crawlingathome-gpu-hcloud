@@ -14,6 +14,7 @@
 import gc
 import os
 import re
+import ssl
 import sys
 import time
 import trio
@@ -49,6 +50,9 @@ import asks
 asks.init("trio")
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True  # https://stackoverflow.com/a/47958486
+ssl_ctx = ssl.create_default_context()
+ssl_ctx.check_hostname = False
+ssl_ctx.verify_mode = ssl.CERT_NONE
 
 class Tracer(trio.abc.Instrument):
 
@@ -277,7 +281,7 @@ async def request_image(datas, start_sampleid, img_output_folder, localbloom, tm
 
     # change the number of parallel connections based on CPU speed, network capabilities, etc.
     # the number of 192 is optimized for 1 vCPU droplet at Hetzner Cloud (code CX11)
-    session = asks.Session(connections=256)
+    session = asks.Session(connections=164, ssl_context=ssl_ctx)
     # try to make the bot website friendly
     session.headers = {
         "User-Agent": user_agent,
