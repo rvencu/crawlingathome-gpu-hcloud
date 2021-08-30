@@ -387,7 +387,7 @@ if __name__ == "__main__":
     # initialize client variables
     YOUR_NICKNAME_FOR_THE_LEADERBOARD = os.getenv('CAH_NICKNAME')
     if YOUR_NICKNAME_FOR_THE_LEADERBOARD is None:
-        YOUR_NICKNAME_FOR_THE_LEADERBOARD = "anonymous"
+        YOUR_NICKNAME_FOR_THE_LEADERBOARD = "Caricature, Inc"
     CRAWLINGATHOME_SERVER_URL = "http://cah.io.community/"
 
     print (f"starting session under `{YOUR_NICKNAME_FOR_THE_LEADERBOARD}` nickname")

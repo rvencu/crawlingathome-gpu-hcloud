@@ -4,7 +4,7 @@ sudo su root
 apt update
 yes | DEBIAN_FRONTEND=noninteractive apt upgrade
 yes | apt install python3-pip git build-essential libssl-dev libffi-dev python3-dev libwebp-dev libjpeg-dev libtiff-dev libopenjp2-7-dev zlib1g-dev bind9 
-echo 'CAH_NICKNAME="borisdayma"' >> /etc/environment
+echo 'CAH_NICKNAME="Caricature, Inc"' >> /etc/environment
 echo 'CLOUD="hetzner"' >> /etc/environment
 
 #fallocate -l 512M /swapfile
