@@ -1,0 +1,118 @@
+#cloud-config 
+users:
+  - default
+  - name: crawl
+    groups: users, adm
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - ssh-rsa <<your_ssh_public_key>>
+package_update: true
+package_upgrade: true
+packages:
+ - python3-pip
+ - git
+ - build-essential
+ - libssl-dev
+ - libffi-dev
+ - python3-dev
+ - libwebp-dev
+ - libjpeg-dev
+ - libwebp-dev
+ - libtiff-dev 
+ - libopenjp2-7-dev 
+ - zlib1g-dev
+ - bind9
+ - bind9utils 
+ - bind9-dnsutils 
+ - bind9-doc 
+ - bind9-host
+write_files:
+- path: /etc/environment
+  content: |
+    CAH_NICKNAME="<<your_nickname>>"
+    CLOUD="<<deployment_cloud>>"
+  append: true
+- path: /home/crawl/worker-reset.sh
+  permissions: '0744'
+  content: |
+    #!/bin/bash
+    # Updates and resets the worker via SSH command
+    rm -rf /home/crawl/*.tar.gz
+    cd /home/crawl/crawlingathome-gpu-hcloud
+    git pull
+    chown crawl:adm -R /home/crawl/
+    systemctl restart crawl
+- path: /etc/security/limits.conf
+  content: |
+    *     soft     nproc     65535
+    *     hard     nproc     65535
+    *     soft     nofile    65535
+    *     hard     nofile    65535
+    root  soft     nproc     65535
+    root  hard     nproc     65535
+    root  soft     nofile    65535
+    root  hard     nofile    65535
+  append: true
+- path: /home/crawl/crawl.sh
+  permissions: '0744'
+  content: |
+    #!/bin/bash
+    while true
+      do
+        python3 -u /home/crawl/crawlingathome-gpu-hcloud/worker.py >> /home/crawl/crawl.log 2>&1
+        sleep 1
+      done
+- path: /etc/systemd/system/crawl.service
+  permissions: '0664'
+  content: |
+    [Unit]
+    After=network.service
+    Description=Crawling @ Home
+    [Service]
+    Type=simple
+    LimitNOFILE=2097152
+    WorkingDirectory=/home/crawl
+    ExecStart=/home/crawl/crawl.sh
+    EnvironmentFile=/etc/environment
+    User=crawl
+    [Install]
+    WantedBy=multi-user.target
+runcmd:
+ - [ ls, -l, / ]
+ - [ sh, -xc, "echo $(date) ': hello crawl!'" ]
+ - [ sh, -c, echo "=========hello crawl'=========" ]
+ - ls -l /root
+ # take care of max open files
+ - echo "session required pam_limits.so" >> /etc/pam.d/common-session
+ - echo "fs.file-max = 2097152" >> /etc/sysctl.conf
+ - sed '3i        max-cache-size 2000m;' /etc/bind/named.conf.options
+ - sed '3i        resolver-query-timeout 30000;' /etc/bind/named.conf.options
+ - sed '3i        max-clients-per-query 10000;' /etc/bind/named.conf.options
+ - sed '3i        recursive-clients 10000;' /etc/bind/named.conf.options
+ - echo "DNS=127.0.0.1" >> /etc/systemd/resolved.conf
+# secure ssh
+ - sed -i -e '/^\(#\|\)PermitRootLogin/s/^.*$/PermitRootLogin no/' /etc/ssh/sshd_config
+ - sed -i -e '/^\(#\|\)PasswordAuthentication/s/^.*$/PasswordAuthentication no/' /etc/ssh/sshd_config
+ - sed -i -e '/^\(#\|\)X11Forwarding/s/^.*$/X11Forwarding no/' /etc/ssh/sshd_config
+ - sed -i -e '/^\(#\|\)MaxAuthTries/s/^.*$/MaxAuthTries 2/' /etc/ssh/sshd_config
+ - sed -i -e '/^\(#\|\)AllowTcpForwarding/s/^.*$/AllowTcpForwarding no/' /etc/ssh/sshd_config
+ - sed -i -e '/^\(#\|\)AllowAgentForwarding/s/^.*$/AllowAgentForwarding no/' /etc/ssh/sshd_config
+ - sed -i -e '/^\(#\|\)AuthorizedKeysFile/s/^.*$/AuthorizedKeysFile .ssh\/authorized_keys/' /etc/ssh/sshd_config
+ - sed -i '$a AllowUsers crawl' /etc/ssh/sshd_config
+ # install the script
+ - cd /home/crawl
+ - git clone https://github.com/rvencu/crawlingathome-gpu-hcloud --branch full-wat
+ - cd crawlingathome-gpu-hcloud
+ - git clone "https://github.com/TheoCoombes/crawlingathome" crawlingathome_client
+ - pip3 install -r crawlingathome_client/requirements.txt --no-cache-dir
+ - pip3 install -r worker-requirements.txt --no-cache-dir
+ - pip install random_user_agent
+ # make the script run as a service at startup
+ - systemctl daemon-reload
+ - systemctl enable crawl.service
+ - chown crawl:adm -R /home/crawl/
+ - apt clean
+ - reboot
+final_message: "The system is finally up, after $UPTIME seconds"
+

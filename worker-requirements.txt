@@ -1,0 +1,9 @@
+ftfy
+pandas
+pycld2
+trio
+ujson
+asks
+bloom-filter2
+pillow
+glances

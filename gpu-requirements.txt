@@ -1,0 +1,8 @@
+ftfy
+pandas
+regex
+tfr_image
+trio
+ujson
+colorama
+dashing
