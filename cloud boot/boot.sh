@@ -76,7 +76,7 @@ chown crawl:crawl -R /home/crawl/
 
 sudo -u crawl -i
 
-git clone https://github.com/rvencu/crawlingathome-gpu-hcloud --branch full-wat
+git clone https://github.com/rvencu/crawlingathome-gpu-hcloud
 cd crawlingathome-gpu-hcloud
 git clone "https://github.com/TheoCoombes/crawlingathome" crawlingathome_client
 pip3 install -r crawlingathome_client/requirements.txt --no-cache-dir
