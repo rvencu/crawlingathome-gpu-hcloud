@@ -253,7 +253,8 @@ if __name__ == "__main__":
                     sshkey = sshkey.replace(char,"\\"+char)
             #print(sshkey)
             if cloud in ["hetzner"]:
-                os.system("rm cloud-init")
+                if os.path.exists("cloud-init"):
+                    os.system("rm cloud-init")
                 os.system("cp 'cloud boot/cloud-init.yaml' cloud-init")
                 os.system(f"sed -i -e \"s/<<your_ssh_public_key>>/{sshkey}/\" cloud-init")
                 os.system(f"sed -i -e \"s/<<deployment_cloud>>/{cloud}/\" cloud-init")
