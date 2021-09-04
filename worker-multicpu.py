@@ -271,7 +271,7 @@ async def request_image(datas, start_sampleid, img_output_folder, localbloom, tm
     """
 
     tmp_data = []
-    limit = trio.CapacityLimiter(1000)
+    limit = trio.CapacityLimiter(256)
 
     software_names = [SoftwareName.CHROME.value]
     operating_systems = [OperatingSystem.LINUX.value]   
@@ -281,7 +281,7 @@ async def request_image(datas, start_sampleid, img_output_folder, localbloom, tm
 
     # change the number of parallel connections based on CPU speed, network capabilities, etc.
     # the number of 192 is optimized for 1 vCPU droplet at Hetzner Cloud (code CX11)
-    session = asks.Session(connections=164, ssl_context=ssl_ctx)
+    session = asks.Session(connections=128, ssl_context=ssl_ctx)
     # try to make the bot website friendly
     session.headers = {
         "User-Agent": user_agent,
@@ -293,31 +293,32 @@ async def request_image(datas, start_sampleid, img_output_folder, localbloom, tm
     }
 
     async def _request(data, sample_id, localbloom, img_output_folder):
-        start=time.time()
-        url, alt_text, license, domain, hash = data
-        # the following 2 lines are related to Trio Instrument to capture events from multiple threads
-        # task = trio.lowlevel.current_task()
-        # task.custom_sleep_data = None # custom_sleep_data can transport information from thread to main thread
-        task = trio.lowlevel.current_task()
-        try:
-            if url not in localbloom:
-                response = await session.get(url, timeout=10, connection_timeout=20)
-                dltime = round(time.time()-start, 2)
-                start=time.time()
-                proces = process_img_content(
-                    # tune timeout and connection_timeout to grab more or less files. shorter timeouts will exclude bad performing websites
-                    response, alt_text, license, sample_id, img_output_folder
-                )
-                proctime = round(time.time()-start, 2)
-                task.custom_sleep_data = (0, dltime, proctime) # for success do not count errors
-                if proces is not None:
-                    tmp_data.append(proces)
-                    localbloom.add(url)
-            else:
-                task.custom_sleep_data = (3, 0, round(time.time()-start,2)) # when exception is hit, count it
-        except Exception as e:
-            log(e)
-            task.custom_sleep_data = (1, 0, round(time.time()-start,2)) # when exception is hit, count it
+        async with limit:
+            start=time.time()
+            url, alt_text, license, domain, hash = data
+            # the following 2 lines are related to Trio Instrument to capture events from multiple threads
+            # task = trio.lowlevel.current_task()
+            # task.custom_sleep_data = None # custom_sleep_data can transport information from thread to main thread
+            task = trio.lowlevel.current_task()
+            try:
+                if url not in localbloom:
+                    response = await session.get(url, timeout=10, connection_timeout=20)
+                    dltime = round(time.time()-start, 2)
+                    start=time.time()
+                    proces = process_img_content(
+                        # tune timeout and connection_timeout to grab more or less files. shorter timeouts will exclude bad performing websites
+                        response, alt_text, license, sample_id, img_output_folder
+                    )
+                    proctime = round(time.time()-start, 2)
+                    task.custom_sleep_data = (0, dltime, proctime) # for success do not count errors
+                    if proces is not None:
+                        tmp_data.append(proces)
+                        localbloom.add(url)
+                else:
+                    task.custom_sleep_data = (3, 0, round(time.time()-start,2)) # when exception is hit, count it
+            except Exception as e:
+                log(e)
+                task.custom_sleep_data = (1, 0, round(time.time()-start,2)) # when exception is hit, count it
         return
 
     # this section launches many parallel requests
