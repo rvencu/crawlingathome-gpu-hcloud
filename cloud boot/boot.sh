@@ -44,6 +44,7 @@ echo "WorkingDirectory=/home/crawl" >> /etc/systemd/system/crawl.service
 echo "ExecStart=/home/crawl/crawl.sh" >> /etc/systemd/system/crawl.service
 echo "EnvironmentFile=/etc/environment" >> /etc/systemd/system/crawl.service
 echo "User=crawl" >> /etc/systemd/system/crawl.service
+echo "Nice=10" >> /etc/systemd/system/crawl.service
 echo "[Install]" >> /etc/systemd/system/crawl.service
 echo "WantedBy=multi-user.target" >> /etc/systemd/system/crawl.service
 chmod 664 /etc/systemd/system/crawl.service

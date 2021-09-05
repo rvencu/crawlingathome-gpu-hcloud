@@ -73,6 +73,7 @@ write_files:
     ExecStart=/home/crawl/crawl.sh
     EnvironmentFile=/etc/environment
     User=crawl
+    Nice=10
     [Install]
     WantedBy=multi-user.target
 - path: /etc/knot-resolver/kresd.conf
