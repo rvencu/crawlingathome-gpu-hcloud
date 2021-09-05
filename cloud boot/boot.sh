@@ -1,8 +1,7 @@
 #!/bin/sh
 sudo su root
 
-apt update
-yes | DEBIAN_FRONTEND=noninteractive apt upgrade
+apt update && yes | DEBIAN_FRONTEND=noninteractive apt upgrade
 yes | apt install python3-pip git build-essential libssl-dev libffi-dev python3-dev libwebp-dev libjpeg-dev libtiff-dev libopenjp2-7-dev zlib1g-dev knot-dnsutils resolvconf
 wget https://secure.nic.cz/files/knot-resolver/knot-resolver-release.deb
 sudo dpkg -i knot-resolver-release.deb
@@ -11,29 +10,17 @@ systemctl enable --now kresd@{1..2}.service
 systemctl disable systemd.resolved
 
 echo 'CAH_NICKNAME="Caricature, Inc"' >> /etc/environment
-echo 'CLOUD="hetzner"' >> /etc/environment
-
-#fallocate -l 512M /swapfile
-#chmod 600 /swapfile
-#mkswap /swapfile
-#swapon /swapfile
-#cp /etc/fstab /etc/fstab.bak
-#echo "/swapfile none swap sw 0 0" >> /etc/fstab
-#sysctl vm.swappiness=10
-#echo "vm.swappiness=10" >> /etc/sysctl.conf
 
 adduser --system --group --shell /bin/bash crawl
 echo 'crawl     ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 
 touch /home/crawl/worker-reset.sh
-chown crawl:crawl /home/crawl/worker-reset.sh
 chmod 0744 /home/crawl/worker-reset.sh
 echo '#!/bin/bash' >> /home/crawl/worker-reset.sh
 echo '# Updates and resets the worker via SSH command' >> /home/crawl/worker-reset.sh
 echo 'rm -rf /home/crawl/*.tar.gz' >> /home/crawl/worker-reset.sh
 echo 'cd /home/crawl/crawlingathome-gpu-hcloud' >> /home/crawl/worker-reset.sh
 echo 'git pull' >> /home/crawl/worker-reset.sh
-echo 'chown crawl:adm -R /home/crawl/' >> /home/crawl/worker-reset.sh
 echo 'systemctl restart crawl' >> /home/crawl/worker-reset.sh
 
 echo "* soft     nproc          65535 " >> /etc/security/limits.conf
@@ -60,8 +47,10 @@ echo "User=crawl" >> /etc/systemd/system/crawl.service
 echo "[Install]" >> /etc/systemd/system/crawl.service
 echo "WantedBy=multi-user.target" >> /etc/systemd/system/crawl.service
 chmod 664 /etc/systemd/system/crawl.service
+
 systemctl daemon-reload
 systemctl enable crawl.service
+
 touch /home/crawl/crawl.sh
 echo '#!/bin/bash' >> /home/crawl/crawl.sh
 echo "while true" >> /home/crawl/crawl.sh
