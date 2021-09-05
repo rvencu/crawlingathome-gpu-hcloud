@@ -7,7 +7,7 @@ yes | apt install python3-pip git build-essential libssl-dev libffi-dev python3-
 wget https://secure.nic.cz/files/knot-resolver/knot-resolver-release.deb
 sudo dpkg -i knot-resolver-release.deb
 sudo apt install -y knot-resolver
-systemctl enable --now kresd@1.service
+systemctl enable --now kresd@{1..2}.service
 systemctl disable systemd.resolved
 
 echo 'CAH_NICKNAME="Caricature, Inc"' >> /etc/environment

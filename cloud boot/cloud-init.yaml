@@ -109,8 +109,7 @@ runcmd:
  - wget https://secure.nic.cz/files/knot-resolver/knot-resolver-release.deb
  - sudo dpkg -i knot-resolver-release.deb
  - sudo apt install -y knot-resolver
- #- systemctl enable --now kresd@{1..8}.service # use this line for multicpu worker
- - systemctl enable --now kresd@1.service
+ - systemctl enable --now kresd@{1..2}.service
  - systemctl disable systemd.resolved
  # take care of max open files
  - echo "session required pam_limits.so" >> /etc/pam.d/common-session
