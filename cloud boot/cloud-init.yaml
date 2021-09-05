@@ -22,11 +22,8 @@ packages:
  - libtiff-dev 
  - libopenjp2-7-dev 
  - zlib1g-dev
- - bind9
- - bind9utils 
- - bind9-dnsutils 
- - bind9-doc 
- - bind9-host
+ - knot-dnsutils
+ - resolvconf
 write_files:
 - path: /etc/environment
   content: |
@@ -78,19 +75,46 @@ write_files:
     User=crawl
     [Install]
     WantedBy=multi-user.target
+- path: /etc/knot-resolver/kresd.conf
+  content: |
+    -- SPDX-License-Identifier: CC0-1.0
+    -- vim:syntax=lua:set ts=4 sw=4:
+    -- Refer to manual: https://knot-resolver.readthedocs.org/en/stable/
+    -- Network interface configuration
+    net.listen('127.0.0.1', 53, { kind = 'dns' })
+    net.listen('127.0.0.1', 853, { kind = 'tls' })
+    --net.listen('127.0.0.1', 443, { kind = 'doh2' })
+    net.listen('::1', 53, { kind = 'dns', freebind = true })
+    net.listen('::1', 853, { kind = 'tls', freebind = true })
+    --net.listen('::1', 443, { kind = 'doh2' })
+    -- Load useful modules
+    modules = {
+            'hints > iterate',    -- Load /etc/hosts and allow custom root hints
+            'stats',              -- Track internal statistics
+            'predict',            -- Prefetch expiring/frequent records
+            'serve_stale < cache' -- Server from cache if forwarder is staled
+    }
+    -- Cache size
+    cache.size = 10000 * MB
+    -- Disable DNSSEC
+    trust_anchors.remove('.')
+    -- forward all traffic to specified IP addresses (selected automatically)
+    policy.add(policy.all(policy.FORWARD({'10.254.0.5', '1.1.1.1'})))
 runcmd:
  - [ ls, -l, / ]
  - [ sh, -xc, "echo $(date) ': hello crawl!'" ]
  - [ sh, -c, echo "=========hello crawl'=========" ]
  - ls -l /root
+ # setup knot resolver
+ - wget https://secure.nic.cz/files/knot-resolver/knot-resolver-release.deb
+ - sudo dpkg -i knot-resolver-release.deb
+ - sudo apt install -y knot-resolver
+ #- systemctl enable --now kresd@{1..8}.service # use this line for multicpu worker
+ - systemctl enable --now kresd@1.service
+ - systemctl disable systemd.resolved
  # take care of max open files
  - echo "session required pam_limits.so" >> /etc/pam.d/common-session
  - echo "fs.file-max = 2097152" >> /etc/sysctl.conf
- - sed '3i        max-cache-size 2000m;' /etc/bind/named.conf.options
- - sed '3i        resolver-query-timeout 30000;' /etc/bind/named.conf.options
- - sed '3i        max-clients-per-query 10000;' /etc/bind/named.conf.options
- - sed '3i        recursive-clients 10000;' /etc/bind/named.conf.options
- - echo "DNS=127.0.0.1" >> /etc/systemd/resolved.conf
 # secure ssh
  - sed -i -e '/^\(#\|\)PermitRootLogin/s/^.*$/PermitRootLogin no/' /etc/ssh/sshd_config
  - sed -i -e '/^\(#\|\)PasswordAuthentication/s/^.*$/PasswordAuthentication no/' /etc/ssh/sshd_config

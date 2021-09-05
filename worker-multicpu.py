@@ -271,7 +271,7 @@ async def request_image(datas, start_sampleid, img_output_folder, localbloom, tm
     """
 
     tmp_data = []
-    limit = trio.CapacityLimiter(256)
+    limit = trio.CapacityLimiter(512)
 
     software_names = [SoftwareName.CHROME.value]
     operating_systems = [OperatingSystem.LINUX.value]   
@@ -281,7 +281,7 @@ async def request_image(datas, start_sampleid, img_output_folder, localbloom, tm
 
     # change the number of parallel connections based on CPU speed, network capabilities, etc.
     # the number of 192 is optimized for 1 vCPU droplet at Hetzner Cloud (code CX11)
-    session = asks.Session(connections=128, ssl_context=ssl_ctx)
+    session = asks.Session(connections=256, ssl_context=ssl_ctx)
     # try to make the bot website friendly
     session.headers = {
         "User-Agent": user_agent,
