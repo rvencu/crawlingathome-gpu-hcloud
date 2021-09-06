@@ -17,7 +17,7 @@ def worker(i:int, q: Queue):
             to_delete = ["/home/archiveteam/CAH/gpujobs/" + x.split(" ")[1] + ".tar.gz" for x in eligible]
             #print(f"[{i}] starting delete after {round(time.time()-start2, 2)}")
             for file in to_delete:
-                if os.path.isfile(file): # this makes the code more robust
+                if os.path.isfile(file) and os.path.getmtime(file) < time.time() - 60*60: # this makes the code more robust
                     os.remove(file)
             #print(f"[{i}] batch done in {round(time.time()-start2, 2)}")
         except Exception as e:

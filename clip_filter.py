@@ -173,10 +173,13 @@ def filter(df, out_fname, output_folder):
         pickle.dump(img_embeds_sampleid, f)
     #print(f"Embeddings ran in {round(time.time()-start,2)}")
     #start = time.time()
+    '''
+    # we do not need anymore tfrecord files
     df_tfrecords(
         dff,
         f"{output_folder}crawling_at_home_{out_fname}__00000-of-00001.tfrecord",
     )
+    '''
     # save hashes
     #dff.loc[:,"hash"] = dff.apply(lambda row: hashlib.md5((str(row.URL)+str(row.TEXT)).encode("utf-8")).hexdigest(), axis=1)
     with open(f"{output_folder}hashes-{out_fname}.hsh", "wt") as f:
