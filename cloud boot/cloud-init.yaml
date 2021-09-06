@@ -111,7 +111,7 @@ runcmd:
  - sudo dpkg -i knot-resolver-release.deb
  - sudo apt install -y knot-resolver
  - systemctl enable --now kresd@{1..2}.service
- - systemctl disable systemd.resolved
+ - systemctl disable systemd-resolved
  # take care of max open files
  - echo "session required pam_limits.so" >> /etc/pam.d/common-session
  - echo "fs.file-max = 2097152" >> /etc/sysctl.conf
