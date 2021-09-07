@@ -1,4 +1,4 @@
-<mxfile host="app.diagrams.net" modified="2021-09-07T17:55:06.157Z" agent="5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.159 Safari/537.36 Edg/92.0.902.84" etag="9FwKjAFnLUF1T-WJanhm" version="15.1.1" type="github">
+<mxfile host="app.diagrams.net" modified="2021-09-07T18:01:32.159Z" agent="5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.159 Safari/537.36 Edg/92.0.902.84" etag="9lFSLI1KncS5O89t817g" version="15.1.1" type="github">
   <diagram id="HWF6cFD_o7p9VQBaK8Nd" name="Page-1">
     <mxGraphModel dx="3342" dy="1874" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" background="none" math="0" shadow="0">
       <root>
@@ -60,7 +60,7 @@
         <mxCell id="32pcUigWsBj-OOpQZ1Kn-9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" parent="1" source="32pcUigWsBj-OOpQZ1Kn-6" target="32pcUigWsBj-OOpQZ1Kn-4" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="32pcUigWsBj-OOpQZ1Kn-6" value="GPU INFERENCE NODES" style="pointerEvents=1;shadow=0;dashed=0;html=1;strokeColor=none;labelPosition=left;verticalLabelPosition=middle;verticalAlign=middle;outlineConnect=0;align=right;shape=mxgraph.office.devices.workstation;fillColor=#B5B5B5;" parent="1" vertex="1">
+        <mxCell id="32pcUigWsBj-OOpQZ1Kn-6" value="GPU INFERENCE NODES" style="pointerEvents=1;shadow=0;dashed=0;html=1;strokeColor=none;labelPosition=left;verticalLabelPosition=middle;verticalAlign=middle;outlineConnect=0;align=right;shape=mxgraph.office.devices.workstation;fillColor=#545454;" parent="1" vertex="1">
           <mxGeometry x="482" y="190" width="53" height="56" as="geometry" />
         </mxCell>
         <mxCell id="32pcUigWsBj-OOpQZ1Kn-18" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.523;entryY=-0.007;entryDx=0;entryDy=0;entryPerimeter=0;" parent="1" source="32pcUigWsBj-OOpQZ1Kn-14" target="32pcUigWsBj-OOpQZ1Kn-17" edge="1">
@@ -110,7 +110,7 @@
             </Array>
           </mxGeometry>
         </mxCell>
-        <mxCell id="aqjGa1b1h-gu6OBOAQX7-1" value="TRACKER" style="pointerEvents=1;shadow=0;dashed=0;html=1;strokeColor=none;labelPosition=center;verticalLabelPosition=bottom;verticalAlign=top;outlineConnect=0;align=center;shape=mxgraph.office.servers.sql_server;fillColor=#FFCE9F;" parent="1" vertex="1">
+        <mxCell id="aqjGa1b1h-gu6OBOAQX7-1" value="TRACKER" style="pointerEvents=1;shadow=0;dashed=0;html=1;strokeColor=none;labelPosition=center;verticalLabelPosition=bottom;verticalAlign=top;outlineConnect=0;align=center;shape=mxgraph.office.servers.sql_server;fillColor=#D4AB84;" parent="1" vertex="1">
           <mxGeometry x="603" y="190" width="43" height="56" as="geometry" />
         </mxCell>
       </root>
