@@ -30,39 +30,18 @@ serverclip = BloomFilter(max_elements=10000000, error_rate=0.01, filename=(f"/ho
 start = time.time()
 now = datetime.now().strftime("%Y/%m/%d_%H:%M")
 
-bloom = [BloomFilter(max_elements=200000000, error_rate=0.05, filename=(x,-1)) for x in glob("/home/archiveteam/CAH/bloom/bloom[!_]*")]
-bloom_active = BloomFilter(max_elements=200000000, error_rate=0.05, filename=("/home/archiveteam/CAH/bloom/bloom_active.bin",-1))
-bloom.append(bloom_active)
-filesbloom = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("/home/archiveteam/filesbloom.bin",-1))
-
 failed = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("/home/archiveteam/CAH/bloom/failed-domains.bin",-1))
 filesfailed = BloomFilter(max_elements=100000, error_rate=0.01, filename=("/home/archiveteam/filesfailed.bin",-1))
-
-clipped = [BloomFilter(max_elements=200000000, error_rate=0.05, filename=(x,-1)) for x in glob("/home/archiveteam/CAH/bloom/clipped[!_]*")]
-clipped_active = BloomFilter(max_elements=200000000, error_rate=0.05, filename=("/home/archiveteam/CAH/bloom/clipped_active.bin",-1))
-clipped.append(clipped_active)
-filesclipped = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("/home/archiveteam/filesclipped.bin",-1))
 
 time.sleep(5)
 counter = 0
 uniques = 0
 for file in glob("/home/archiveteam/CAH/hashes/*.hsh"):
     stem = Path(file).stem.strip(".")
-    if stem not in filesbloom:
+    if stem not in serverbloom:
         with open(file,"rt") as f:
             for line in f.readlines():
-                line = line.strip()
                 counter += 1
-                infilters = False
-                for filter in bloom:
-                    if line in filter:
-                        infilters = True
-                        break
-                if not infilters:
-                    bloom_active.add(line)
-                    uniques += 1
-        filesbloom.add(stem)
-    if stem not in serverbloom:
         post = {
             'file': (stem, open(file, 'rb')),
             'key': (None, 'main'),
@@ -70,6 +49,7 @@ for file in glob("/home/archiveteam/CAH/hashes/*.hsh"):
         response = requests.post(f'http://{bloomip}:8000/add/', files=post)
         if response.status_code == 200:
             serverbloom.add(stem)
+            uniques = int(response.text)
 
 failed_counter = 0
 for file in glob("/home/archiveteam/CAH/bloom/*.txt"):
@@ -86,19 +66,6 @@ for file in glob("/home/archiveteam/CAH/bloom/*.txt"):
 clipped_counter = 0
 for file in glob("/home/archiveteam/CAH/clipped/*.clp"):
     stem = Path(file).stem.strip(".")
-    if stem not in filesclipped:
-        with open(file,"rt") as f:
-            for line in f.readlines():
-                line = line.strip()
-                infilters = False
-                for filter in clipped:
-                    if line in filter:
-                        infilters = True
-                        break
-                if not infilters:
-                    clipped_active.add(line)
-                    clipped_counter += 1
-        filesclipped.add(stem)
     if stem not in serverclip:
         post = {
             'file': (stem, open(file, 'rb')),
@@ -107,6 +74,7 @@ for file in glob("/home/archiveteam/CAH/clipped/*.clp"):
         response = requests.post(f'http://{bloomip}:8000/add/', files=post)
         if response.status_code == 200:
             serverclip.add(stem)
+            clipped_counter = int(response.text)
 
 pd.set_option('precision', 2)
 df = pd.read_csv("bloom.log", sep=" ",header=None, names=["Date", "a", "unique pairs (5%)", "b", "total including duplicates","c","clipped filter (5%)","d","failed filter","e"])
@@ -129,6 +97,3 @@ if uniques > 0:
         file.write("<h2>Last week stats</h2>\n")
         file.write("<h5>Last reset date: 02 August 2021</h5>\n")
         file.write(str(df[df.Date > datetime.now() - pd.to_timedelta("7day")].sum(axis=0, numeric_only=True)).replace("\n","<br/>"))
-
-
-    

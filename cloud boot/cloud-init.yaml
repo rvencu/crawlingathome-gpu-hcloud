@@ -24,6 +24,13 @@ packages:
  - zlib1g-dev
  - knot-dnsutils
  - resolvconf
+bootcmd:
+ # setup knot resolver
+ - wget https://secure.nic.cz/files/knot-resolver/knot-resolver-release.deb
+ - sudo dpkg -i knot-resolver-release.deb
+ - sudo apt install -y knot-resolver
+ #- systemctl enable --now kresd@{1..2}.service
+ #- systemctl disable systemd-resolved
 write_files:
 - path: /etc/environment
   content: |
@@ -96,7 +103,7 @@ write_files:
             'serve_stale < cache' -- Server from cache if forwarder is staled
     }
     -- Cache size
-    cache.size = 10000 * MB
+    cache.size = 100 * MB
     -- Disable DNSSEC
     trust_anchors.remove('.')
     -- forward all traffic to specified IP addresses (selected automatically)
@@ -106,12 +113,6 @@ runcmd:
  - [ sh, -xc, "echo $(date) ': hello crawl!'" ]
  - [ sh, -c, echo "=========hello crawl'=========" ]
  - ls -l /root
- # setup knot resolver
- - wget https://secure.nic.cz/files/knot-resolver/knot-resolver-release.deb
- - sudo dpkg -i knot-resolver-release.deb
- - sudo apt install -y knot-resolver
- - systemctl enable --now kresd@{1..2}.service
- - systemctl disable systemd-resolved
  # take care of max open files
  - echo "session required pam_limits.so" >> /etc/pam.d/common-session
  - echo "fs.file-max = 2097152" >> /etc/sysctl.conf
