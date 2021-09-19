@@ -464,7 +464,7 @@ if __name__ == "__main__":
                 # attempt to download validated links and save to disk for stats and blocking lists
                 dlparse_df = dl_wat( parsed_data, first_sample_id, localbloom)
                 dlparse_df.to_csv(output_folder + out_fname + ".csv", index=False, sep="|")
-                dlparse_df.to_csv(output_folder + out_fname + "_unfiltered.csv", index=False, sep="|")
+                #dlparse_df.to_csv(output_folder + out_fname + "_unfiltered.csv", index=False, sep="|")
                 print (f"[stats {shard_of_chunk}] pairs retained {len(dlparse_df)} in {round(time.time() - start, 2)}")
                 print (f"[stats {shard_of_chunk}] scraping efficiency {len(dlparse_df)/(time.time() - start)} img/sec")
                 print (f"[stats {shard_of_chunk}] crawling efficiency {lastlinks/(time.time() - start)} links/sec")
