@@ -109,10 +109,11 @@ async def up(nodes, pref_loc, server_type="cx11", nick=""):
 async def down(cloud, nick=""):
     workers = []
     nicknames = []
-    with open(f"{cloud}.txt", "r") as f:
-        for line in f.readlines():
-            workers.append(line.split(" ")[0])
-            nicknames.append(line.split(" ")[1])
+    if os.path.exists(f"{cloud}.txt"):
+        with open(f"{cloud}.txt", "r") as f:
+            for line in f.readlines():
+                workers.append(line.split(" ")[0])
+                nicknames.append(line.split(" ")[1])
     with open(".env", "r") as auth:
         tokens = [x.split(" ") for x in auth.readlines()]
     for token in tokens:
