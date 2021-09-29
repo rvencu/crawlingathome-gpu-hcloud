@@ -22,6 +22,7 @@ import crawlingathome_client as cah
 sys.path.append('./crawlingathome-worker/')
 from multiprocessing import JoinableQueue, Process
 
+# basic watcher that sends email when the script crashes as it is long ran
 import sentry_sdk
 sentry_sdk.init(
     "https://78667479988545ec9fa78fba79638986@o576504.ingest.sentry.io/5909507",
@@ -60,6 +61,7 @@ GPU workflow:
     The monitor displays the status of the workers as well as performance metrics about the jobs performed
 '''
 
+# spawn this interface to double or more than shard groups so they can download jobs and communicate with the tracker in parallel with GPU processing. this will keep GPU busy almost continuously
 def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: JoinableQueue, logqueue: JoinableQueue, YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL):
     # initiate and reinitiate a GPU type client if needed
     logqueue.put (f"   |___ inbound worker started")
@@ -163,6 +165,7 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
             logqueue.put (e) #see why clients crashes
             time.sleep(30)
 
+# process to spawn many interfaces with the tracker
 def io_worker(incomingqueue: JoinableQueue, outgoingqueue: list, groupsize: int, logqueue: JoinableQueue, YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL):
     # separate process to initialize threaded workers
     logqueue.put (f"[io] inbound workers:")
@@ -173,6 +176,7 @@ def io_worker(incomingqueue: JoinableQueue, outgoingqueue: list, groupsize: int,
     except Exception as e:
         logqueue.put(f"[io] some inbound problem occured: {e}")
 
+# process to upload the results
 def upload_worker(uploadqueue: JoinableQueue, counter: JoinableQueue, outgoingqueue: list, logqueue: JoinableQueue):
     logqueue.put(f"upload worker started")
 
@@ -197,6 +201,7 @@ def upload_worker(uploadqueue: JoinableQueue, counter: JoinableQueue, outgoingqu
         else:
             time.sleep(5)
 
+# main gpu workers. perhaps this worker needs to be run in as many processes as GPUs are present in the system. (todo)
 def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag: JoinableQueue, groupsize: int, logqueue: JoinableQueue):
     logqueue.put (f"[gpu] worker started")
     first_groupsize = groupsize
@@ -302,6 +307,7 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             time.sleep(10)
 
 
+# tried to make a monitor in terminal, wip, not used
 def monitor(nodes, inbound, outbound, jobscounter, logqueue):
 
     ui = VSplit(
@@ -337,6 +343,7 @@ def monitor(nodes, inbound, outbound, jobscounter, logqueue):
         ui.display()
         time.sleep(1.0/25)
 
+# tried to make a monitor in terminal, wip, not used (second attempt)
 def monitor2(nodes, inbound, outbound, jobscounter, logqueue):
     while True:        
         while logqueue.qsize() > 0:
@@ -345,7 +352,7 @@ def monitor2(nodes, inbound, outbound, jobscounter, logqueue):
             logqueue.task_done()
 
 if __name__ == "__main__":
-
+    # script initialization
     YOUR_NICKNAME_FOR_THE_LEADERBOARD = os.getenv('CAH_NICKNAME')
     if YOUR_NICKNAME_FOR_THE_LEADERBOARD is None:
         YOUR_NICKNAME_FOR_THE_LEADERBOARD = "anonymous"
@@ -357,6 +364,8 @@ if __name__ == "__main__":
     time.sleep(10)
 
     groupsize = 20 # how many shards to group for CLIP
+
+    # folders cleanup (remove previous runs artifacts)
 
     if not os.path.exists("./stats/"):
         os.makedirs("./stats/")
