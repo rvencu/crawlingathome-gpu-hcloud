@@ -187,10 +187,21 @@ def parse_wat(content, start, line_count):
 
     valid_hashes = response.content.decode("utf-8").split("\n")
 
-    # remove from valid_data elements rejected by clipped bloom server
+    print(f"[debug] bloom server returned {len(valid_hashes)} in {round(time.time()-s,3)} sec")
+
+    valid_data = [t for t in {tuple(i) for i in valid_data}]
+    kept_data = []
+    clpd = len(valid_data)
+
+    for item in valid_data:
+        if item[-1].strip() in valid_hashes:
+            kept_data.append(item)
+            clpd -= 1
+
+    # remove from valid_data elements rejected by parsed bloom server
     with open('hash.txt', 'w') as f:
-        for item in valid_hashes:
-            f.write(item.strip()+"\n")
+        for item in kept_data:
+            f.write(item[0].strip()+"\n")
     post = {
         'file': ('hash.txt', open('hash.txt', 'rb')),
         'key': (None, 'parsed'),
@@ -209,23 +220,20 @@ def parse_wat(content, start, line_count):
         print(f"crash, cannot contact the parsed bloom server, please fix")
         sys.exit() # maybe fallback to file based filters? too depressing...
 
-    valid_hashes = response.content.decode("utf-8").split("\n")
+    valid_urls = response.content.decode("utf-8").split("\n")
 
+    valid_data = [t for t in {tuple(i) for i in kept_data}]
+    final_kept_data = []
+    prsd = len(kept_data)
 
-    print(f"[debug] bloom server returned {len(valid_hashes)} in {round(time.time()-s,3)} sec")
-
-    valid_data = [t for t in {tuple(i) for i in valid_data}]
-    kept_data = []
-    clpd = len(valid_data)
-
-    for item in valid_data:
-        if item[-1].strip() in valid_hashes:
-            kept_data.append(item)
-            clpd -= 1
+    for item in kept_data:
+        if item[0].strip() in valid_urls:
+            final_kept_data.append(item)
+            prsd -= 1
 
     print(f"[debug] lenght of deduplicated pairs to return {len(kept_data)}")
 
-    return (kept_data, clpd)  # use a dict in order to remove duplicate tuples from list
+    return (kept_data, clpd, prsd)  # use a dict in order to remove duplicate tuples from list
 
 
 def process_img_content(response, alt_text, license, sample_id):
@@ -337,6 +345,29 @@ async def request_image(datas, start_sampleid, localbloom):
     with open(f".tmp/{uuid1()}.json", "w") as f:
         ujson.dump(tmp_data, f)
     gc.collect()
+
+    # add downloaded urls to parsed bloom server
+    bloom2ip = "94.130.167.172"
+    with open('hash.txt', 'w') as f:
+        for item in datas:
+            f.write(item[0].strip()+"\n")
+    post = {
+        'file': ('hash.txt', open('hash.txt', 'rb')),
+        'key': (None, 'parsed'),
+    }
+    
+    failure = True
+    for _ in range(5):
+        response = requests.post(f'http://{bloom2ip}:8000/add/', files=post)
+        if response.status_code != 200:
+            print(f"bloom server error, retrying...")
+            time.sleep(1)            
+        else:
+            failure = False
+            break
+    if failure:
+        print(f"crash, cannot contact the parsed bloom server, please fix")
+
     return
 
 
@@ -473,7 +504,7 @@ if __name__ == "__main__":
 
                 # parse valid links from wat file
                 with open("shard.wat", "r") as infile:
-                    parsed_data, clpd = parse_wat(infile, start_index, lines)
+                    parsed_data, clpd, prsd = parse_wat(infile, start_index, lines)
                 print (f"[stats {shard_of_chunk}] Parsed wat in {round(time.time()-start,2)} sec")
                 start = time.time()
 
@@ -486,7 +517,7 @@ if __name__ == "__main__":
                 random.shuffle(parsed_data)
                 
                 lastlinks = len(parsed_data)
-                print (f"[stats {shard_of_chunk}] This job has {lastlinks} candidates after removing {clpd} via bloom filters")
+                print (f"[stats {shard_of_chunk}] This job has {lastlinks} candidates after removing {clpd} already clipped and {prsd} already parsed via bloom filters")
             
                 # attempt to download validated links and save to disk for stats and blocking lists
                 dlparse_df = dl_wat( parsed_data, first_sample_id, localbloom)
