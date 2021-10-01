@@ -94,6 +94,7 @@ def parse_wat(content, start, line_count):
     """
 
     bloomip = "116.202.162.146"
+    bloom2ip = "94.130.167.172"
 
     # clipped*.bin filters domains based on previous results of CLIP filtering.
     # the domains are not likely to pass CLIP for either bad captions or the content is almost always NSFW
@@ -181,10 +182,36 @@ def parse_wat(content, start, line_count):
             failure = False
             break
     if failure:
-        print(f"crash, cannot contact the bloom server, please fix")
+        print(f"crash, cannot contact the clipped bloom server, please fix")
         sys.exit() # maybe fallback to file based filters? too depressing...
 
     valid_hashes = response.content.decode("utf-8").split("\n")
+
+    # remove from valid_data elements rejected by clipped bloom server
+    with open('hash.txt', 'w') as f:
+        for item in valid_hashes:
+            f.write(item.strip()+"\n")
+    post = {
+        'file': ('hash.txt', open('hash.txt', 'rb')),
+        'key': (None, 'parsed'),
+    }
+    
+    failure = True
+    for _ in range(5):
+        response = requests.post(f'http://{bloom2ip}:8000/deduplicate/', files=post)
+        if response.status_code != 200:
+            print(f"bloom server error, retrying...")
+            time.sleep(1)            
+        else:
+            failure = False
+            break
+    if failure:
+        print(f"crash, cannot contact the parsed bloom server, please fix")
+        sys.exit() # maybe fallback to file based filters? too depressing...
+
+    valid_hashes = response.content.decode("utf-8").split("\n")
+
+
     print(f"[debug] bloom server returned {len(valid_hashes)} in {round(time.time()-s,3)} sec")
 
     valid_data = [t for t in {tuple(i) for i in valid_data}]
