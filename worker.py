@@ -231,9 +231,9 @@ def parse_wat(content, start, line_count):
             final_kept_data.append(item)
             prsd -= 1
 
-    print(f"[debug] lenght of deduplicated pairs to return {len(kept_data)}")
+    print(f"[debug] lenght of deduplicated pairs to return {len(final_kept_data)}")
 
-    return (kept_data, clpd, prsd)  # use a dict in order to remove duplicate tuples from list
+    return (final_kept_data, clpd, prsd)  # use a dict in order to remove duplicate tuples from list
 
 
 def process_img_content(response, alt_text, license, sample_id):
