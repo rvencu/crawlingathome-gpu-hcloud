@@ -109,77 +109,76 @@ def parse_wat(content, start, line_count, i):
     output: a list of tuples (url, text, license)
     """
 
-    # blocklist-domains.txt contains a list of domains to block based on previous results of CLIP filtering.
+    bloomip = "116.202.162.146"
+    bloom2ip = "94.130.167.172"
+
+    # clipped*.bin filters domains based on previous results of CLIP filtering.
     # the domains are not likely to pass CLIP for either bad captions or the content is almost always NSFW
 
-    # failed-domains.txt contains failed domains, i.e. domains with image links and suitable alt texts that actually
+    # failed-domains.bin contains failed domains, i.e. domains with image links and suitable alt texts that actually
     # do not produce any image. domains that mayb dissapeared, or are good at blocking scrapers. List is also learned from
     # past crawling effort
-    bloomip = "116.202.162.146"
-
     print (f"[{i} parser] start parsing")
-
-    blocked = BloomFilter(max_elements=10000000, error_rate=0.01, filename=(f"/home/crawl/{i}/.bloom/failed-domains.bin",-1))
+    #clipped = [BloomFilter(max_elements=200000000, error_rate=0.05, filename=(x,-1)) for x in glob("crawlingathome-gpu-hcloud/blocklists/clipped*")]
+    # blocked = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("crawlingathome-gpu-hcloud/blocklists/failed-domains.bin",-1))    
 
     clpd = 0
     valid_data = []
-    content.seek(start)
     check_flag = set() # track urls and make them unique
-
-    try:
-        for _ in range(line_count):
-            line = content.readline()
-            if "IMG@" not in line:
+    content.seek(start)
+    for _ in range(line_count):
+        line = content.readline()
+        if "IMG@" not in line:
+            continue
+        line_str = line.strip()
+        data = ujson.loads(line_str)
+        # find all links inside the line
+        linklist = data["Envelope"]["Payload-Metadata"]["HTTP-Response-Metadata"][
+            "HTML-Metadata"
+        ]["Links"]
+        # get base url
+        base_url = os.path.dirname(
+            data["Envelope"]["WARC-Header-Metadata"]["WARC-Target-URI"]
+        )
+        license = "?"
+        for e in linklist:
+            if "url" in e and "creativecommons.org/licenses/" in e["url"]:
+                license = e["url"]
+            # reject links if ALT tag is not present
+            if "alt" not in e:
                 continue
-            line_str = line.strip()
-            data = ujson.loads(line_str)
-            # find all links inside the line
-            linklist = data["Envelope"]["Payload-Metadata"]["HTTP-Response-Metadata"][
-                "HTML-Metadata"
-            ]["Links"]
-            # get base url
-            base_url = os.path.dirname(
-                data["Envelope"]["WARC-Header-Metadata"]["WARC-Target-URI"]
-            )
-            license = "?"
-            for e in linklist:
-                if "url" in e and "creativecommons.org/licenses/" in e["url"]:
-                    license = e["url"]
-                # reject links if ALT tag is not present
-                if "alt" not in e:
+            url = e["url"]
+            # reject links of svg, gif or scripted images content
+            if any( x in url for x in [".svg", ".gif", "data:image", "javascript:"] ):
+                continue
+            domain = urlparse(url).netloc
+            '''
+            # reject links found in blocked list
+            domain = "unknown"
+            try:
+                domain = urlparse(url).netloc
+                if domain in blocked:
                     continue
-                url = e["url"]
-                # reject links of svg, gif or scripted images content
-                if any( x in url for x in [".svg", ".gif", "data:image", "javascript:"] ):
-                    continue
-                # reject links found in blocked list
-                domain = "unknown"
-                try:
-                    domain = urlparse(url).netloc
-                    if domain in blocked:
-                        continue
-                except:
-                    # cannot even parse the url
-                    continue
-                # detect ALT text language, we want to retain only English captions
-                alt_text = ftfy.fix_text(e["alt"].replace("\n", " ")).strip()
-                try:
-                    _, _, details = cld2.detect(alt_text)
-                except Exception as e:
-                    alt_text = remove_bad_chars(alt_text)
-                    _, _, details = cld2.detect(alt_text)
-                # keep pair if we made it so far
-                if details[0][1] == "en":
-                    if not url.startswith("http"):
-                        url = urljoin(base_url, url)
-                    hash = hashlib.md5((url + alt_text).encode("utf-8")).hexdigest()
-                    if url not in check_flag:
-                        valid_data.append((url, alt_text, license, domain, hash))
-                        check_flag.add(url)
-
-    except Exception as e:
-        print(f"[{i} parser] parser exception: {e}")
-    
+            except:
+                # cannot even parse the url
+                continue
+            '''
+            # detect ALT text language, we want to retain only English captions
+            alt_text = ftfy.fix_text(e["alt"].replace("\n", " ")).strip()
+            try:
+                _, _, details = cld2.detect(alt_text)
+            except Exception as e:
+                alt_text = remove_bad_chars(alt_text)
+                _, _, details = cld2.detect(alt_text)
+            # keep pair if we made it so far
+            if details[0][1] == "en":
+                if not url.startswith("http"):
+                    url = urljoin(base_url, url)
+                hash = hashlib.md5((url + alt_text).encode("utf-8")).hexdigest()
+                if url not in check_flag:
+                    valid_data.append((url, alt_text, license, domain, hash))
+                    check_flag.add(url)
+            
     print(f"[debug] lenght of pairs to filter {len(valid_data)}")
     s = time.time()
 
@@ -202,11 +201,12 @@ def parse_wat(content, start, line_count, i):
             failure = False
             break
     if failure:
-        print(f"crash, cannot contact the bloom server, please fix")
+        print(f"crash, cannot contact the clipped bloom server, please fix")
         sys.exit() # maybe fallback to file based filters? too depressing...
 
     valid_hashes = response.content.decode("utf-8").split("\n")
-    print(f"[debug] bloom server returned {len(valid_hashes)} in {round(time.time()-s,3)} sec")
+
+    print(f"[debug] clipped bloom server returned {len(valid_hashes)} in {round(time.time()-s,3)} sec")
 
     valid_data = [t for t in {tuple(i) for i in valid_data}]
     kept_data = []
@@ -216,9 +216,46 @@ def parse_wat(content, start, line_count, i):
         if item[-1].strip() in valid_hashes:
             kept_data.append(item)
             clpd -= 1
+    
+    s = time.time()
+    # remove from valid_data elements rejected by parsed bloom server
+    with open('hash.txt', 'w') as f:
+        for item in kept_data:
+            f.write(item[0].strip()+"\n")
+    post = {
+        'file': ('hash.txt', open('hash.txt', 'rb')),
+        'key': (None, 'parsed'),
+    }
+    
+    failure = True
+    for _ in range(5):
+        response = requests.post(f'http://{bloom2ip}:8000/deduplicate/', files=post)
+        if response.status_code != 200:
+            print(f"bloom server error, retrying...")
+            time.sleep(1)            
+        else:
+            failure = False
+            break
+    if failure:
+        print(f"crash, cannot contact the parsed bloom server, please fix")
+        sys.exit() # maybe fallback to file based filters? too depressing...
 
-    print (f"[{i} parser] parsed {len(kept_data)} preparing to return")
-    return (kept_data, clpd)  # use a dict in order to remove duplicate tuples from list
+    valid_urls = response.content.decode("utf-8").split("\n")
+
+    print(f"[debug] parsed bloom server returned {len(valid_urls)} in {round(time.time()-s,3)} sec")
+
+    valid_data = [t for t in {tuple(i) for i in kept_data}]
+    final_kept_data = []
+    prsd = len(kept_data)
+
+    for item in kept_data:
+        if item[0].strip() in valid_urls:
+            final_kept_data.append(item)
+            prsd -= 1
+
+    print(f"[{i} parser] lenght of deduplicated pairs to return {len(final_kept_data)}")
+
+    return (final_kept_data, clpd, prsd)  # use a dict in order to remove duplicate tuples from list
 
 
 def process_img_content(response, alt_text, license, sample_id, img_output_folder):
@@ -281,7 +318,7 @@ async def request_image(datas, start_sampleid, img_output_folder, localbloom, tm
 
     # change the number of parallel connections based on CPU speed, network capabilities, etc.
     # the number of 192 is optimized for 1 vCPU droplet at Hetzner Cloud (code CX11)
-    session = asks.Session(connections=256, ssl_context=ssl_ctx)
+    session = asks.Session(connections=64, ssl_context=ssl_ctx)
     # try to make the bot website friendly
     session.headers = {
         "User-Agent": user_agent,
@@ -333,6 +370,29 @@ async def request_image(datas, start_sampleid, img_output_folder, localbloom, tm
     with open(f"{tmp_folder}/{fn}.json", "w") as f:
         ujson.dump(tmp_data, f)
     gc.collect()
+
+    # add downloaded urls to parsed bloom server
+    bloom2ip = "94.130.167.172"
+    with open('hash.txt', 'w') as f:
+        for item in datas:
+            f.write(item[0].strip()+"\n")
+    post = {
+        'file': ('hash.txt', open('hash.txt', 'rb')),
+        'key': (None, 'parsed'),
+    }
+    
+    failure = True
+    for _ in range(5):
+        response = requests.post(f'http://{bloom2ip}:8000/add/', files=post)
+        if response.status_code != 200:
+            print(f"bloom server error, retrying...")
+            time.sleep(1)            
+        else:
+            failure = False
+            break
+    if failure:
+        print(f"crash, cannot contact the parsed bloom server, please fix")
+
     return ujson.load(open(f"{tmp_folder}/{fn}.json"))
 
 
@@ -360,10 +420,10 @@ def upload(source: str, clientType: str, target: str):
     with tarfile.open(f"{source}.tar.gz", "w:gz") as tar:
         tar.add(source, arcname=os.path.basename(source))
     result = os.system(f"rsync -av {source}.tar.gz {target}")
-    if os.path.exists(f"/home/crawl/{source}.tar.gz"):
-        os.remove(f"/home/crawl/{source}.tar.gz")
-    if os.path.exists(f"/home/crawl/{source}"):
-        shutil.rmtree(f"/home/crawl/{source}", ignore_errors=True)
+    if os.path.exists(f"{source}.tar.gz"):
+        os.remove(f"{source}.tar.gz")
+    if os.path.exists(f"{source}"):
+        shutil.rmtree(f"{source}", ignore_errors=True)
     return result
 class FileData:
     """
@@ -409,7 +469,7 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
 
     # initialize stats variables for previous job
     last = 0
-    localbloom = BloomFilter(max_elements=1000000000, error_rate=0.05, filename=("/home/crawl/crawlingathome-gpu-hcloud/localbloom.bin",-1))
+    localbloom = BloomFilter(max_elements=1000000000, error_rate=0.05, filename=("crawlingathome-gpu-hcloud/localbloom.bin",-1))
 
     # this makes a loop to download new jobs while the script is running
     # normally it reads while client.jobCount() > 0
@@ -455,7 +515,7 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
                 start = time.time()
                 # parse valid links from wat file
                 with open(tmp_folder + "shard.wat", "r") as infile:
-                    parsed_data, clpd = parse_wat(infile, start_index, lines, i)
+                    parsed_data, clpd, prsd = parse_wat(infile, start_index, lines, i)
                 print (f"[{i} multicpu] parsed wat in {round(time.time()-start,2)}")
                 start = time.time()
 
@@ -468,7 +528,7 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
                 random.shuffle(parsed_data) 
             
                 lastlinks = len(parsed_data)
-                print (f"[{i} multicpu] this job has {lastlinks} links left after removing {clpd} already clipped")
+                print (f"[{i} multicpu] this job has {lastlinks} links left after removing {clpd} already clipped and {prsd} already parsed")
             
                 start = time.time()            
                 # attempt to download validated links and save to disk for stats and blocking lists
@@ -522,12 +582,13 @@ if __name__ == "__main__":
         #use this queue to annount that bloom is currently processing and please do not update filters. if queue is not empty please wait, if queue is empty you may update filters
         workers.append(Process(target=proc_worker, args= [i, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVER_URL], daemon=True))
 
-    if os.path.exists("/home/crawl/crawlingathome-gpu-hcloud/blocklists/"):
-        shutil.rmtree("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
-    os.makedirs("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
+    '''
+    if os.path.exists("crawlingathome-gpu-hcloud/blocklists/"):
+        shutil.rmtree("crawlingathome-gpu-hcloud/blocklists/")
+    os.makedirs("crawlingathome-gpu-hcloud/blocklists/")
     os.system(f'wget -m -np -c -U "Crawling@Home" --tries=15 -R "index.html*,bloom*.bin,clipped*.bin" "http://the-eye.eu/public/AI/cahblacklists/"')
-    os.system("mv ./the-eye.eu/public/AI/cahblacklists/* /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
-
+    os.system("mv ./the-eye.eu/public/AI/cahblacklists/* crawlingathome-gpu-hcloud/blocklists/")
+    '''
     time.sleep(10)
 
     for worker in workers:

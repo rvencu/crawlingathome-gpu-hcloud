@@ -103,8 +103,8 @@ def parse_wat(content, start, line_count):
     # do not produce any image. domains that mayb dissapeared, or are good at blocking scrapers. List is also learned from
     # past crawling effort
 
-    #clipped = [BloomFilter(max_elements=200000000, error_rate=0.05, filename=(x,-1)) for x in glob("/home/crawl/crawlingathome-gpu-hcloud/blocklists/clipped*")]
-    blocked = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("/home/crawl/crawlingathome-gpu-hcloud/blocklists/failed-domains.bin",-1))    
+    #clipped = [BloomFilter(max_elements=200000000, error_rate=0.05, filename=(x,-1)) for x in glob("crawlingathome-gpu-hcloud/blocklists/clipped*")]
+    # blocked = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("crawlingathome-gpu-hcloud/blocklists/failed-domains.bin",-1))    
 
     clpd = 0
     valid_data = []
@@ -135,6 +135,8 @@ def parse_wat(content, start, line_count):
             # reject links of svg, gif or scripted images content
             if any( x in url for x in [".svg", ".gif", "data:image", "javascript:"] ):
                 continue
+            domain = urlparse(url).netloc
+            '''
             # reject links found in blocked list
             domain = "unknown"
             try:
@@ -144,6 +146,7 @@ def parse_wat(content, start, line_count):
             except:
                 # cannot even parse the url
                 continue
+            '''
             # detect ALT text language, we want to retain only English captions
             alt_text = ftfy.fix_text(e["alt"].replace("\n", " ")).strip()
             try:
@@ -187,7 +190,7 @@ def parse_wat(content, start, line_count):
 
     valid_hashes = response.content.decode("utf-8").split("\n")
 
-    print(f"[debug] bloom server returned {len(valid_hashes)} in {round(time.time()-s,3)} sec")
+    print(f"[debug] clipped bloom server returned {len(valid_hashes)} in {round(time.time()-s,3)} sec")
 
     valid_data = [t for t in {tuple(i) for i in valid_data}]
     kept_data = []
@@ -197,7 +200,8 @@ def parse_wat(content, start, line_count):
         if item[-1].strip() in valid_hashes:
             kept_data.append(item)
             clpd -= 1
-
+    
+    s = time.time()
     # remove from valid_data elements rejected by parsed bloom server
     with open('hash.txt', 'w') as f:
         for item in kept_data:
@@ -221,6 +225,8 @@ def parse_wat(content, start, line_count):
         sys.exit() # maybe fallback to file based filters? too depressing...
 
     valid_urls = response.content.decode("utf-8").split("\n")
+
+    print(f"[debug] parsed bloom server returned {len(valid_urls)} in {round(time.time()-s,3)} sec")
 
     valid_data = [t for t in {tuple(i) for i in kept_data}]
     final_kept_data = []
@@ -289,7 +295,7 @@ async def request_image(datas, start_sampleid, localbloom):
 
     # change the number of parallel connections based on CPU speed, network capabilities, etc.
     # the number of 192 is optimized for 1 vCPU droplet at Hetzner Cloud (code CX11)
-    session = asks.Session(connections=164, ssl_context=ssl_ctx)
+    session = asks.Session(connections=64, ssl_context=ssl_ctx)
 
     software_names = [SoftwareName.CHROME.value]
     operating_systems = [OperatingSystem.LINUX.value]   
@@ -398,23 +404,11 @@ def upload(source: str, clientType: str, target: str):
         tar.add(source, arcname=os.path.basename(source))
     print(f"client type is {clientType}")
     result = os.system(f"rsync -av {source}.tar.gz {target}")
-    if os.path.exists(f"/home/crawl/{source}.tar.gz"):
-        os.remove(f"/home/crawl/{source}.tar.gz")
-    if os.path.exists(f"/home/crawl/{source}"):
-        shutil.rmtree(f"/home/crawl/{source}", ignore_errors=True)
+    if os.path.exists(f"{source}.tar.gz"):
+        os.remove(f"{source}.tar.gz")
+    if os.path.exists(f"{source}"):
+        shutil.rmtree(f"{source}", ignore_errors=True)
     return result
-
-def updateBloom(target, initial=False):
-    start = time.time()
-    if initial:
-        if os.path.exists("/home/crawl/crawlingathome-gpu-hcloud/blocklists/"):
-            shutil.rmtree("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
-        os.makedirs("/home/crawl/crawlingathome-gpu-hcloud/blocklists/")
-        os.system(f'wget -m -np -c -U "Crawling@Home" --tries=15 -R "index.html*,bloom*.bin,clipped*.bin" "http://the-eye.eu/public/AI/cahblacklists/"')
-        os.system("mv ./the-eye.eu/public/AI/cahblacklists/* /home/crawl/crawlingathome-gpu-hcloud/blocklists/")
-
-    print(f"Updated bloom filters in {round(time.time()-start, 2)} sec")
-
 class FileData:
     """
     Helper class to easily find wat file size, mid position, etc
@@ -454,8 +448,8 @@ if __name__ == "__main__":
     client = TempCPUWorker(url=CRAWLINGATHOME_SERVER_URL, nickname=YOUR_NICKNAME_FOR_THE_LEADERBOARD)
 
     # initial bloom filters upload
-    updateBloom("archiveteam@88.198.2.17::bloom", True)
-    localbloom = BloomFilter(max_elements=100000000, error_rate=0.01, filename=("/home/crawl/crawlingathome-gpu-hcloud/localbloom.bin",-1))
+    # updateBloom("archiveteam@88.198.2.17::bloom", True)
+    localbloom = BloomFilter(max_elements=100000000, error_rate=0.01, filename=("crawlingathome-gpu-hcloud/localbloom.bin",-1))
 
     # initialize stats variables for previous job
     last = 0
