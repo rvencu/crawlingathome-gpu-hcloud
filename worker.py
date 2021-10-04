@@ -20,9 +20,7 @@ from glob import glob
 from uuid import uuid1
 from io import BytesIO
 from requests import get
-from threading import Thread
-import crawlingathome_client as cah
-from bloom_filter2 import BloomFilter
+#import crawlingathome_client as cah
 from urllib.parse import urljoin, urlparse
 from PIL import Image, ImageFile, UnidentifiedImageError 
 
@@ -180,7 +178,7 @@ def parse_wat(content, start, line_count):
         response = requests.post(f'http://{bloomip}:8000/deduplicate/', files=post)
         if response.status_code != 200:
             print(f"bloom server error, retrying...")
-            time.sleep(1)            
+            time.sleep(5)            
         else:
             failure = False
             break
@@ -216,7 +214,7 @@ def parse_wat(content, start, line_count):
         response = requests.post(f'http://{bloom2ip}:8000/deduplicate/', files=post)
         if response.status_code != 200:
             print(f"bloom server error, retrying...")
-            time.sleep(1)            
+            time.sleep(5)            
         else:
             failure = False
             break
@@ -282,7 +280,7 @@ def process_img_content(response, alt_text, license, sample_id):
     return [str(sample_id), out_fname, response.url, alt_text, width, height, license]
 
 
-async def request_image(datas, start_sampleid, localbloom):
+async def request_image(datas, start_sampleid):
     """
     This function initiates many parallel async connections to try download the images from provided links
     
@@ -313,7 +311,7 @@ async def request_image(datas, start_sampleid, localbloom):
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     }
 
-    async def _request(data, sample_id, localbloom):
+    async def _request(data, sample_id):
         while True:
             start=time.time()
 
@@ -321,21 +319,17 @@ async def request_image(datas, start_sampleid, localbloom):
             # the following 2 lines are related to Trio Instrument to capture events from multiple threads
             task = trio.lowlevel.current_task()
             try:
-                if url not in localbloom:
-                    response = await session.get(url, timeout=10, connection_timeout=20)
-                    dltime = round(time.time()-start, 2)
-                    start=time.time()
-                    proces = process_img_content(
-                        # tune timeout and connection_timeout to grab more or less files. shorter timeouts will exclude bad performing websites
-                        response, alt_text, license, sample_id
-                    )
-                    proctime = round(time.time()-start, 2)
-                    task.custom_sleep_data = (0, dltime, proctime) # for success do not count errors
-                    if proces is not None:
-                        tmp_data.append(proces)
-                        localbloom.add(url)
-                else:
-                    task.custom_sleep_data = (3, 0, round(time.time()-start,2)) # when exception is hit, count it
+                response = await session.get(url, timeout=10, connection_timeout=20)
+                dltime = round(time.time()-start, 2)
+                start=time.time()
+                proces = process_img_content(
+                    # tune timeout and connection_timeout to grab more or less files. shorter timeouts will exclude bad performing websites
+                    response, alt_text, license, sample_id
+                )
+                proctime = round(time.time()-start, 2)
+                task.custom_sleep_data = (0, dltime, proctime) # for success do not count errors
+                if proces is not None:
+                    tmp_data.append(proces)
             except Exception as e:
                 log(e)
                 task.custom_sleep_data = (1, 0, round(time.time()-start,2)) # when exception is hit, count it
@@ -344,7 +338,7 @@ async def request_image(datas, start_sampleid, localbloom):
     async with trio.open_nursery() as n:
         for data in datas:
             async with limit:
-                n.start_soon(_request, data, start_sampleid, localbloom)
+                n.start_soon(_request, data, start_sampleid)
             start_sampleid += 1
             
     # trio makes sure at this point all async tasks were executed
@@ -377,7 +371,7 @@ async def request_image(datas, start_sampleid, localbloom):
     return
 
 
-def dl_wat(valid_data, first_sample_id, localbloom):
+def dl_wat(valid_data, first_sample_id):
     """
     This function initiates download attempt of validated parsed links
     It launches multithreaded tasks by using trio module
@@ -390,7 +384,7 @@ def dl_wat(valid_data, first_sample_id, localbloom):
     # Download every image available
     processed_samples = []
     #trio.run(request_image, valid_data, first_sample_id, instruments=[TrioProgress(len(valid_data), False)] )
-    trio.run( request_image, valid_data, first_sample_id, localbloom, instruments=[Tracer()] )
+    trio.run( request_image, valid_data, first_sample_id, instruments=[Tracer()] )
 
     for tmpf in glob(".tmp/*.json"):
         processed_samples.extend(ujson.load(open(tmpf)))
@@ -446,10 +440,6 @@ if __name__ == "__main__":
 
     # connect to C@H server and initialize client
     client = TempCPUWorker(url=CRAWLINGATHOME_SERVER_URL, nickname=YOUR_NICKNAME_FOR_THE_LEADERBOARD)
-
-    # initial bloom filters upload
-    # updateBloom("archiveteam@88.198.2.17::bloom", True)
-    localbloom = BloomFilter(max_elements=100000000, error_rate=0.01, filename=("crawlingathome-gpu-hcloud/localbloom.bin",-1))
 
     # initialize stats variables for previous job
     last = 0
@@ -514,7 +504,7 @@ if __name__ == "__main__":
                 print (f"[stats {shard_of_chunk}] This job has {lastlinks} candidates after removing {clpd} already clipped and {prsd} already parsed via bloom filters")
             
                 # attempt to download validated links and save to disk for stats and blocking lists
-                dlparse_df = dl_wat( parsed_data, first_sample_id, localbloom)
+                dlparse_df = dl_wat( parsed_data, first_sample_id)
                 dlparse_df.to_csv(output_folder + out_fname + ".csv", index=False, sep="|")
                 #dlparse_df.to_csv(output_folder + out_fname + "_unfiltered.csv", index=False, sep="|")
                 print (f"[stats {shard_of_chunk}] pairs retained {len(dlparse_df)} in {round(time.time() - start, 2)}")
