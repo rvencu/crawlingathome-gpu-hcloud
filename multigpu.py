@@ -18,7 +18,6 @@ from dashing import *
 from pathlib import Path
 from colorama import Fore
 from statistics import mode
-import ignite.distributed as idist
 import crawlingathome_client as cah
 sys.path.append('./crawlingathome-worker/')
 from multiprocessing import JoinableQueue, Process, cpu_count
@@ -34,7 +33,6 @@ sentry_sdk.init(
     traces_sample_rate=1.0
 )
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
 use_jit = torch.cuda.is_available() and '1.7.1' in torch.__version__
 class CLIPDataset(torch.utils.data.Dataset):
     def __init__(self, dataframe, preprocess):
@@ -54,8 +52,8 @@ class CLIPDataset(torch.utils.data.Dataset):
 
 class CLIP:
     def __init__(self):
-        model, self.preprocess = clip.load("ViT-B/32", device=device, jit=use_jit)
-        self.model = idist.auto_model(model)
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.model, self.preprocess = clip.load("ViT-B/32", device=self.device, jit=use_jit)
         self.cosine_similarity = torch.nn.CosineSimilarity(dim=1, eps=1e-6)
         with torch.no_grad():
             self.categories = self.model.encode_text(clip.tokenize(["neutral","selfie", "illustration, drawing", "toys, play, kids, children", "teddy bear, puppet", "animal, bird, mammal, insect" "fashion, clothes", "logo, commercial, ad, advertisement", "drawing, painting","anime, cartoon","comedy, fun","romance, love story","thriller, suspense, crime story","action, action movie", "horror, monster movie", "documentary", "news, journalism", "entertainment", "talk show", "porn, sex, sperm, nipples, breats, tits, boops, penis, dick, cock, clitoris, vagina, fuck, lust, horny, sexual, lick, licking",  "porn, sex, sperm, nipples", "porn, sex, sperm, penis, dick, cock", "nipples, breats, tits, boops, sexy", "penis, dick, cock", "clitoris, vagina", "sex, fuck, lust, horny, sexual, lick, licking", "porn, sex, sexy","sexy, hot","sperm, skin","lust, horny, sexual","lick, licking, body", "anime, hentai, sexy", "cartoon, sexy, sex", "hentai", "anime, sexy, breasts", "hentai"]).to(device))
@@ -64,30 +62,24 @@ class CLIP:
 
     def similarity_imgalt(self, image_tensor, text_tokens):
         with torch.no_grad():
-            image_features = self.model.encode_image(image_tensor.to(device)).float()
-            text_features = self.model.encode_text(text_tokens.to(device)).float()
+            image_features = self.model.encode_image(image_tensor.to(self.device)).float()
+            text_features = self.model.encode_text(text_tokens.to(self.device)).float()
             similarity = self.cosine_similarity(image_features, text_features).tolist()
 
         image_features = image_features.detach().cpu().numpy()
         return image_features, similarity
 
-    def preprocess_images(self, df):
+    def preprocess_images(self, df, rank=-1):
+        if rank > -1:
+            self.device = f"cuda:{rank}" if torch.cuda.is_available() else "cpu"
+            self.model, self.preprocess = clip.load("ViT-B/32", device=self.device, jit=use_jit)
         ret_image_features = []
         ret_similarity = []
-        batch_size = 256 if device == "cuda" else 8
-        if idist.get_local_rank() > 0:
-            # Ensure that only local rank 0 download the dataset
-            # Thus each node will download a copy of the dataset
-            idist.barrier()
+        batch_size = 256 if "cuda" in self.device else 8
 
         dataset = CLIPDataset(df, self.preprocess)
 
-        if idist.get_local_rank() == 0:
-            # Ensure that only local rank 0 download the dataset
-            idist.barrier()
-
-        dataloader = idist.auto_dataloader(dataset, batch_size=batch_size, num_workers=12, shuffle=True)
-        #dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=int(cpu_count()-3), pin_memory=True)
+        dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=12, pin_memory=True)
         for tensors, tokens in dataloader:
             image_features, similarities = self.similarity_imgalt(tensors, tokens)
             ret_image_features.extend(image_features)
@@ -96,7 +88,7 @@ class CLIP:
 
     def prob(self, image_features, text_features):
         text_features = text_features.float()
-        image_features = torch.as_tensor(image_features).to(device, dtype=torch.float32)
+        image_features = torch.as_tensor(image_features).to(self.device, dtype=torch.float32)
         image_features /= image_features.norm(dim=-1, keepdim=True)
         text_features /= text_features.norm(dim=-1, keepdim=True)
 
@@ -109,15 +101,11 @@ class CLIP:
 clip_filter = CLIP()
 
 
-def df_clipfilter(df):
+def df_clipfilter(df, rank):
     sim_threshold = 0.3
     underaged_text = ["teen", "kid", "child", "baby"]
     
-    backend = "nccl"
-    dist_configs={}
-    dist_configs["nproc_per_node"] = 2
-    with idist.Parallel(backend=backend, **dist_configs) as parallel:
-        img_embedding, similarities = parallel.run(clip_filter.preprocess_images(df))
+    img_embedding, similarities = clip_filter.preprocess_images(df, rank)
 
     #img_embedding, similarities = clip_filter.preprocess_images(df)
     tmp_embed = []
@@ -195,7 +183,7 @@ def df_tfrecords(df, output_fname):
             tfrecord_writer.write(example.SerializeToString())
 
 
-def filter(df, out_fname, output_folder):
+def filter(df, out_fname, output_folder, rank):
     # save hashes
     # df.loc[:,"hash"] = df.apply(lambda row: hashlib.md5((str(row.URL)+str(row.TEXT)).encode("utf-8")).hexdigest(), axis=1) # seems already set from gpu.py
     with open(f"{output_folder}hashes-{out_fname}.clp", "wt") as f:
@@ -203,7 +191,7 @@ def filter(df, out_fname, output_folder):
             f.write(item + "\n")
     results = []
     #start0 = start = time.time()
-    img_embeddings, dff = df_clipfilter(df)
+    img_embeddings, dff = df_clipfilter(df, rank)
     dff.to_csv(f"{output_folder}{out_fname}.csv", index=False, sep="|")
 
     #count results for each worker from resulting dff
@@ -403,7 +391,7 @@ def upload_worker(uploadqueue: JoinableQueue, counter: JoinableQueue, outgoingqu
             time.sleep(5)
 
 # main gpu workers. perhaps this worker needs to be run in as many processes as GPUs are present in the system. (todo)
-def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag: JoinableQueue, groupsize: int, logqueue: JoinableQueue):
+def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag: JoinableQueue, groupsize: int, logqueue: JoinableQueue, rank: int):
     logqueue.put (f"[gpu] worker started")
     first_groupsize = groupsize
     bloomip = "116.202.162.146"
@@ -484,7 +472,7 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             logqueue.put (f"{Fore.YELLOW}[gpu] preparation done in {round(time.time()-start, 2)} sec.{Fore.RESET}")
 
             start = time.time()
-            final_images, results = filter(group_parse, group_id, "./save/")
+            final_images, results = filter(group_parse, group_id, "./save/", rank)
             
             dedupe_ratio = round((duped - total) / duped, 4)
             logqueue.put(f"{Fore.GREEN}[gpu] {final_images} img from {bloomed} bloomed from {total} / {duped} ({dedupe_ratio}) duplic in {round(time.time()-start, 2)}s")
@@ -605,10 +593,14 @@ if __name__ == "__main__":
     logqueue = JoinableQueue() # use this to send log lines to monitor
     
     sys.stderr = open('gpuerr.txt', 'w')
-    monitor = Process(target=monitor2, args=[groupsize * 3, inbound, outbound, counter, logqueue]).start()
+    #monitor = Process(target=monitor2, args=[groupsize * 3, inbound, outbound, counter, logqueue]).start()
 
     # launch separate processes with specialized workers
     io = Process(target=io_worker, args=[inbound, outbound, groupsize, logqueue, YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL], daemon=True).start()
     upd = Process(target=upload_worker, args=[uploadqueue, counter, outbound, logqueue], daemon=True).start()
     
-    gpu_worker(inbound, uploadqueue, gpuflag, groupsize, logqueue)
+    gpu0 = Process(target=gpu_worker, args=[inbound, uploadqueue, gpuflag, groupsize, logqueue, 0], daemon=True).start()
+    gpu1 = Process(target=gpu_worker, args=[inbound, uploadqueue, gpuflag, groupsize, logqueue, 1], daemon=True).start()
+
+    monitor2(groupsize * 3, inbound, outbound, counter, logqueue)
+    
