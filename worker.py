@@ -260,16 +260,36 @@ def process_img_content(response, alt_text, license, sample_id):
             # reject if too large (might be a DOS decompression bomb)
             if width * height > 89478484:
                 return
-            if width * height > 8294400: #if image is larger than 4K then attempt scale down
-                ratio = math.sqrt(width * height / 8294400)
-                width = int(width/ratio)
-                height = int(height/ratio)
-                im = im.resize((width, height), resample=Image.LANCZOS)
             im_format = im.format
             out_fname = f"{img_output_folder}{str(sample_id)}.{im_format.lower()}"
             # reject if format is not in this list
             if im_format not in ["JPEG", "JPG", "PNG", "WEBP"]:
                 return
+            if height > 224 and width >= height: #if image is larger than tall and small side is larger than 224 pixels
+                ratio = height / 224
+                new_width = int(round(width/ratio,0))
+                new_height = int(round(height/ratio,0))
+                im = im.resize((new_width, new_height), resample=Image.LANCZOS)
+                if new_width > 224:
+                    left = (new_width - 224)/2
+                    top = (new_height - 224)/2
+                    right = (new_width + 224)/2
+                    bottom = (new_height + 224)/2
+                    # Crop the center of the image
+                    im = im.crop((left, top, right, bottom))
+            elif width > 224 and height > width:
+                ratio = width / 224
+                new_width = int(round(width/ratio,0))
+                new_height = int(round(height/ratio,0))
+                im = im.resize((new_width, new_height), resample=Image.LANCZOS)
+                if new_height > 224: # it is always like this since height > width but I keep this for simmetry
+                    left = (new_width - 224)/2
+                    top = (new_height - 224)/2
+                    right = (new_width + 224)/2
+                    bottom = (new_height + 224)/2
+                    # Crop the center of the image
+                    im = im.crop((left, top, right, bottom))
+            
             # convert all images to RGB (necessary for CLIP, also CLIP is doing it again so do we need it here?)
             if im.mode != "RGB":
                 im = im.convert("RGB")
