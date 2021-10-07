@@ -250,6 +250,21 @@ def process_img_content(response, alt_text, license, sample_id):
     output: list of image parameters or None if image is rejected
     """
     img_output_folder = "save/images/"
+
+    def _resize(im: Image):
+        width, height = im.size
+        ratio = min(width, height) / 224
+        new_width = int(round(width/ratio,0))
+        new_height = int(round(height/ratio,0))
+        im = im.resize((new_width, new_height), resample=Image.BICUBIC)
+        if new_width > 224 or new_height > 224:
+            left = (new_width - 224)/2
+            top = (new_height - 224)/2
+            right = (new_width + 224)/2
+            bottom = (new_height + 224)/2
+            # Crop the center of the image
+            im = im.crop((left, top, right, bottom))
+        return im
     try:
         # reject too small images
         if len(response.content) < 5000:
@@ -265,30 +280,8 @@ def process_img_content(response, alt_text, license, sample_id):
             # reject if format is not in this list
             if im_format not in ["JPEG", "JPG", "PNG", "WEBP"]:
                 return
-            if height > 224 and width >= height: #if image is larger than tall and small side is larger than 224 pixels
-                ratio = height / 224
-                new_width = int(round(width/ratio,0))
-                new_height = int(round(height/ratio,0))
-                im = im.resize((new_width, new_height), resample=Image.LANCZOS)
-                if new_width > 224:
-                    left = (new_width - 224)/2
-                    top = (new_height - 224)/2
-                    right = (new_width + 224)/2
-                    bottom = (new_height + 224)/2
-                    # Crop the center of the image
-                    im = im.crop((left, top, right, bottom))
-            elif width > 224 and height > width:
-                ratio = width / 224
-                new_width = int(round(width/ratio,0))
-                new_height = int(round(height/ratio,0))
-                im = im.resize((new_width, new_height), resample=Image.LANCZOS)
-                if new_height > 224: # it is always like this since height > width but I keep this for simmetry
-                    left = (new_width - 224)/2
-                    top = (new_height - 224)/2
-                    right = (new_width + 224)/2
-                    bottom = (new_height + 224)/2
-                    # Crop the center of the image
-                    im = im.crop((left, top, right, bottom))
+            if min(width, height) > 224:
+                im = _resize(im)
             
             # convert all images to RGB (necessary for CLIP, also CLIP is doing it again so do we need it here?)
             if im.mode != "RGB":
