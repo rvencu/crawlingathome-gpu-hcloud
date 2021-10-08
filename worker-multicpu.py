@@ -19,7 +19,6 @@ import sys
 import time
 import trio
 import uuid
-import math
 import ftfy
 import ujson
 import shutil
@@ -30,16 +29,14 @@ import requests
 import numpy as np
 import pandas as pd
 import pycld2 as cld2
-from glob import glob
 from _thread import *
 from uuid import uuid1
 from io import BytesIO
 from datetime import datetime
-import crawlingathome_client as cah
-from bloom_filter2 import BloomFilter
+#import crawlingathome_client as cah
 from urllib.parse import urljoin, urlparse
 sys.path.append('./crawlingathome-worker/')
-from multiprocessing import Process, cpu_count, Queue
+from multiprocessing import Process, cpu_count
 from crawlingathome_client.temp import TempCPUWorker
 from PIL import Image, ImageFile, UnidentifiedImageError 
 
@@ -63,7 +60,6 @@ class Tracer(trio.abc.Instrument):
         self.imgproc_duration = 0
         self.download_duration = 0
         self.error_duration = 0
-        self.bloom = 0
         self.i = i
 
     def task_exited(self, task):
@@ -75,8 +71,6 @@ class Tracer(trio.abc.Instrument):
                 self.download_duration += task.custom_sleep_data[1]
                 self.imgproc_duration += task.custom_sleep_data[2]
                 self.downloads += 1
-            if task.custom_sleep_data[0] == 3:
-                self.bloom += 1
 
     def after_run(self):
         rate = round(self.exceptions / (self.exceptions + self.downloads + sys.float_info.epsilon), 2)
@@ -86,8 +80,6 @@ class Tracer(trio.abc.Instrument):
         print(f"[{self.i} instrumentation] While scraping there were {self.exceptions} errors within {self.downloads + self.exceptions} candidates (error rate = {round(rate * 100,2)} %). {self.downloads} images were downloaded.")
         print(f"[{self.i} instrumentation] Cumulative image processing duration {round(self.imgproc_duration, 2)} s.")
         print(f"[{self.i} instrumentation] Average downloading time {avg_download} s/img, image processing time {avg_process} s/img, exceptions processing time {avg_error} s/link")
-        print(f"[{self.i} instrumentation] Localbloom catched {self.bloom} urls")
-
 
 def log(e):
     with open("errors.txt","a") as f:
@@ -112,15 +104,7 @@ def parse_wat(content, start, line_count, i):
     bloomip = "116.202.162.146"
     bloom2ip = "94.130.167.172"
 
-    # clipped*.bin filters domains based on previous results of CLIP filtering.
-    # the domains are not likely to pass CLIP for either bad captions or the content is almost always NSFW
-
-    # failed-domains.bin contains failed domains, i.e. domains with image links and suitable alt texts that actually
-    # do not produce any image. domains that mayb dissapeared, or are good at blocking scrapers. List is also learned from
-    # past crawling effort
-    print (f"[{i} parser] start parsing")
-    #clipped = [BloomFilter(max_elements=200000000, error_rate=0.05, filename=(x,-1)) for x in glob("crawlingathome-gpu-hcloud/blocklists/clipped*")]
-    # blocked = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("crawlingathome-gpu-hcloud/blocklists/failed-domains.bin",-1))    
+    print (f"[{i} parser] start parsing")  
 
     clpd = 0
     valid_data = []
@@ -152,17 +136,7 @@ def parse_wat(content, start, line_count, i):
             if any( x in url for x in [".svg", ".gif", "data:image", "javascript:"] ):
                 continue
             domain = urlparse(url).netloc
-            '''
-            # reject links found in blocked list
-            domain = "unknown"
-            try:
-                domain = urlparse(url).netloc
-                if domain in blocked:
-                    continue
-            except:
-                # cannot even parse the url
-                continue
-            '''
+
             # detect ALT text language, we want to retain only English captions
             alt_text = ftfy.fix_text(e["alt"].replace("\n", " ")).strip()
             try:
@@ -268,6 +242,20 @@ def process_img_content(response, alt_text, license, sample_id, img_output_folde
     output: list of image parameters or None if image is rejected
     """
 
+    def _resize(im: Image):
+        width, height = im.size
+        ratio = min(width, height) / 224
+        new_width = int(round(width/ratio,0))
+        new_height = int(round(height/ratio,0))
+        im = im.resize((new_width, new_height), resample=Image.BICUBIC)
+        if new_width > 224 or new_height > 224:
+            left = (new_width - 224)/2
+            top = (new_height - 224)/2
+            right = (new_width + 224)/2
+            bottom = (new_height + 224)/2
+            # Crop the center of the image
+            im = im.crop((left, top, right, bottom))
+        return im
     try:
         # reject too small images
         if len(response.content) < 5000:
@@ -278,16 +266,14 @@ def process_img_content(response, alt_text, license, sample_id, img_output_folde
             # reject if too large (might be a DOS decompression bomb)
             if width * height > 89478484:
                 return
-            if width * height > 8294400: #if image is larger than 4K then attempt scale down
-                ratio = math.sqrt(width * height / 8294400)
-                width = int(width/ratio)
-                height = int(height/ratio)
-                im = im.resize((width, height), resample=Image.LANCZOS)
             im_format = im.format
             out_fname = f"{img_output_folder}{str(sample_id)}.{im_format.lower()}"
             # reject if format is not in this list
             if im_format not in ["JPEG", "JPG", "PNG", "WEBP"]:
                 return
+            if min(width, height) > 224:
+                im = _resize(im)
+            
             # convert all images to RGB (necessary for CLIP, also CLIP is doing it again so do we need it here?)
             if im.mode != "RGB":
                 im = im.convert("RGB")
@@ -298,7 +284,7 @@ def process_img_content(response, alt_text, license, sample_id, img_output_folde
     return [str(sample_id), out_fname, response.url, alt_text, width, height, license]
 
 
-async def request_image(datas, start_sampleid, img_output_folder, localbloom, tmp_folder):
+async def request_image(datas, start_sampleid, img_output_folder, tmp_folder):
     """
     This function initiates many parallel async connections to try download the images from provided links
     
@@ -329,7 +315,7 @@ async def request_image(datas, start_sampleid, img_output_folder, localbloom, tm
         "Accept": "text/html,application/xhtml+xml,application/xml,image/;q=0.9,*/*;q=0.8",
     }
 
-    async def _request(data, sample_id, localbloom, img_output_folder):
+    async def _request(data, sample_id, img_output_folder):
         async with limit:
             start=time.time()
             url, alt_text, license, domain, hash = data
@@ -338,21 +324,18 @@ async def request_image(datas, start_sampleid, img_output_folder, localbloom, tm
             # task.custom_sleep_data = None # custom_sleep_data can transport information from thread to main thread
             task = trio.lowlevel.current_task()
             try:
-                if url not in localbloom:
-                    response = await session.get(url, timeout=10, connection_timeout=20)
-                    dltime = round(time.time()-start, 2)
-                    start=time.time()
-                    proces = process_img_content(
-                        # tune timeout and connection_timeout to grab more or less files. shorter timeouts will exclude bad performing websites
-                        response, alt_text, license, sample_id, img_output_folder
-                    )
-                    proctime = round(time.time()-start, 2)
-                    task.custom_sleep_data = (0, dltime, proctime) # for success do not count errors
-                    if proces is not None:
-                        tmp_data.append(proces)
-                        localbloom.add(url)
-                else:
-                    task.custom_sleep_data = (3, 0, round(time.time()-start,2)) # when exception is hit, count it
+                response = await session.get(url, timeout=10, connection_timeout=20)
+                dltime = round(time.time()-start, 2)
+                start=time.time()
+                proces = process_img_content(
+                    # tune timeout and connection_timeout to grab more or less files. shorter timeouts will exclude bad performing websites
+                    response, alt_text, license, sample_id, img_output_folder
+                )
+                proctime = round(time.time()-start, 2)
+                task.custom_sleep_data = (0, dltime, proctime) # for success do not count errors
+                if proces is not None:
+                    tmp_data.append(proces)
+                
             except Exception as e:
                 log(e)
                 task.custom_sleep_data = (1, 0, round(time.time()-start,2)) # when exception is hit, count it
@@ -362,7 +345,7 @@ async def request_image(datas, start_sampleid, img_output_folder, localbloom, tm
     async with trio.open_nursery() as n:
         for data in datas:
             async with limit:
-                n.start_soon(_request, data, start_sampleid, localbloom, img_output_folder)
+                n.start_soon(_request, data, start_sampleid, img_output_folder)
             start_sampleid += 1
 
     fn = uuid1()
@@ -396,7 +379,7 @@ async def request_image(datas, start_sampleid, img_output_folder, localbloom, tm
     return ujson.load(open(f"{tmp_folder}/{fn}.json"))
 
 
-def dl_wat(valid_data, first_sample_id, img_output_folder, localbloom, tmp_folder, i):
+def dl_wat(valid_data, first_sample_id, img_output_folder, tmp_folder, i):
     """
     This function initiates download attempt of validated parsed links
     It launches multithreaded tasks by using trio module
@@ -409,7 +392,7 @@ def dl_wat(valid_data, first_sample_id, img_output_folder, localbloom, tmp_folde
     # Download every image available
     processed_samples = []
     #trio.run(request_image, valid_data, first_sample_id, instruments=[TrioProgress(len(valid_data), False)] )
-    result = trio.run( request_image, valid_data, first_sample_id, img_output_folder, localbloom, tmp_folder, instruments=[Tracer(i)])
+    result = trio.run( request_image, valid_data, first_sample_id, img_output_folder, tmp_folder, instruments=[Tracer(i)])
     processed_samples.extend(result)
     return pd.DataFrame(
         processed_samples,
@@ -469,7 +452,7 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
 
     # initialize stats variables for previous job
     last = 0
-    localbloom = BloomFilter(max_elements=1000000000, error_rate=0.05, filename=("crawlingathome-gpu-hcloud/localbloom.bin",-1))
+    #localbloom = BloomFilter(max_elements=1000000000, error_rate=0.05, filename=("crawlingathome-gpu-hcloud/localbloom.bin",-1))
 
     # this makes a loop to download new jobs while the script is running
     # normally it reads while client.jobCount() > 0
@@ -532,7 +515,7 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
             
                 start = time.time()            
                 # attempt to download validated links and save to disk for stats and blocking lists
-                dlparse_df = dl_wat( parsed_data, first_sample_id, img_output_folder, localbloom, tmp_folder, i )
+                dlparse_df = dl_wat( parsed_data, first_sample_id, img_output_folder, tmp_folder, i )
                 dlparse_df["PATH"] = dlparse_df.PATH.apply(lambda x: re.sub(r"^./save/\d{1,2}/(.*)$", r"save/\1", x))
                 dlparse_df.to_csv(output_folder + out_fname + ".csv", index=False, sep="|")
                 dlparse_df.to_csv(output_folder + out_fname + "_unfiltered.csv", index=False, sep="|")
@@ -582,13 +565,6 @@ if __name__ == "__main__":
         #use this queue to annount that bloom is currently processing and please do not update filters. if queue is not empty please wait, if queue is empty you may update filters
         workers.append(Process(target=proc_worker, args= [i, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVER_URL], daemon=True))
 
-    '''
-    if os.path.exists("crawlingathome-gpu-hcloud/blocklists/"):
-        shutil.rmtree("crawlingathome-gpu-hcloud/blocklists/")
-    os.makedirs("crawlingathome-gpu-hcloud/blocklists/")
-    os.system(f'wget -m -np -c -U "Crawling@Home" --tries=15 -R "index.html*,bloom*.bin,clipped*.bin" "http://the-eye.eu/public/AI/cahblacklists/"')
-    os.system("mv ./the-eye.eu/public/AI/cahblacklists/* crawlingathome-gpu-hcloud/blocklists/")
-    '''
     time.sleep(10)
 
     for worker in workers:
