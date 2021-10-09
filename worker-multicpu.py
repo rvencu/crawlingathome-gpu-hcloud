@@ -28,7 +28,7 @@ import tarfile
 import requests
 import numpy as np
 import pandas as pd
-import pycld2 as cld2
+import gcld3
 from _thread import *
 from uuid import uuid1
 from io import BytesIO
@@ -136,16 +136,18 @@ def parse_wat(content, start, line_count, i):
             if any( x in url for x in [".svg", ".gif", "data:image", "javascript:"] ):
                 continue
             domain = urlparse(url).netloc
-
             # detect ALT text language, we want to retain only English captions
             alt_text = ftfy.fix_text(e["alt"].replace("\n", " ")).strip()
+            detector = gcld3.NNetLanguageIdentifier(min_num_bytes=6, max_num_bytes=1000)
+            detlang = ""
             try:
-                _, _, details = cld2.detect(alt_text)
+                res = detector.FindLanguage(alt_text)
+                detlang = res.language
             except Exception as e:
                 alt_text = remove_bad_chars(alt_text)
-                _, _, details = cld2.detect(alt_text)
-            # keep pair if we made it so far
-            if details[0][1] == "en":
+                res = detector.FindLanguage(alt_text)
+                detlang = res.language            # keep pair if we made it so far
+            if detlang == "en":
                 if not url.startswith("http"):
                     url = urljoin(base_url, url)
                 hash = hashlib.md5((url + alt_text).encode("utf-8")).hexdigest()

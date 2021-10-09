@@ -2,7 +2,7 @@
 sudo su root
 
 apt update && yes | DEBIAN_FRONTEND=noninteractive apt upgrade
-yes | apt install python3-pip git build-essential libssl-dev libffi-dev python3-dev libwebp-dev libjpeg-dev libtiff-dev libopenjp2-7-dev zlib1g-dev knot-dnsutils resolvconf
+yes | apt install python3-pip git build-essential libssl-dev libffi-dev python3-dev libwebp-dev libjpeg-dev libtiff-dev libopenjp2-7-dev zlib1g-dev knot-dnsutils resolvconf protobuf-compiler libprotobuf-dev
 wget https://secure.nic.cz/files/knot-resolver/knot-resolver-release.deb
 sudo dpkg -i knot-resolver-release.deb
 sudo apt install -y knot-resolver
