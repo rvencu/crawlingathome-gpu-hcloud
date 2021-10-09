@@ -133,7 +133,10 @@ def parse_wat(content, start, line_count):
             # reject links of svg, gif or scripted images content
             if any( x in url for x in [".svg", ".gif", "data:image", "javascript:"] ):
                 continue
-            domain = urlparse(url).netloc
+            try:
+                domain = urlparse(url).netloc
+            except:
+                continue
             '''
             # reject links found in blocked list
             domain = "unknown"

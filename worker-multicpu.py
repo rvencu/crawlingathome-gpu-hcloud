@@ -135,7 +135,10 @@ def parse_wat(content, start, line_count, i):
             # reject links of svg, gif or scripted images content
             if any( x in url for x in [".svg", ".gif", "data:image", "javascript:"] ):
                 continue
-            domain = urlparse(url).netloc
+            try:
+                domain = urlparse(url).netloc
+            except:
+                continue
             # detect ALT text language, we want to retain only English captions
             alt_text = ftfy.fix_text(e["alt"].replace("\n", " ")).strip()
             detector = gcld3.NNetLanguageIdentifier(min_num_bytes=6, max_num_bytes=1000)
