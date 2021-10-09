@@ -558,9 +558,9 @@ if __name__ == "__main__":
 
     print (f"starting session under `{YOUR_NICKNAME_FOR_THE_LEADERBOARD}` nickname")
 
-    procs = cpu_count() - 16
+    procs = cpu_count()
     if len(sys.argv) > 1:
-        procs = min(int(sys.argv[1]), cpu_count() - 5)
+        procs = int(sys.argv[1])
 
     workers = []
     for i in range ( procs ):
