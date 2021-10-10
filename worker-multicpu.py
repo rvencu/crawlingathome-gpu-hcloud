@@ -181,7 +181,7 @@ def parse_wat(content, start, line_count, i):
             break
     if failure:
         print(f"crash, cannot contact the clipped bloom server, please fix")
-        sys.exit() # maybe fallback to file based filters? too depressing...
+        return
 
     valid_hashes = response.content.decode("utf-8").split("\n")
 
@@ -217,7 +217,7 @@ def parse_wat(content, start, line_count, i):
             break
     if failure:
         print(f"crash, cannot contact the parsed bloom server, please fix")
-        sys.exit() # maybe fallback to file based filters? too depressing...
+        return
 
     valid_urls = response.content.decode("utf-8").split("\n")
 
