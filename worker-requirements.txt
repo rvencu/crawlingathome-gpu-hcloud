@@ -1,6 +1,5 @@
 ftfy
 pandas
-pycld2
 gcld3
 trio
 ujson
