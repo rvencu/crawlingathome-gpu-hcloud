@@ -461,7 +461,7 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
 
             bloomed = len(group_parse.index)
 
-            group_parse.to_csv("./stats/" + group_id + "_beforeclip.csv", index=False, sep="|") # I am using these to find out domains to filter from scraping
+            #group_parse.to_csv("./stats/" + group_id + "_beforeclip.csv", index=False, sep="|") # I am using these to find out domains to filter from scraping
 
             logqueue.put (f"{Fore.YELLOW}[gpu] preparation done in {round(time.time()-start, 2)} sec.{Fore.RESET}")
 
