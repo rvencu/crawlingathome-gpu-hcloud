@@ -547,7 +547,7 @@ if __name__ == "__main__":
     if len(sys.argv) > 1:
         gpuid = sys.argv[1]
 
-    YOUR_NICKNAME_FOR_THE_LEADERBOARD = YOUR_NICKNAME_FOR_THE_LEADERBOARD + str(gpuid)
+    #YOUR_NICKNAME_FOR_THE_LEADERBOARD = YOUR_NICKNAME_FOR_THE_LEADERBOARD + str(gpuid)
     
     print(
         f"[GPU{gpuid}] starting session under `{YOUR_NICKNAME_FOR_THE_LEADERBOARD}` nickname")
