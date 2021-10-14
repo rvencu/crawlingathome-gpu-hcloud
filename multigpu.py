@@ -386,7 +386,7 @@ def upload_worker(uploadqueue: JoinableQueue, counter: JoinableQueue, outgoingqu
 
 # main gpu workers. perhaps this worker needs to be run in as many processes as GPUs are present in the system. (todo)
 def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag: JoinableQueue, groupsize: int, logqueue: JoinableQueue, gpuid: int):
-    logqueue.put (f"[gpu] worker started")
+    logqueue.put (f"[gpu{gpuid}] worker started")
     first_groupsize = groupsize
     bloomip = "116.202.162.146"
     # watch for the incoming queue, when it is big enough we can trigger processing    
@@ -399,7 +399,7 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             shards = []
             addresses = []
             group_id = uuid.uuid4().hex
-            logqueue.put (f"[gpu] got new {groupsize} jobs to group in id {group_id}")
+            logqueue.put (f"[gpu{gpuid}] got new {groupsize} jobs to group in id {group_id}")
             group_parse = None
             for _ in range(groupsize):
                 i, job, address = incomingqueue.get()
@@ -446,14 +446,23 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
                 'file': ('hash.txt', open('hash.txt', 'rb')),
                 'key': (None, 'main'),
             }
-            response = requests.post(f'http://{bloomip}:8000/deduplicate/', files=post)
             os.remove('hash.txt')
-            if response.status_code != 200:
-                logqueue.put(f"crash, cannot contact the bloom server, please fix")
-                sys.exit()
+            
+            failure = True
+            for _ in range(10):
+                response = requests.post(f'http://{bloomip}:8000/deduplicate/', files=post)
+                if response.status_code != 200:
+                    print(f"[gpu{gpuid}] bloom server error, retrying...")
+                    time.sleep(15)            
+                else:
+                    failure = False
+                    break
+            if failure:
+                logqueue.put(f"[gpu{gpuid}] crash, cannot contact the bloom server, please fix")
+                continue
 
             valid_hashes = response.content.decode("utf-8").split("\n")
-            logqueue.put(f"bloom server has validated {len(valid_hashes)} pairs")
+            logqueue.put(f"[gpu{gpuid}] bloom server has validated {len(valid_hashes)} pairs")
 
             group_parse = group_parse[group_parse.hash.isin(valid_hashes)]
 
@@ -463,7 +472,7 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
 
             #group_parse.to_csv("./stats/" + group_id + "_beforeclip.csv", index=False, sep="|") # I am using these to find out domains to filter from scraping
 
-            logqueue.put (f"{Fore.YELLOW}[gpu] preparation done in {round(time.time()-start, 2)} sec.{Fore.RESET}")
+            logqueue.put (f"{Fore.YELLOW}[gpu{gpuid}] preparation done in {round(time.time()-start, 2)} sec.{Fore.RESET}")
 
             start = time.time()
 
@@ -471,8 +480,8 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             final_images, results = filter(group_parse, group_id, "./save/", clip_filter_obj)
             
             dedupe_ratio = round((duped - total) / duped, 4)
-            logqueue.put(f"{Fore.GREEN}[gpu] {final_images} img from {bloomed} bloomed from {total} / {duped} ({dedupe_ratio}) duplic in {round(time.time()-start, 2)}s")
-            logqueue.put(f"({groupsize} shards grouped. avg duration per shard was {round((time.time()-start)/groupsize,2)}s){Fore.RESET}")
+            logqueue.put(f"{Fore.GREEN}[gpu{gpuid}] {final_images} img from {bloomed} bloomed from {total} / {duped} ({dedupe_ratio}) duplic in {round(time.time()-start, 2)}s")
+            logqueue.put(f"[gpu{gpuid}] ({groupsize} shards grouped. avg duration per shard was {round((time.time()-start)/groupsize,2)}s){Fore.RESET}")
 
             # find most required upload address among the grouped shards
             upload_address = mode(addresses)
@@ -484,49 +493,12 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             groupsize = min( int(3 * first_groupsize) - 5 , groupsize - gradient )
             groupsize = max( groupsize - gradient, 3 )
             if groupsize != oldgroupsize:
-                logqueue.put (f"{Fore.YELLOW}[gpu] groupsize changed to {groupsize}{Fore.RESET}")
+                logqueue.put (f"{Fore.YELLOW}[gpu{gpuid}] groupsize changed to {groupsize}{Fore.RESET}")
             
             gpuflag.get()
             gpuflag.task_done()
         else:
             time.sleep(10)
-
-
-# tried to make a monitor in terminal, wip, not used
-def monitor(nodes, inbound, outbound, jobscounter, logqueue):
-
-    ui = VSplit(
-            HSplit(
-                HGauge(val=int(nodes), title="incoming pipeline", border_color=5),
-                HGauge(val=int(nodes), title="outgoing pipeline", border_color=5),
-                ),
-            VChart(border_color=2, color=2),
-            Log(title='logs', border_color=5),
-            title='GPU Monitor'
-        )
-    log = ui.items[2]
-    incoming = ui.items[0].items[0]
-    outgoing = ui.items[0].items[1]
-    chart = ui.items[1]
-    
-    while True:
-        cnt = 0
-        while jobscounter.qsize() > 0:
-            jobscounter.get()
-            cnt += 1
-            jobscounter.task_done()
-        chart.append(cnt)
-        
-        while logqueue.qsize() > 0:
-            logmsg = logqueue.get()
-            log.append(logmsg)
-            logqueue.task_done()
-
-        incoming.value = inbound.qsize()
-        outgoing.value = sum (i.qsize() for i in outbound)
-
-        ui.display()
-        time.sleep(1.0/25)
 
 # tried to make a monitor in terminal, wip, not used (second attempt)
 def monitor2(nodes, inbound, outbound, jobscounter, logqueue):

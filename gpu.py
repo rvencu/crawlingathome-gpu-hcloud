@@ -263,11 +263,20 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
                 'file': ('hash.txt', open('hash.txt', 'rb')),
                 'key': (None, 'main'),
             }
-            response = requests.post(f'http://{bloomip}:8000/deduplicate/', files=post)
             os.remove('hash.txt')
-            if response.status_code != 200:
-                logqueue.put(f"crash, cannot contact the bloom server, please fix")
-                sys.exit()
+            
+            failure = True
+            for _ in range(10):
+                response = requests.post(f'http://{bloomip}:8000/deduplicate/', files=post)
+                if response.status_code != 200:
+                    print(f"[gpu] bloom server error, retrying...")
+                    time.sleep(15)            
+                else:
+                    failure = False
+                    break
+            if failure:
+                logqueue.put(f"[gpu] crash, cannot contact the bloom server, please fix")
+                continue
 
             valid_hashes = response.content.decode("utf-8").split("\n")
             logqueue.put(f"bloom server has validated {len(valid_hashes)} pairs")

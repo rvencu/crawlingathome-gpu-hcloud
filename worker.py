@@ -169,11 +169,11 @@ def parse_wat(content, start, line_count):
     }
     
     failure = True
-    for _ in range(5):
+    for _ in range(10):
         response = requests.post(f'http://{bloomip}:8000/deduplicate/', files=post)
         if response.status_code != 200:
             print(f"bloom server error, retrying...")
-            time.sleep(5)            
+            time.sleep(15)            
         else:
             failure = False
             break
@@ -205,11 +205,11 @@ def parse_wat(content, start, line_count):
     }
     
     failure = True
-    for _ in range(5):
+    for _ in range(10):
         response = requests.post(f'http://{bloom2ip}:8000/deduplicate/', files=post)
         if response.status_code != 200:
             print(f"bloom server error, retrying...")
-            time.sleep(5)            
+            time.sleep(15)            
         else:
             failure = False
             break
