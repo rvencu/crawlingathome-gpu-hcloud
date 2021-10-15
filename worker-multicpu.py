@@ -370,11 +370,11 @@ async def request_image(datas, start_sampleid, img_output_folder, tmp_folder):
     }
     
     failure = True
-    for _ in range(5):
+    for _ in range(10):
         response = requests.post(f'http://{bloom2ip}:8000/add/', files=post)
         if response.status_code != 200:
             print(f"bloom server error, retrying...")
-            time.sleep(1)            
+            time.sleep(15)            
         else:
             failure = False
             break
