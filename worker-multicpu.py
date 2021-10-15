@@ -162,11 +162,11 @@ def parse_wat(content, start, line_count, i):
     s = time.time()
 
     # remove from valid_data elements rejected by clipped bloom server
-    with open('hash.txt', 'w') as f:
+    with open(f'{i}/hash.txt', 'w') as f:
         for item in valid_data:
             f.write(item[-1].strip()+"\n")
     post = {
-        'file': ('hash.txt', open('hash.txt', 'rb')),
+        'file': ('hash.txt', open(f'{i}/hash.txt', 'rb')),
         'key': (None, 'clipped'),
     }
     
@@ -198,11 +198,11 @@ def parse_wat(content, start, line_count, i):
     
     s = time.time()
     # remove from valid_data elements rejected by parsed bloom server
-    with open('hash.txt', 'w') as f:
+    with open(f'{i}/hash.txt', 'w') as f:
         for item in kept_data:
             f.write(item[0].strip()+"\n")
     post = {
-        'file': ('hash.txt', open('hash.txt', 'rb')),
+        'file': ('hash.txt', open(f'{i}/hash.txt', 'rb')),
         'key': (None, 'parsed'),
     }
     
@@ -361,11 +361,11 @@ async def request_image(datas, start_sampleid, img_output_folder, tmp_folder):
 
     # add downloaded urls to parsed bloom server
     bloom2ip = "94.130.167.172"
-    with open('hash.txt', 'w') as f:
+    with open(f"{tmp_folder}/hash.txt", 'w') as f:
         for item in datas:
             f.write(item[0].strip()+"\n")
     post = {
-        'file': ('hash.txt', open('hash.txt', 'rb')),
+        'file': ('hash.txt', open(f"{tmp_folder}/hash.txt", 'rb')),
         'key': (None, 'parsed'),
     }
     
