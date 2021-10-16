@@ -247,7 +247,7 @@ GPU workflow:
 # spawn this interface to double or more than shard groups so they can download jobs and communicate with the tracker in parallel with GPU processing. this will keep GPU busy almost continuously
 def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: JoinableQueue, logqueue: JoinableQueue, YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL):
     # initiate and reinitiate a GPU type client if needed
-    logqueue.put (f"   |___ inbound worker started")
+    print (f"   |___ inbound worker started")
     while True:
         client = cah.init(
             url=CRAWLINGATHOME_SERVER_URL, nickname=YOUR_NICKNAME_FOR_THE_LEADERBOARD, type="GPU"
@@ -266,7 +266,7 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                         job = client.shard.split(" ")[1]
                     except:
                         client.invalidURL()
-                        logqueue.put (f"[io {i}] invalid job detected: {job}")
+                        print (f"[io {i}] invalid job detected: {job}")
                         continue
                     # found repeating shards, need to clear old files before continuing
                     if os.path.exists("./"+ job):
@@ -277,7 +277,7 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                     # test for csv and for images folder
                     if len(glob(f"{job}/*.csv")) == 0 or not os.path.exists(f"./{job}/images"):
                         client.invalidURL()
-                        logqueue.put (f"[io {i}] invalid job detected: {job}")
+                        print (f"[io {i}] invalid job detected: {job}")
                         continue
                     for file in glob(f"{job}/*_parsed.csv"):
                         os.system(f"mv {file} stats/")
@@ -304,12 +304,12 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                                 im.close()
                             except Exception as e:
                                 if index < 10:
-                                    logqueue.put (f"[io {i}] invalid image {row['PATH']} because {e}")
+                                    print (f"[io {i}] invalid image {row['PATH']} because {e}")
                                 df = df.drop(index)
                         df.to_csv(file, sep="|", index=False)
                         del df
                     
-                    #logqueue.put (f"[io] job sent to GPU: {job}")
+                    #print (f"[io] job sent to GPU: {job}")
                     incomingqueue.put((i, job, client.upload_address))
                     
                     # wait until job gets processes
@@ -317,17 +317,17 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                         if outgoingqueue.qsize() > 0:
                             outjob, pairs = outgoingqueue.get() # I am poping out from queue only if my current job is finished
                             if pairs >= 0:
-                                #logqueue.put (f"[io {i}] mark job as complete: {job}")
+                                #print (f"[io {i}] mark job as complete: {job}")
                                 # cleanup temp storage now
                                 if pairs == 0:
                                     pairs = 1
                                 try:
                                     client.completeJob(int(pairs))
                                 except:
-                                    logqueue.put(f"[io {i}] invalid trying to complete with {pairs} pairs")
+                                    print(f"[io {i}] invalid trying to complete with {pairs} pairs")
                                     client.invalidURL()
                             else:
-                                logqueue.put(f"[io {i}] invalid with negative {pairs} pairs?")
+                                print(f"[io {i}] invalid with negative {pairs} pairs?")
                                 client.invalidURL()
                             if os.path.exists("./"+ job):
                                 shutil.rmtree("./"+ job)
@@ -338,37 +338,37 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                         else:
                             time.sleep(1)
                 else:
-                    logqueue.put (f"[io {i}] no jobs")
+                    print (f"[io {i}] no jobs")
                     time.sleep(120)
             else:
-                logqueue.put (f"[io {i}] client forgotten")
+                print (f"[io {i}] client forgotten")
                 time.sleep(30)
         except Exception as e:
-            logqueue.put (f"[io {i}] client crashed, respawning...")
-            logqueue.put (e) #see why clients crashes
+            print (f"[io {i}] client crashed, respawning...")
+            print (e) #see why clients crashes
             time.sleep(30)
 
 # process to spawn many interfaces with the tracker
 def io_worker(incomingqueue: JoinableQueue, outgoingqueue: list, groupsize: int, logqueue: JoinableQueue, YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL):
     # separate process to initialize threaded workers
-    logqueue.put (f"[io] inbound workers:")
+    print (f"[io] inbound workers:")
     try:
         # just launch how many threads we need to group jobs into single output
         for i in range(int(2.7 * groupsize)):
             threading.Thread(target=gpu_cah_interface, args=(i, incomingqueue, outgoingqueue[i], logqueue, YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL)).start()
     except Exception as e:
-        logqueue.put(f"[io] some inbound problem occured: {e}")
+        print(f"[io] some inbound problem occured: {e}")
 
 # process to upload the results
 def upload_worker(uploadqueue: JoinableQueue, counter: JoinableQueue, outgoingqueue: list, logqueue: JoinableQueue):
-    logqueue.put(f"upload worker started")
+    print(f"upload worker started")
 
     while True:
         if uploadqueue.qsize() > 0:
             group_id, upload_address, shards, results = uploadqueue.get()
             response = os.system(f"rsync -av save/*{group_id}* {upload_address}") # to do get target from client
             if response == 0:
-                #logqueue.put (f"[io2] sending all jobs to be marked as completed")
+                #print (f"[io2] sending all jobs to be marked as completed")
                 for i, job, item in shards:
                     cnt = results.get(job)
                     if cnt is None:
@@ -386,12 +386,12 @@ def upload_worker(uploadqueue: JoinableQueue, counter: JoinableQueue, outgoingqu
 
 # main gpu workers. perhaps this worker needs to be run in as many processes as GPUs are present in the system. (todo)
 def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag: JoinableQueue, groupsize: int, logqueue: JoinableQueue, gpuid: int):
-    logqueue.put (f"[gpu{gpuid}] worker started")
+    print (f"[gpu{gpuid}] worker started")
     first_groupsize = groupsize
     bloomip = "116.202.162.146"
     # watch for the incoming queue, when it is big enough we can trigger processing    
     while True:
-        #logqueue.put (f"[gpu] testing incoming queue size")
+        #print (f"[gpu] testing incoming queue size")
         if incomingqueue.qsize() >= groupsize:
             start = time.time()
 
@@ -399,7 +399,7 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             shards = []
             addresses = []
             group_id = uuid.uuid4().hex
-            logqueue.put (f"[gpu{gpuid}] got new {groupsize} jobs to group in id {group_id}")
+            print (f"[gpu{gpuid}] got new {groupsize} jobs to group in id {group_id}")
             group_parse = None
             for _ in range(groupsize):
                 i, job, address = incomingqueue.get()
@@ -411,14 +411,14 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
                             all_csv_files.append(file)
                 # get name of csv file
                 out_path = all_csv_files[0]
-                #logqueue.put(out_path)
+                #print(out_path)
                 out_path = Path(out_path).stem
-                #logqueue.put(out_path)
+                #print(out_path)
                 shards.append((i, job, out_path))
                 addresses.append(address)
 
                 incomingqueue.task_done()
-            #logqueue.put (f"[gpu] adjusted image paths")
+            #print (f"[gpu] adjusted image paths")
 
 
             for i, job, item in shards:
@@ -458,11 +458,11 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
                     failure = False
                     break
             if failure:
-                logqueue.put(f"[gpu{gpuid}] crash, cannot contact the bloom server, please fix")
+                print(f"[gpu{gpuid}] crash, cannot contact the bloom server, please fix")
                 continue
 
             valid_hashes = response.content.decode("utf-8").split("\n")
-            logqueue.put(f"[gpu{gpuid}] bloom server has validated {len(valid_hashes)} pairs")
+            print(f"[gpu{gpuid}] bloom server has validated {len(valid_hashes)} pairs")
 
             group_parse = group_parse[group_parse.hash.isin(valid_hashes)]
 
@@ -472,7 +472,7 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
 
             #group_parse.to_csv("./stats/" + group_id + "_beforeclip.csv", index=False, sep="|") # I am using these to find out domains to filter from scraping
 
-            logqueue.put (f"{Fore.YELLOW}[gpu{gpuid}] preparation done in {round(time.time()-start, 2)} sec.{Fore.RESET}")
+            print (f"{Fore.YELLOW}[gpu{gpuid}] preparation done in {round(time.time()-start, 2)} sec.{Fore.RESET}")
 
             start = time.time()
 
@@ -480,8 +480,8 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             final_images, results = filter(group_parse, group_id, "./save/", clip_filter_obj)
             
             dedupe_ratio = round((duped - total) / duped, 4)
-            logqueue.put(f"{Fore.GREEN}[gpu{gpuid}] {final_images} img from {bloomed} bloomed from {total} / {duped} ({dedupe_ratio}) duplic in {round(time.time()-start, 2)}s")
-            logqueue.put(f"[gpu{gpuid}] ({groupsize} shards grouped. avg duration per shard was {round((time.time()-start)/groupsize,2)}s){Fore.RESET}")
+            print(f"{Fore.GREEN}[gpu{gpuid}] {final_images} img from {bloomed} bloomed from {total} / {duped} ({dedupe_ratio}) duplic in {round(time.time()-start, 2)}s")
+            print(f"[gpu{gpuid}] ({groupsize} shards grouped. avg duration per shard was {round((time.time()-start)/groupsize,2)}s){Fore.RESET}")
 
             # find most required upload address among the grouped shards
             upload_address = mode(addresses)
@@ -493,20 +493,12 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             groupsize = min( int(3 * first_groupsize) - 5 , groupsize - gradient )
             groupsize = max( groupsize - gradient, 3 )
             if groupsize != oldgroupsize:
-                logqueue.put (f"{Fore.YELLOW}[gpu{gpuid}] groupsize changed to {groupsize}{Fore.RESET}")
+                print (f"{Fore.YELLOW}[gpu{gpuid}] groupsize changed to {groupsize}{Fore.RESET}")
             
             gpuflag.get()
             gpuflag.task_done()
         else:
             time.sleep(10)
-
-# tried to make a monitor in terminal, wip, not used (second attempt)
-def monitor2(nodes, inbound, outbound, jobscounter, logqueue):
-    while True:        
-        while logqueue.qsize() > 0:
-            logmsg = logqueue.get()
-            print(logmsg)
-            logqueue.task_done()
 
 if __name__ == "__main__":
     # script initialization
@@ -526,7 +518,7 @@ if __name__ == "__main__":
 
     time.sleep(10)
 
-    groupsize = 20 # how many shards to group for CLIP
+    groupsize = 30 # how many shards to group for CLIP
 
     gpuid = 0
     if len(sys.argv) > 1:
@@ -571,7 +563,6 @@ if __name__ == "__main__":
     logqueue = JoinableQueue() # use this to send log lines to monitor
     
     sys.stderr = open('gpuerr.txt', 'w')
-    monitor = Process(target=monitor2, args=[groupsize * 3, inbound, outbound, counter, logqueue]).start()
 
     # launch separate processes with specialized workers
     io = Process(target=io_worker, args=[inbound, outbound, groupsize, logqueue, YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL], daemon=True).start()
