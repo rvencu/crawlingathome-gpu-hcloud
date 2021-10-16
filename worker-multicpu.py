@@ -457,7 +457,6 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
 
     # initialize stats variables for previous job
     last = 0
-    #localbloom = BloomFilter(max_elements=1000000000, error_rate=0.05, filename=("crawlingathome-gpu-hcloud/localbloom.bin",-1))
 
     # this makes a loop to download new jobs while the script is running
     # normally it reads while client.jobCount() > 0
@@ -498,13 +497,13 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
 
                 # compute output file names base
                 out_fname = f"FIRST_SAMPLE_ID_IN_SHARD_{str(first_sample_id)}_LAST_SAMPLE_ID_IN_SHARD_{str(last_sample_id)}_{shard}"
-                print(f"[{i} multicpu] shard {out_fname} acquired in {round(time.time()-start,2)} sec")
+                print(f"[{datetime.now().strftime('%H:%M:%S')} {i} multicpu] shard {out_fname} acquired in {round(time.time()-start,2)} sec")
                 
                 start = time.time()
                 # parse valid links from wat file
                 with open(tmp_folder + "shard.wat", "r") as infile:
                     parsed_data, clpd, prsd = parse_wat(infile, start_index, lines, i)
-                print (f"[{i} multicpu] parsed wat in {round(time.time()-start,2)}")
+                print (f"[{datetime.now().strftime('%H:%M:%S')} {i} multicpu] parsed wat in {round(time.time()-start,2)}")
                 start = time.time()
 
                 # convert to dataframe and save to disk (for statistics and generating blocking lists)
@@ -516,7 +515,7 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
                 random.shuffle(parsed_data) 
             
                 lastlinks = len(parsed_data)
-                print (f"[{i} multicpu] this job has {lastlinks} links left after removing {clpd} already clipped and {prsd} already parsed")
+                print (f"[{datetime.now().strftime('%H:%M:%S')} {i} multicpu] this job has {lastlinks} links left after removing {clpd} already clipped and {prsd} already parsed")
             
                 start = time.time()            
                 # attempt to download validated links and save to disk for stats and blocking lists
@@ -524,9 +523,9 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
                 dlparse_df["PATH"] = dlparse_df.PATH.apply(lambda x: re.sub(r"^./save/\d{1,2}/(.*)$", r"save/\1", x))
                 dlparse_df.to_csv(output_folder + out_fname + ".csv", index=False, sep="|")
                 dlparse_df.to_csv(output_folder + out_fname + "_unfiltered.csv", index=False, sep="|")
-                print (f"[{i} stats shard {shard_of_chunk}] pairs retained {len(dlparse_df)} in {round(time.time() - start, 2)}")
-                print (f"[{i} stats shard {shard_of_chunk}] scraping efficiency {len(dlparse_df)/(time.time() - start)} img/sec")
-                print (f"[{i} stats shard {shard_of_chunk}] crawling efficiency {lastlinks/(time.time() - start)} links/sec")
+                print (f"[{datetime.now().strftime('%H:%M:%S')} {i} stats shard {shard_of_chunk}] pairs retained {len(dlparse_df)} in {round(time.time() - start, 2)}")
+                print (f"[{datetime.now().strftime('%H:%M:%S')} {i} stats shard {shard_of_chunk}] scraping efficiency {len(dlparse_df)/(time.time() - start)} img/sec")
+                print (f"[{datetime.now().strftime('%H:%M:%S')} {i} stats shard {shard_of_chunk}] crawling efficiency {lastlinks/(time.time() - start)} links/sec")
 
                 # at this point we finishes the CPU node job, need to make the data available for GPU worker
                 prefix = uuid.uuid4().hex
@@ -540,12 +539,13 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
 
             last = round(time.time() - start0)
 
-            print(f"[{i} stats] WAT job completed in {last} seconds")
+            print(f"[{datetime.now().strftime('%H:%M:%S')} {i} stats] WAT job completed in {last} seconds")
            
         except Exception as e:
             print (e)
-            print (f"[{i} multicpu] worker crashed")
+            print (f"[{datetime.now().strftime('%H:%M:%S')} {i} multicpu] worker crashed")
             time.sleep(60)
+            client = TempCPUWorker(url=CRAWLINGATHOME_SERVER_URL, nickname=YOUR_NICKNAME_FOR_THE_LEADERBOARD)
 
 if __name__ == "__main__":
 
