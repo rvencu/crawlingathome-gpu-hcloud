@@ -114,7 +114,7 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                         df = pd.read_csv(file, sep="|")
                         df["PATH"] = df.PATH.apply(lambda x: re.sub(r"^(.*)./save/[-]?[0-9][0-9]?[0-9]?/(.*)$", r"save/\2", x)) # when path is like /save/12/images/name.jpg
                         df["PATH"] = df.PATH.apply(lambda x: re.sub(r"^(.*)./[-]?[0-9][0-9]?[0-9]?/save/(.*)$", r"save/\2", x)) # when path is like /12/save/images/name.jpg
-                        df["PATH"] = df.PATH.apply(lambda x: "./" + job + "/" + x.strip("save/"), axis=1)
+                        df["PATH"] = df.PATH.apply(lambda x: "./" + job + "/" + x.strip("save/"))
                         for index, row in df.iterrows():
                             try:
                                 im = Image.open(row["PATH"])
