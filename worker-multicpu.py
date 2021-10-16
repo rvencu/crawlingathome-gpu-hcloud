@@ -158,7 +158,7 @@ def parse_wat(content, start, line_count, i):
                     valid_data.append((url, alt_text, license, domain, hash))
                     check_flag.add(url)
             
-    print(f"[debug] lenght of pairs to filter {len(valid_data)}")
+    print(f"[{i} parser] lenght of pairs to filter {len(valid_data)}")
     s = time.time()
 
     # remove from valid_data elements rejected by clipped bloom server
@@ -174,18 +174,18 @@ def parse_wat(content, start, line_count, i):
     for _ in range(10):
         response = requests.post(f'http://{bloomip}:8000/deduplicate/', files=post)
         if response.status_code != 200:
-            print(f"bloom server error, retrying...")
+            print(f"[{i} parser] bloom server error, retrying...")
             time.sleep(15)            
         else:
             failure = False
             break
     if failure:
-        print(f"crash, cannot contact the clipped bloom server, please fix")
-        return
+        print(f"[{i} parser] crash, cannot contact the clipped bloom server, please fix")
+        return  (None, 0, 0)
 
     valid_hashes = response.content.decode("utf-8").split("\n")
 
-    print(f"[debug] clipped bloom server returned {len(valid_hashes)} in {round(time.time()-s,3)} sec")
+    print(f"[{i} parser]  clipped bloom server returned {len(valid_hashes)} in {round(time.time()-s,3)} sec")
 
     valid_data = [t for t in {tuple(i) for i in valid_data}]
     kept_data = []
@@ -210,18 +210,18 @@ def parse_wat(content, start, line_count, i):
     for _ in range(10):
         response = requests.post(f'http://{bloom2ip}:8000/deduplicate/', files=post)
         if response.status_code != 200:
-            print(f"bloom server error, retrying...")
+            print(f"[{i} parser] bloom server error, retrying...")
             time.sleep(15)            
         else:
             failure = False
             break
     if failure:
-        print(f"crash, cannot contact the parsed bloom server, please fix")
-        return
+        print(f"[{i} parser] crash, cannot contact the parsed bloom server, please fix")
+        return (None, 0, 0)
 
     valid_urls = response.content.decode("utf-8").split("\n")
 
-    print(f"[debug] parsed bloom server returned {len(valid_urls)} in {round(time.time()-s,3)} sec")
+    print(f"[{i} parser]  parsed bloom server returned {len(valid_urls)} in {round(time.time()-s,3)} sec")
 
     valid_data = [t for t in {tuple(i) for i in kept_data}]
     final_kept_data = []
@@ -289,7 +289,7 @@ def process_img_content(response, alt_text, license, sample_id, img_output_folde
     return [str(sample_id), out_fname, response.url, alt_text, width, height, license]
 
 
-async def request_image(datas, start_sampleid, img_output_folder, tmp_folder):
+async def request_image(datas, start_sampleid, img_output_folder, tmp_folder, i):
     """
     This function initiates many parallel async connections to try download the images from provided links
     
@@ -373,13 +373,13 @@ async def request_image(datas, start_sampleid, img_output_folder, tmp_folder):
     for _ in range(10):
         response = requests.post(f'http://{bloom2ip}:8000/add/', files=post)
         if response.status_code != 200:
-            print(f"bloom server error, retrying...")
+            print(f"[{i} parser] bloom server (update) error, retrying...")
             time.sleep(15)            
         else:
             failure = False
             break
     if failure:
-        print(f"crash, cannot contact the parsed bloom server, please fix")
+        print(f"[{i} parser] crash, cannot contact the parsed bloom server, please fix")
 
     return ujson.load(open(f"{tmp_folder}/{fn}.json"))
 
@@ -397,7 +397,7 @@ def dl_wat(valid_data, first_sample_id, img_output_folder, tmp_folder, i):
     # Download every image available
     processed_samples = []
     #trio.run(request_image, valid_data, first_sample_id, instruments=[TrioProgress(len(valid_data), False)] )
-    result = trio.run( request_image, valid_data, first_sample_id, img_output_folder, tmp_folder, instruments=[Tracer(i)])
+    result = trio.run( request_image, valid_data, first_sample_id, img_output_folder, tmp_folder, i, instruments=[Tracer(i)])
     processed_samples.extend(result)
     return pd.DataFrame(
         processed_samples,
