@@ -172,13 +172,16 @@ def parse_wat(content, start, line_count, i):
     
     failure = True
     for _ in range(10):
-        response = requests.post(f'http://{bloomip}:8000/deduplicate/', files=post)
-        if response.status_code != 200:
-            print(f"[{i} parser] bloom server error, retrying...")
-            time.sleep(15)            
-        else:
-            failure = False
-            break
+        try:
+            response = requests.post(f'http://{bloomip}:8000/deduplicate/', files=post)
+            if response.status_code != 200:
+                print(f"[{i} parser] bloom server error, retrying...")
+                time.sleep(15)            
+            else:
+                failure = False
+                break
+        except:
+            time.sleep(15)
     if failure:
         print(f"[{i} parser] crash, cannot contact the clipped bloom server, please fix")
         return  (None, 0, 0)
@@ -208,13 +211,16 @@ def parse_wat(content, start, line_count, i):
     
     failure = True
     for _ in range(10):
-        response = requests.post(f'http://{bloom2ip}:8000/deduplicate/', files=post)
-        if response.status_code != 200:
-            print(f"[{i} parser] bloom server error, retrying...")
-            time.sleep(15)            
-        else:
-            failure = False
-            break
+        try:
+            response = requests.post(f'http://{bloom2ip}:8000/deduplicate/', files=post)
+            if response.status_code != 200:
+                print(f"[{i} parser] bloom server error, retrying...")
+                time.sleep(15)            
+            else:
+                failure = False
+                break
+        except:
+            time.sleep(15)
     if failure:
         print(f"[{i} parser] crash, cannot contact the parsed bloom server, please fix")
         return (None, 0, 0)
@@ -371,13 +377,16 @@ async def request_image(datas, start_sampleid, img_output_folder, tmp_folder, i)
     
     failure = True
     for _ in range(10):
-        response = requests.post(f'http://{bloom2ip}:8000/add/', files=post)
-        if response.status_code != 200:
-            print(f"[{i} parser] bloom server (update) error, retrying...")
-            time.sleep(15)            
-        else:
-            failure = False
-            break
+        try:
+            response = requests.post(f'http://{bloom2ip}:8000/add/', files=post)
+            if response.status_code != 200:
+                print(f"[{i} parser] bloom server (update) error, retrying...")
+                time.sleep(15)
+            else:
+                failure = False
+                break
+        except:
+            time.sleep(15)
     if failure:
         print(f"[{i} parser] crash, cannot contact the parsed bloom server, please fix")
 
