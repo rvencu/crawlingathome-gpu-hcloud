@@ -279,7 +279,7 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
                 values = "VALUES({})".format(",".join(["%s" for _ in df_columns])) 
 
                 #create INSERT INTO table (columns) VALUES('%s',...)
-                insert_stmt = "INSERT INTO {} ({}) {}".format("dataset",columns,values)
+                insert_stmt = "INSERT INTO {} ({}) {} ON CONFLICT (url) DO NOTHING".format("dataset", columns, values)
                 
                 conn = engine.raw_connection()
                 cur = conn.cursor()
