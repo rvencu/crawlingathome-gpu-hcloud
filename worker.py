@@ -170,13 +170,16 @@ def parse_wat(content, start, line_count):
     
     failure = True
     for _ in range(10):
-        response = requests.post(f'http://{bloomip}:8000/deduplicate/', files=post)
-        if response.status_code != 200:
-            print(f"bloom server error, retrying...")
-            time.sleep(15)            
-        else:
-            failure = False
-            break
+        try:
+            response = requests.post(f'http://{bloomip}:8000/deduplicate/', files=post)
+            if response.status_code != 200:
+                print(f"bloom server error, retrying...")
+                time.sleep(15)            
+            else:
+                failure = False
+                break
+        except:
+            time.sleep(15)
     if failure:
         print(f"crash, cannot contact the clipped bloom server, please fix")
         return
@@ -206,13 +209,16 @@ def parse_wat(content, start, line_count):
     
     failure = True
     for _ in range(10):
-        response = requests.post(f'http://{bloom2ip}:8000/deduplicate/', files=post)
-        if response.status_code != 200:
-            print(f"bloom server error, retrying...")
-            time.sleep(15)            
-        else:
-            failure = False
-            break
+        try:
+            response = requests.post(f'http://{bloom2ip}:8000/deduplicate/', files=post)
+            if response.status_code != 200:
+                print(f"bloom server error, retrying...")
+                time.sleep(15)            
+            else:
+                failure = False
+                break
+        except:
+            time.sleep(15)
     if failure:
         print(f"crash, cannot contact the parsed bloom server, please fix")
         sys.exit() # maybe fallback to file based filters? too depressing...
@@ -366,13 +372,16 @@ async def request_image(datas, start_sampleid):
     
     failure = True
     for _ in range(10):
-        response = requests.post(f'http://{bloom2ip}:8000/add/', files=post)
-        if response.status_code != 200:
-            print(f"bloom server error, retrying...")
-            time.sleep(15)            
-        else:
-            failure = False
-            break
+        try:
+            response = requests.post(f'http://{bloom2ip}:8000/add/', files=post)
+            if response.status_code != 200:
+                print(f"bloom server error, retrying...")
+                time.sleep(15)            
+            else:
+                failure = False
+                break
+        except:
+            time.sleep(15)
     if failure:
         print(f"crash, cannot contact the parsed bloom server, please fix")
 

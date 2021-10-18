@@ -2,14 +2,6 @@
 # command line: python3 worker-multicpu.py N nickname
 # where N = max number of CPU to use
 # nickname is you nickname for the leaderboard
-# examples:
-# 10Gbps internet link and 6 million PPS routing - use N = 40 (max)
-# 1Gbps internet link and 4 million PPS - suggested N = 30
-# 1Gbps internet link and 2 million PPS - N = 15
-# 1Gbps internet link and 500,000 PPS - N = 8
-# 1Gbps internet link and 100,000 PPS - N = 2
-# 1Gbps internet link and 50,000 PPS - N = 1
-# most home modems do not allow more than 50,000 PPS for fiber link of 1Gbps. Check with your internet provider
 
 import gc
 import os
