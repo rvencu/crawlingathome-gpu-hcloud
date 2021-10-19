@@ -268,7 +268,7 @@ def upload(source: str, clientType: str, target: str):
     return result
 
 def newJob(engine):
-    select_stmt1 = "UPDATE dataset SET status = 1 WHERE sampleid IN (SELECT DISTINCT ON (domain) sampleid FROM (SELECT domain, sampleid FROM dataset WHERE status = 0 LIMIT 50000 FOR UPDATE SKIP LOCKED) as \"U\" LIMIT 500) AND status = 0 RETURNING sampleid"
+    select_stmt1 = "UPDATE dataset SET status = 1 WHERE sampleid IN (SELECT DISTINCT ON (domain) sampleid FROM (SELECT domain, sampleid FROM dataset WHERE status = 0 LIMIT 500000 FOR UPDATE SKIP LOCKED) as \"U\" LIMIT 80000) AND status = 0 RETURNING sampleid"
     conn = engine.raw_connection()
     cur = conn.cursor()
     cur.execute(select_stmt1)
@@ -355,7 +355,7 @@ if __name__ == "__main__":
             
             os.mkdir(prefix)
             os.system(f"mv save/* {prefix}/")
-            result += upload(prefix, "CPU", "archiveteam@5.9.55.230::gpujobs") #todo find the IP and endpoint
+            result += upload(prefix, "CPU", "archiveteam@176.9.4.150::gpujobs") #todo find the IP and endpoint
             if result == 0:
                 completeJob(engine, prefix, parsed_df, dlparse_df)
 
