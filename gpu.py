@@ -2,10 +2,9 @@ import os
 import re
 import sys
 import time
-import math
 import uuid
 import shutil
-import curses
+import tarfile
 import hashlib
 import requests
 import threading
@@ -19,6 +18,8 @@ from pathlib import Path
 from colorama import Fore
 from statistics import mode
 import crawlingathome_client as cah
+from sqlalchemy import create_engine
+from configparser import ConfigParser
 sys.path.append('./crawlingathome-worker/')
 from multiprocessing import JoinableQueue, Process
 
@@ -33,7 +34,22 @@ sentry_sdk.init(
     traces_sample_rate=1.0
 )
 
+def config(filename='database.ini', section='postgresql'):
+    # create a parser
+    parser = ConfigParser()
+    # read config file
+    parser.read(filename)
 
+    # get section, default to postgresql
+    db = {}
+    if parser.has_section(section):
+        params = parser.items(section)
+        for param in params:
+            db[param[0]] = param[1]
+    else:
+        raise Exception('Section {0} not found in the {1} file'.format(section, filename))
+
+    return db
 
 '''
 GPU workflow:
@@ -61,8 +77,36 @@ GPU workflow:
     The monitor displays the status of the workers as well as performance metrics about the jobs performed
 '''
 
+def invalidURL (client, job, jobtype, engine):
+    if jobtype == 0:
+        client.invalidURL()
+    if jobtype == 1:
+        update_stmt1 = "DELETE jobs WHERE jobid='{}'".format(job)
+        update_stmt2 = "UPDATE dataset SET status = 0 WHERE prefix='{}'".format(job)
+        conn = engine.raw_connection()
+        cur = conn.cursor()
+        cur.execute(update_stmt1)
+        cur.execute(update_stmt2)
+        conn.commit()
+        cur.close()
+        conn.close()
+    return
+
+def completeJob (client, job, jobtype, engine, pairs):
+    if jobtype == 0:
+        client.completeJob(int(pairs))
+    if jobtype == 1:
+        update_stmt1 = "UPDATE jobs SET status = 2 WHERE jobid='{}'".format(job)
+        conn = engine.raw_connection()
+        cur = conn.cursor()
+        cur.execute(update_stmt1)
+        conn.commit()
+        cur.close()
+        conn.close()
+    return
+
 # spawn this interface to double or more than shard groups so they can download jobs and communicate with the tracker in parallel with GPU processing. this will keep GPU busy almost continuously
-def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: JoinableQueue, logqueue: JoinableQueue, YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL):
+def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: JoinableQueue, logqueue: JoinableQueue, YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL, engine):
     # initiate and reinitiate a GPU type client if needed
     logqueue.put (f"   |___ inbound worker started")
     while True:
@@ -71,29 +115,57 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
         )
         try:
             while client.isAlive():
-                while client.jobCount() > 0: 
+                while client.jobCount() > 0:
                     # each thread gets a new job, passes it to GPU then waits for completion
-                    try:
-                        client.newJob()
-                    except:
-                        time.sleep(10)
-                        continue
+                    jobtype = 0
                     job = ""
-                    try:
-                        job = client.shard.split(" ")[1]
-                    except:
-                        client.invalidURL()
-                        logqueue.put (f"[io {i}] invalid job detected: {job}")
-                        continue
-                    # found repeating shards, need to clear old files before continuing
-                    if os.path.exists("./"+ job):
-                        shutil.rmtree("./"+ job, ignore_errors=True)
-                    #os.mkdir("./"+ job)
-                    client.downloadShard()
+                    if client.jobCount() > 200:
+                        try:
+                            client.newJob()
+                        except:
+                            time.sleep(10)
+                            continue                        
+                        try:
+                            job = client.shard.split(" ")[1]
+                        except:
+                            invalidURL (client, job, jobtype, engine)
+                            logqueue.put (f"[io {i}] invalid job detected: {job}")
+                            continue
+                        # found repeating shards, need to clear old files before continuing
+                        if os.path.exists("./"+ job):
+                            shutil.rmtree("./"+ job, ignore_errors=True)
+                        #os.mkdir("./"+ job)
+                        client.downloadShard()
+                    else:
+                        # insert database job here
+                        jobtype = 1
+                        select_stmt1 = "UPDATE jobs SET status = 1 WHERE jobid in (SELECT jobid from jobs where status = 0 LIMIT 1 FOR UPDATE SKIP LOCKED) RETURNING jobid"
+                        conn = engine.raw_connection()
+                        cur = conn.cursor()
+                        cur.execute(select_stmt1)
+                        job = cur.fetchone()
+                        conn.commit()
+                        cur.close()
+                        conn.close()
+
+                        # found repeating shards, need to clear old files before continuing
+                        if os.path.exists("./"+ job):
+                            shutil.rmtree("./"+ job, ignore_errors=True)
+
+                        resp = 1
+                        for _ in range(5):
+                            resp = os.system(f'rsync -av archiveteam@176.9.4.150::gpujobs/{job}.tar.gz {job}.tar.gz')
+                            if resp == 5888:
+                                print('[crawling@home] rsync job not found')
+                                invalidURL (client, job, jobtype, engine)
+                            if resp == 0:
+                                with tarfile.open(f"{job}.tar.gz", "r:gz") as tar:
+                                    tar.extractall()
+                                break
 
                     # test for csv and for images folder
                     if len(glob(f"{job}/*.csv")) == 0 or not os.path.exists(f"./{job}/images"):
-                        client.invalidURL()
+                        invalidURL (client, job, jobtype, engine)
                         logqueue.put (f"[io {i}] invalid job detected: {job}")
                         continue
                     for file in glob(f"{job}/*_parsed.csv"):
@@ -139,13 +211,13 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                                 if pairs == 0:
                                     pairs = 1
                                 try:
-                                    client.completeJob(int(pairs))
+                                    completeJob (client, job, jobtype, engine, pairs)
                                 except:
                                     logqueue.put(f"[io {i}] invalid trying to complete with {pairs} pairs")
-                                    client.invalidURL()
+                                    invalidURL (client, job, jobtype, engine)
                             else:
                                 logqueue.put(f"[io {i}] invalid with negative {pairs} pairs?")
-                                client.invalidURL()
+                                invalidURL (client, job, jobtype, engine)
                             if os.path.exists("./"+ job):
                                 shutil.rmtree("./"+ job)
                             if os.path.exists(f"{job}.tar.gz"):
@@ -155,7 +227,7 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                         else:
                             time.sleep(1)
                 else:
-                    logqueue.put (f"[io {i}] no jobs")
+                    logqueue.put (f"[io {i}] no classic jobs, switching to database jobs")
                     time.sleep(120)
             else:
                 logqueue.put (f"[io {i}] client forgotten")
@@ -166,13 +238,13 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
             time.sleep(30)
 
 # process to spawn many interfaces with the tracker
-def io_worker(incomingqueue: JoinableQueue, outgoingqueue: list, groupsize: int, logqueue: JoinableQueue, YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL):
+def io_worker(incomingqueue: JoinableQueue, outgoingqueue: list, groupsize: int, logqueue: JoinableQueue, YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL, engine):
     # separate process to initialize threaded workers
     logqueue.put (f"[io] inbound workers:")
     try:
         # just launch how many threads we need to group jobs into single output
         for i in range(int(2.7 * groupsize)):
-            threading.Thread(target=gpu_cah_interface, args=(i, incomingqueue, outgoingqueue[i], logqueue, YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL)).start()
+            threading.Thread(target=gpu_cah_interface, args=(i, incomingqueue, outgoingqueue[i], logqueue, YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL, engine)).start()
     except Exception as e:
         logqueue.put(f"[io] some inbound problem occured: {e}")
 
@@ -316,42 +388,6 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             time.sleep(10)
 
 
-# tried to make a monitor in terminal, wip, not used
-def monitor(nodes, inbound, outbound, jobscounter, logqueue):
-
-    ui = VSplit(
-            HSplit(
-                HGauge(val=int(nodes), title="incoming pipeline", border_color=5),
-                HGauge(val=int(nodes), title="outgoing pipeline", border_color=5),
-                ),
-            VChart(border_color=2, color=2),
-            Log(title='logs', border_color=5),
-            title='GPU Monitor'
-        )
-    log = ui.items[2]
-    incoming = ui.items[0].items[0]
-    outgoing = ui.items[0].items[1]
-    chart = ui.items[1]
-    
-    while True:
-        cnt = 0
-        while jobscounter.qsize() > 0:
-            jobscounter.get()
-            cnt += 1
-            jobscounter.task_done()
-        chart.append(cnt)
-        
-        while logqueue.qsize() > 0:
-            logmsg = logqueue.get()
-            log.append(logmsg)
-            logqueue.task_done()
-
-        incoming.value = inbound.qsize()
-        outgoing.value = sum (i.qsize() for i in outbound)
-
-        ui.display()
-        time.sleep(1.0/25)
-
 # tried to make a monitor in terminal, wip, not used (second attempt)
 def monitor2(nodes, inbound, outbound, jobscounter, logqueue):
     while True:        
@@ -372,7 +408,10 @@ if __name__ == "__main__":
 
     time.sleep(10)
 
-    groupsize = 20 # how many shards to group for CLIP
+    params = config()
+    engine = create_engine(f'postgresql://{params["user"]}:{params["password"]}@localhost:5432/{params["database"]}')
+
+    groupsize = 30 # how many shards to group for CLIP
 
     # folders cleanup (remove previous runs artifacts)
 
@@ -416,7 +455,7 @@ if __name__ == "__main__":
     monitor = Process(target=monitor2, args=[groupsize * 3, inbound, outbound, counter, logqueue]).start()
 
     # launch separate processes with specialized workers
-    io = Process(target=io_worker, args=[inbound, outbound, groupsize, logqueue, YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL], daemon=True).start()
+    io = Process(target=io_worker, args=[inbound, outbound, groupsize, logqueue, YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL, engine], daemon=True).start()
     upd = Process(target=upload_worker, args=[uploadqueue, counter, outbound, logqueue], daemon=True).start()
     
     gpu_worker(inbound, uploadqueue, gpuflag, groupsize, logqueue)

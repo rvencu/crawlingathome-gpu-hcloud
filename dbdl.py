@@ -57,7 +57,6 @@ class Tracer(trio.abc.Instrument):
         self.imgproc_duration = 0
         self.download_duration = 0
         self.error_duration = 0
-        self.bloom = 0
 
     def task_exited(self, task):
         if task.custom_sleep_data is not None:
@@ -68,8 +67,6 @@ class Tracer(trio.abc.Instrument):
                 self.download_duration += task.custom_sleep_data[1]
                 self.imgproc_duration += task.custom_sleep_data[2]
                 self.downloads += 1
-            if task.custom_sleep_data[0] == 3:
-                self.bloom += 1
 
     def after_run(self):
         rate = round(self.exceptions / (self.exceptions + self.downloads + sys.float_info.epsilon), 2)
@@ -79,7 +76,6 @@ class Tracer(trio.abc.Instrument):
         print(f"[instrumentation] While scraping there were {self.exceptions} errors within {self.downloads + self.exceptions} candidates (error rate = {round(rate * 100,2)} %). {self.downloads} images were downloaded.")
         print(f"[instrumentation] Cumulative image processing duration {round(self.imgproc_duration, 2)} s.")
         print(f"[instrumentation] Average downloading time {avg_download} s/img, image processing time {avg_process} s/img, exceptions processing time {avg_error} s/link")
-        print(f"[instrumentation] Localbloom catched {self.bloom} urls")
 
 def log(e):
     with open("errors.txt","a") as f:
@@ -268,7 +264,7 @@ def upload(source: str, clientType: str, target: str):
     return result
 
 def newJob(engine):
-    select_stmt1 = "UPDATE dataset SET status = 1 WHERE sampleid IN (SELECT DISTINCT ON (domain) sampleid FROM (SELECT domain, sampleid FROM dataset WHERE status = 0 LIMIT 500000 FOR UPDATE SKIP LOCKED) as \"U\" LIMIT 80000) AND status = 0 RETURNING sampleid"
+    select_stmt1 = "UPDATE dataset SET status = 1 WHERE sampleid IN (SELECT DISTINCT ON (domain) sampleid FROM (SELECT domain, sampleid FROM dataset WHERE status = 0 LIMIT 50000 FOR UPDATE SKIP LOCKED) as \"U\" LIMIT 8000) AND status = 0 RETURNING sampleid"
     conn = engine.raw_connection()
     cur = conn.cursor()
     cur.execute(select_stmt1)
