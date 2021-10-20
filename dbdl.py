@@ -13,7 +13,6 @@ import pandas as pd
 from glob import glob
 from uuid import uuid1
 from io import BytesIO
-from requests import get
 from sqlalchemy import create_engine
 from configparser import ConfigParser
 from PIL import Image, ImageFile, UnidentifiedImageError 

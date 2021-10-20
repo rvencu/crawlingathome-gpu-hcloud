@@ -7,3 +7,5 @@ asks
 bloom-filter2
 pillow
 glances
+sqlalchemy
+psycopg2

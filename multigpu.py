@@ -277,7 +277,7 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                         client.downloadShard()
                     elif client.shard.startswith('postgres'):
                             print(f"[io {i}] this is a database job not classic, marking it complete in tracker since progress continues to be tracked in database")
-                            client.completeJob(0)
+                            client.completeJob(1)
                             continue
 
                     # test for csv and for images folder

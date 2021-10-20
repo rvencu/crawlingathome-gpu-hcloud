@@ -6,3 +6,4 @@ trio
 ujson
 colorama
 dashing
+sqlalchemy

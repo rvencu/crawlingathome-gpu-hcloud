@@ -20,6 +20,7 @@ import trio
 import time
 import pipes
 #import subprocess
+from configparser import ConfigParser
 from itertools import cycle
 from hcloud import Client
 from hcloud.images.domain import Image
@@ -29,6 +30,22 @@ from hcloud.server_types.client import ServerType
 from pssh.clients import ParallelSSHClient, SSHClient
 from gevent import joinall
 
+def config(filename='database.ini', section='postgresql'):
+    # create a parser
+    parser = ConfigParser()
+    # read config file
+    parser.read(filename)
+
+    # get section, default to postgresql
+    db = {}
+    if parser.has_section(section):
+        params = parser.items(section)
+        for param in params:
+            db[param[0]] = param[1]
+    else:
+        raise Exception('Section {0} not found in the {1} file'.format(section, filename))
+
+    return db
 
 async def list_servers(tok=""):
     servers = []
@@ -242,6 +259,8 @@ if __name__ == "__main__":
         nodes = 1
     if len(sys.argv) > 4:
         location = sys.argv[4]
+
+    params = config()
     
     if command == "up":
         try:
@@ -259,6 +278,10 @@ if __name__ == "__main__":
                 os.system("cp 'cloud boot/cloud-init.yaml' cloud-init")
                 os.system(f"sed -i -e \"s/<<your_ssh_public_key>>/{sshkey}/\" cloud-init")
                 os.system(f"sed -i -e \"s/<<deployment_cloud>>/{cloud}/\" cloud-init")
+                os.system(f"sed -i -e \"s/<<host>>/{params['host']}/\" cloud-init")
+                os.system(f"sed -i -e \"s/<<database>>/{params['database']}/\" cloud-init")
+                os.system(f"sed -i -e \"s/<<dbuser>>/{params['user']}/\" cloud-init")
+                os.system(f"sed -i -e \"s/<<dbpwd>>/{params['password']}/\" cloud-init")
             elif cloud in ["vultr"]:
                 # do some boot.sh API calls
                 os.system("rm boot")
