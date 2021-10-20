@@ -199,6 +199,30 @@ def parse_wat(content, start, line_count, i):
 
     print(f"[{i} parser] lenght of deduplicated pairs to return {len(final_kept_data)}")
 
+    # add parsed urls to parsed bloom server
+    with open('hash.txt', 'w') as f:
+        for url in final_kept_data:
+            f.write(item[0].strip()+"\n")
+    post = {
+        'file': ('hash.txt', open('hash.txt', 'rb')),
+        'key': (None, 'parsed'),
+    }
+    
+    failure = True
+    for _ in range(10):
+        try:
+            response = requests.post(f'http://{bloom2ip}:8000/add/', files=post)
+            if response.status_code != 200:
+                print(f"bloom server error, retrying...")
+                time.sleep(15)            
+            else:
+                failure = False
+                break
+        except:
+            time.sleep(15)
+    if failure:
+        print(f"crash, cannot contact the parsed bloom server, please fix")
+
     return (final_kept_data, clpd, prsd)  # use a dict in order to remove duplicate tuples from list
 
 class FileData:

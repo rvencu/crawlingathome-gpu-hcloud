@@ -200,31 +200,6 @@ async def request_image(parsed_df):
         ujson.dump(tmp_data, f)
     gc.collect()
 
-    # add downloaded urls to parsed bloom server
-    bloom2ip = "94.130.167.172"
-    with open('hash.txt', 'w') as f:
-        for url in parsed_df["url"]:
-            f.write(url.strip()+"\n")
-    post = {
-        'file': ('hash.txt', open('hash.txt', 'rb')),
-        'key': (None, 'parsed'),
-    }
-    
-    failure = True
-    for _ in range(10):
-        try:
-            response = requests.post(f'http://{bloom2ip}:8000/add/', files=post)
-            if response.status_code != 200:
-                print(f"bloom server error, retrying...")
-                time.sleep(15)            
-            else:
-                failure = False
-                break
-        except:
-            time.sleep(15)
-    if failure:
-        print(f"crash, cannot contact the parsed bloom server, please fix")
-
     return
 
 
