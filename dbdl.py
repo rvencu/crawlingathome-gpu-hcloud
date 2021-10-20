@@ -254,7 +254,7 @@ def newJob(engine):
 def completeJob(engine, prefix, parsed_df, dlparse_df):
     values1 = ",".join(dlparse_df["SAMPLE_ID"].astype(str))
     values2 = ",".join(parsed_df["sampleid"].astype(str))
-    update_stmt1 = "UPDATE dataset SET status=2, prefix='{}' where sampleid in ({})".format(prefix, values1)
+    update_stmt1 = "UPDATE dataset SET status=2 where sampleid in ({})".format(values1)
     update_stmt2 = "UPDATE dataset SET status=9 where status=1 AND sampleid in ({})".format(values2)
     insert_stmt = "INSERT INTO jobs (jobid) VALUES ('{}')".format(prefix)
 
