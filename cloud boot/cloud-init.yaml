@@ -24,6 +24,8 @@ packages:
  - zlib1g-dev
  - knot-dnsutils
  - resolvconf
+ - protobuf-compiler
+ - libprotobuf-dev
 bootcmd:
  # setup knot resolver
  - wget https://secure.nic.cz/files/knot-resolver/knot-resolver-release.deb
