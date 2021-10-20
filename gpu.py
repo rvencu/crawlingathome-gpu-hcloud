@@ -108,7 +108,7 @@ def completeJob (client, job, jobtype, engine, pairs):
 # spawn this interface to double or more than shard groups so they can download jobs and communicate with the tracker in parallel with GPU processing. this will keep GPU busy almost continuously
 def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: JoinableQueue, logqueue: JoinableQueue, YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL, engine):
     # initiate and reinitiate a GPU type client if needed
-    logqueue.put (f"   |___ inbound worker started")
+    print(f"   |___ inbound worker started")
     while True:
         client = cah.init(
             url=CRAWLINGATHOME_SERVER_URL, nickname=YOUR_NICKNAME_FOR_THE_LEADERBOARD, type="GPU"
@@ -120,24 +120,30 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                     jobtype = 0
                     job = ""
                     if client.jobCount() > 200:
+                        print(f"[io {i}] started CLASSIC job")
                         try:
                             client.newJob()
                         except:
                             time.sleep(10)
-                            continue                        
-                        try:
-                            job = client.shard.split(" ")[1]
-                        except:
-                            invalidURL (client, job, jobtype, engine)
-                            logqueue.put (f"[io {i}] invalid job detected: {job}")
                             continue
-                        # found repeating shards, need to clear old files before continuing
-                        if os.path.exists("./"+ job):
-                            shutil.rmtree("./"+ job, ignore_errors=True)
-                        #os.mkdir("./"+ job)
-                        client.downloadShard()
+                        if client.shard.startswith('rsync'):
+                            try:
+                                job = client.shard.split(" ")[1]
+                            except:
+                                invalidURL (client, job, jobtype, engine)
+                                print(f"[io {i}] invalid job detected: {job}")
+                                continue
+                            # found repeating shards, need to clear old files before continuing
+                            if os.path.exists("./"+ job):
+                                shutil.rmtree("./"+ job, ignore_errors=True)
+                            #os.mkdir("./"+ job)
+                            client.downloadShard()
+                        elif client.shard.startswith('postgres'):
+                            print(f"[io {i}] this is a database job not classic, marking it complete in tracker since progress continues to be tracked in database")
+                            completeJob (client, job, jobtype, engine, 0)
+                            continue
                     else:
-                        # insert database job here
+                        print(f"[io {i}] started DATABASE job")
                         jobtype = 1
                         select_stmt1 = "UPDATE jobs SET status = 1 WHERE jobid in (SELECT jobid from jobs where status = 0 LIMIT 1 FOR UPDATE SKIP LOCKED) RETURNING jobid"
                         conn = engine.raw_connection()
@@ -166,7 +172,7 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                     # test for csv and for images folder
                     if len(glob(f"{job}/*.csv")) == 0 or not os.path.exists(f"./{job}/images"):
                         invalidURL (client, job, jobtype, engine)
-                        logqueue.put (f"[io {i}] invalid job detected: {job}")
+                        print(f"[io {i}] invalid job detected: {job}")
                         continue
                     for file in glob(f"{job}/*_parsed.csv"):
                         os.system(f"mv {file} stats/")
@@ -193,12 +199,12 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                                 im.close()
                             except Exception as e:
                                 if index < 10:
-                                    logqueue.put (f"[io {i}] invalid image {row['PATH']} because {e}")
+                                    print(f"[io {i}] invalid image {row['PATH']} because {e}")
                                 df = df.drop(index)
                         df.to_csv(file, sep="|", index=False)
                         del df
                     
-                    #logqueue.put (f"[io] job sent to GPU: {job}")
+                    #print(f"[io] job sent to GPU: {job}")
                     incomingqueue.put((i, job, client.upload_address))
                     
                     # wait until job gets processes
@@ -206,7 +212,7 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                         if outgoingqueue.qsize() > 0:
                             outjob, pairs = outgoingqueue.get() # I am poping out from queue only if my current job is finished
                             if pairs >= 0:
-                                #logqueue.put (f"[io {i}] mark job as complete: {job}")
+                                #print(f"[io {i}] mark job as complete: {job}")
                                 # cleanup temp storage now
                                 if pairs == 0:
                                     pairs = 1
@@ -227,20 +233,20 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                         else:
                             time.sleep(1)
                 else:
-                    logqueue.put (f"[io {i}] no classic jobs, switching to database jobs")
+                    print(f"[io {i}] no classic jobs, switching to database jobs")
                     time.sleep(120)
             else:
-                logqueue.put (f"[io {i}] client forgotten")
+                print(f"[io {i}] client forgotten")
                 time.sleep(30)
         except Exception as e:
-            logqueue.put (f"[io {i}] client crashed, respawning...")
-            logqueue.put (e) #see why clients crashes
+            print(f"[io {i}] client crashed, respawning...")
+            print(e) #see why clients crashes
             time.sleep(30)
 
 # process to spawn many interfaces with the tracker
 def io_worker(incomingqueue: JoinableQueue, outgoingqueue: list, groupsize: int, logqueue: JoinableQueue, YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL, engine):
     # separate process to initialize threaded workers
-    logqueue.put (f"[io] inbound workers:")
+    print(f"[io] inbound workers:")
     try:
         # just launch how many threads we need to group jobs into single output
         for i in range(int(2.7 * groupsize)):
@@ -257,7 +263,7 @@ def upload_worker(uploadqueue: JoinableQueue, counter: JoinableQueue, outgoingqu
             group_id, upload_address, shards, results = uploadqueue.get()
             response = os.system(f"rsync -av save/*{group_id}* {upload_address}") # to do get target from client
             if response == 0:
-                #logqueue.put (f"[io2] sending all jobs to be marked as completed")
+                #print(f"[io2] sending all jobs to be marked as completed")
                 for i, job, item in shards:
                     cnt = results.get(job)
                     if cnt is None:
@@ -275,12 +281,12 @@ def upload_worker(uploadqueue: JoinableQueue, counter: JoinableQueue, outgoingqu
 
 # main gpu workers. perhaps this worker needs to be run in as many processes as GPUs are present in the system. (todo)
 def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag: JoinableQueue, groupsize: int, logqueue: JoinableQueue):
-    logqueue.put (f"[gpu] worker started")
+    print(f"[gpu] worker started")
     first_groupsize = groupsize
     bloomip = "116.202.162.146"
     # watch for the incoming queue, when it is big enough we can trigger processing    
     while True:
-        #logqueue.put (f"[gpu] testing incoming queue size")
+        #print(f"[gpu] testing incoming queue size")
         if incomingqueue.qsize() >= groupsize:
             start = time.time()
 
@@ -288,7 +294,7 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             shards = []
             addresses = []
             group_id = uuid.uuid4().hex
-            logqueue.put (f"[gpu] got new {groupsize} jobs to group in id {group_id}")
+            print(f"[gpu] got new {groupsize} jobs to group in id {group_id}")
             group_parse = None
             for _ in range(groupsize):
                 i, job, address = incomingqueue.get()
@@ -307,7 +313,7 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
                 addresses.append(address)
 
                 incomingqueue.task_done()
-            #logqueue.put (f"[gpu] adjusted image paths")
+            #print(f"[gpu] adjusted image paths")
 
 
             for i, job, item in shards:
@@ -361,7 +367,7 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
 
             #group_parse.to_csv("./stats/" + group_id + "_beforeclip.csv", index=False, sep="|") # I am using these to find out domains to filter from scraping
 
-            logqueue.put (f"{Fore.YELLOW}[gpu] preparation done in {round(time.time()-start, 2)} sec.{Fore.RESET}")
+            print(f"{Fore.YELLOW}[gpu] preparation done in {round(time.time()-start, 2)} sec.{Fore.RESET}")
 
             start = time.time()
             final_images, results = clip_filter.filter(group_parse, group_id, "./save/")
@@ -380,7 +386,7 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             groupsize = min( int(3 * first_groupsize) - 5 , groupsize - gradient )
             groupsize = max( groupsize - gradient, 3 )
             if groupsize != oldgroupsize:
-                logqueue.put (f"{Fore.YELLOW}[gpu] groupsize changed to {groupsize}{Fore.RESET}")
+                print(f"{Fore.YELLOW}[gpu] groupsize changed to {groupsize}{Fore.RESET}")
             
             gpuflag.get()
             gpuflag.task_done()

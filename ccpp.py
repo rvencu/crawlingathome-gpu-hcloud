@@ -286,6 +286,7 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
                 psycopg2.extras.execute_batch(cur, insert_stmt, parsed_df.values)
                 conn.commit()
                 cur.close()
+                conn.close()
             print (f"[{datetime.now().strftime('%H:%M:%S')} {i} multicpu] saved links in {round(time.time()-start,2)}")
 
             lastlinks = len(parsed_data)
@@ -294,7 +295,7 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
             prefixes = {}
             prefixes[str(client.shards[0][0])] = f"postgres {host}"
             prefixes[str(client.shards[1][0])] = f"postgres {host}"
-            #client.completeJob(prefixes)
+            client.completeJob(prefixes)
 
             last = round(time.time() - start0)
             print(f"[{datetime.now().strftime('%H:%M:%S')} {i} stats] WAT job completed in {last} seconds")

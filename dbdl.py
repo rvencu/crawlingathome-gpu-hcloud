@@ -9,7 +9,6 @@ import ujson
 import shutil
 import tarfile
 import requests
-import psycopg2
 import pandas as pd
 from glob import glob
 from uuid import uuid1
@@ -212,7 +211,7 @@ async def request_image(parsed_df):
         'key': (None, 'parsed'),
     }
     
-    """ failure = True
+    failure = True
     for _ in range(10):
         try:
             response = requests.post(f'http://{bloom2ip}:8000/add/', files=post)
@@ -225,7 +224,7 @@ async def request_image(parsed_df):
         except:
             time.sleep(15)
     if failure:
-        print(f"crash, cannot contact the parsed bloom server, please fix") """
+        print(f"crash, cannot contact the parsed bloom server, please fix")
 
     return
 

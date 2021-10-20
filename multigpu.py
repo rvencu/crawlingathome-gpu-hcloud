@@ -262,18 +262,23 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                     except:
                         time.sleep(10)
                         continue
-                    job = ""
-                    try:
-                        job = client.shard.split(" ")[1]
-                    except:
-                        client.invalidURL()
-                        print (f"[{datetime.now().strftime('%H:%M:%S')} io {i}] invalid job detected: {job}")
-                        continue
-                    # found repeating shards, need to clear old files before continuing
-                    if os.path.exists("./"+ job):
-                        shutil.rmtree("./"+ job, ignore_errors=True)
-                    #os.mkdir("./"+ job)
-                    client.downloadShard()
+                    if client.shard.startswith('rsync'):
+                        job = ""
+                        try:
+                            job = client.shard.split(" ")[1]
+                        except:
+                            client.invalidURL()
+                            print (f"[{datetime.now().strftime('%H:%M:%S')} io {i}] invalid job detected: {job}")
+                            continue
+                        # found repeating shards, need to clear old files before continuing
+                        if os.path.exists("./"+ job):
+                            shutil.rmtree("./"+ job, ignore_errors=True)
+                        #os.mkdir("./"+ job)
+                        client.downloadShard()
+                    elif client.shard.startswith('postgres'):
+                            print(f"[io {i}] this is a database job not classic, marking it complete in tracker since progress continues to be tracked in database")
+                            client.completeJob(0)
+                            continue
 
                     # test for csv and for images folder
                     if len(glob(f"{job}/*.csv")) == 0 or not os.path.exists(f"./{job}/images"):
