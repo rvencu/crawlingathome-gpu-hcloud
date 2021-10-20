@@ -119,7 +119,7 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                     # each thread gets a new job, passes it to GPU then waits for completion
                     jobtype = 0
                     job = ""
-                    if client.jobCount() > 200:
+                    if client.jobCount() > 3000:
                         print(f"[io {i}] started CLASSIC job")
                         try:
                             client.newJob()
@@ -140,7 +140,10 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                             client.downloadShard()
                         elif client.shard.startswith('postgres'):
                             print(f"[io {i}] this is a database job not classic, marking it complete in tracker since progress continues to be tracked in database")
-                            completeJob (client, job, jobtype, engine, 0)
+                            try:
+                                completeJob (client, job, jobtype, engine, 0)
+                            except:
+                                pass
                             continue
                     else:
                         print(f"[io {i}] started DATABASE job")
@@ -149,10 +152,16 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                         conn = engine.raw_connection()
                         cur = conn.cursor()
                         cur.execute(select_stmt1)
-                        job = cur.fetchone()
+                        job = cur.fetchone()[0]
                         conn.commit()
+                        #count = cur.rowcount()
                         cur.close()
                         conn.close()
+
+                        # if there are no database jobs available
+                        #if count == 0:
+                        #    time.sleep(60)
+                        #    continue
 
                         # found repeating shards, need to clear old files before continuing
                         if os.path.exists("./"+ job):
@@ -204,7 +213,7 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                         df.to_csv(file, sep="|", index=False)
                         del df
                     
-                    #print(f"[io] job sent to GPU: {job}")
+                    print(f"[io] job sent to GPU: {job}")
                     incomingqueue.put((i, job, client.upload_address))
                     
                     # wait until job gets processes
@@ -415,7 +424,7 @@ if __name__ == "__main__":
     time.sleep(10)
 
     params = config()
-    engine = create_engine(f'postgresql://{params["user"]}:{params["password"]}@{params["host"]}:5432/{params["database"]}')
+    engine = create_engine(f'postgresql://{params["user"]}:{params["password"]}@{params["host"]}:5432/{params["database"]}',pool_size=50, max_overflow=100)
 
     groupsize = 30 # how many shards to group for CLIP
 

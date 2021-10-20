@@ -285,6 +285,9 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
             with open(tmp_folder + "shard.wat", "r") as infile:
                 parsed_data, clpd, prsd = parse_wat(infile, start_index, lines, i)
 
+            if parsed_data is None:
+                continue
+
             print (f"[{datetime.now().strftime('%H:%M:%S')} {i} multicpu] parsed wat in {round(time.time()-start,2)}")
             start = time.time()
 
