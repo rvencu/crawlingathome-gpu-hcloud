@@ -310,7 +310,7 @@ if __name__ == "__main__":
     print (f"starting session")
     
     params = config()
-    engine = create_engine(f'postgresql://{params["user"]}:{params["password"]}@localhost:5432/{params["database"]}')
+    engine = create_engine(f'postgresql://{params["user"]}:{params["password"]}@{params["host"]}:5432/{params["database"]}')
 
     while True:
         try:

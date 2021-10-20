@@ -325,7 +325,7 @@ if __name__ == '__main__':
     if len(sys.argv) > 1:
         procs = int(sys.argv[1])
 
-    engine = create_engine(f'postgresql://{params["user"]}:{params["password"]}@localhost:5432/{params["database"]}')
+    engine = create_engine(f'postgresql://{params["user"]}:{params["password"]}@{params["host"]}:5432/{params["database"]}')
     workers = []
     for i in range ( procs ):
         #use this queue to annount that bloom is currently processing and please do not update filters. if queue is not empty please wait, if queue is empty you may update filters
