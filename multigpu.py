@@ -192,25 +192,7 @@ def filter(df, out_fname, output_folder, clip_filter):
     #count results for each worker from resulting dff
     dff.loc[:,"shard"] = dff.PATH.apply(lambda x: x.split("/")[1])
     results = dff["shard"].value_counts()
-    #print(f"CLIP ran in {round(time.time()-start,2)}")
-    #start = time.time()
-    '''
-    img_embeds_sampleid = {}
-    for i, img_embed_it in enumerate(img_embeddings):
-        dfid_index = dff.at[i, "SAMPLE_ID"]
-        img_embeds_sampleid[str(dfid_index)] = img_embed_it
-    with open(f"{output_folder}image_embedding_dict-{out_fname}.pkl", "wb") as f:
-        pickle.dump(img_embeds_sampleid, f)
-    '''
-    #print(f"Embeddings ran in {round(time.time()-start,2)}")
-    #start = time.time()
-    '''
-    # we do not need anymore tfrecord files
-    df_tfrecords(
-        dff,
-        f"{output_folder}crawling_at_home_{out_fname}__00000-of-00001.tfrecord",
-    )
-    '''
+
     # save hashes
     #dff.loc[:,"hash"] = dff.apply(lambda row: hashlib.md5((str(row.URL)+str(row.TEXT)).encode("utf-8")).hexdigest(), axis=1)
     with open(f"{output_folder}hashes-{out_fname}.hsh", "wt") as f:
