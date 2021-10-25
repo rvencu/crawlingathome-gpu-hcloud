@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import time
 import ftfy
@@ -56,6 +57,76 @@ def parse_wat(content, start, line_count, i):
     output: a list of tuples (url, text, license, domain, hash)
     """
 
+    ip_middle_octet = u"(?:\.(?:1?\d{1,2}|2[0-4]\d|25[0-5]))"
+    ip_last_octet = u"(?:\.(?:[1-9]\d?|1\d\d|2[0-4]\d|25[0-4]))"
+
+    regex = re.compile(
+        u"^"
+        # protocol identifier
+        u"(?:(?:https?|ftp)://)"
+        # user:pass authentication
+        u"(?:\S+(?::\S*)?@)?"
+        u"(?:"
+        u"(?P<private_ip>"
+        # IP address exclusion
+        # private & local networks
+        u"(?:(?:10|127)" + ip_middle_octet + u"{2}" + ip_last_octet + u")|"
+        u"(?:(?:169\.254|192\.168)" + ip_middle_octet + ip_last_octet + u")|"
+        u"(?:172\.(?:1[6-9]|2\d|3[0-1])" + ip_middle_octet + ip_last_octet + u"))"
+        u"|"
+        # IP address dotted notation octets
+        # excludes loopback network 0.0.0.0
+        # excludes reserved space >= 224.0.0.0
+        # excludes network & broadcast addresses
+        # (first & last IP address of each class)
+        u"(?P<public_ip>"
+        u"(?:[1-9]\d?|1\d\d|2[01]\d|22[0-3])"
+        u"" + ip_middle_octet + u"{2}"
+        u"" + ip_last_octet + u")"
+        u"|"
+        # host name
+        u"(?:(?:[a-z\u00a1-\uffff0-9]-?)*[a-z\u00a1-\uffff0-9]+)"
+        # domain name
+        u"(?:\.(?:[a-z\u00a1-\uffff0-9]-?)*[a-z\u00a1-\uffff0-9]+)*"
+        # TLD identifier
+        u"(?:\.(?:[a-z\u00a1-\uffff]{2,}))"
+        u")"
+        # port number
+        u"(?::\d{2,5})?"
+        # resource path
+        u"(?:/\S*)?"
+        # query string
+        u"(?:\?\S*)?"
+        u"$",
+        re.UNICODE | re.IGNORECASE
+    )
+
+    pattern = re.compile(regex)
+
+    def _valid_url(value, public=True):
+        """
+        Return whether or not given value is a valid URL.
+        This validator is based on the wonderful `URL validator of dperini`_.
+        .. _URL validator of dperini:
+            https://gist.github.com/dperini/729294
+        Examples::
+            >>> url('http://foobar.dk')
+            True
+            >>> url('http://10.0.0.1')
+            True
+            >>> url('http://foobar.d')
+            ValidationFailure(func=url, ...)
+            >>> url('http://10.0.0.1', public=True)
+            ValidationFailure(func=url, ...)
+        :param value: URL address string to validate
+        :param public: (default=False) Set True to only allow a public IP address
+        """
+        result = pattern.match(value)
+        if not public:
+            return result
+
+        return result and not result.groupdict()["private_ip"]
+
     bloomip = "116.202.162.146"
     bloom2ip = "94.130.167.172"
 
@@ -87,6 +158,8 @@ def parse_wat(content, start, line_count, i):
             if "alt" not in e:
                 continue
             url = e["url"]
+            if not _valid_url(url):
+                continue
             # reject links of svg, gif or scripted images content
             if any( x in url for x in [".svg", ".gif", "data:image", "javascript:"] ):
                 continue
@@ -224,6 +297,8 @@ def parse_wat(content, start, line_count, i):
         print(f"crash, cannot contact the parsed bloom server, please fix")
 
     return (final_kept_data, clpd, prsd)  # use a dict in order to remove duplicate tuples from list
+
+
 
 class FileData:
     """
