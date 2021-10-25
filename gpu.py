@@ -81,7 +81,7 @@ def invalidURL (client, job, jobtype, engine):
     if jobtype == 0:
         client.invalidURL()
     if jobtype == 1:
-        update_stmt1 = "DELETE jobs WHERE jobid='{}'".format(job)
+        update_stmt1 = "DELETE FROM jobs WHERE jobid='{}'".format(job)
         update_stmt2 = "UPDATE dataset SET status = 0 WHERE prefix='{}'".format(job)
         conn = engine.raw_connection()
         cur = conn.cursor()
@@ -119,7 +119,7 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                     # each thread gets a new job, passes it to GPU then waits for completion
                     jobtype = 0
                     job = ""
-                    if client.jobCount() > 3000:
+                    if client.jobCount() > 10000:
                         print(f"[io {i}] started CLASSIC job")
                         try:
                             client.newJob()
@@ -152,16 +152,18 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                         conn = engine.raw_connection()
                         cur = conn.cursor()
                         cur.execute(select_stmt1)
-                        job = cur.fetchone()[0]
+                        job = cur.fetchone()
                         conn.commit()
                         #count = cur.rowcount()
                         cur.close()
                         conn.close()
 
                         # if there are no database jobs available
-                        #if count == 0:
-                        #    time.sleep(60)
-                        #    continue
+                        if job is None:
+                            time.sleep(60)
+                            continue
+
+                        job = job[0]
 
                         # found repeating shards, need to clear old files before continuing
                         if os.path.exists("./"+ job):
@@ -426,7 +428,7 @@ if __name__ == "__main__":
     params = config()
     engine = create_engine(f'postgresql://{params["user"]}:{params["password"]}@{params["host"]}:5432/{params["database"]}',pool_size=50, max_overflow=100)
 
-    groupsize = 30 # how many shards to group for CLIP
+    groupsize = 40 # how many shards to group for CLIP
 
     # folders cleanup (remove previous runs artifacts)
 
