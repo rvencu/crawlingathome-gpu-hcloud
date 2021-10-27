@@ -8,7 +8,6 @@ import uuid
 import ujson
 import shutil
 import tarfile
-import requests
 import pandas as pd
 from glob import glob
 from uuid import uuid1
@@ -237,7 +236,7 @@ def upload(source: str, clientType: str, target: str):
     return result
 
 def newJob(engine):
-    select_stmt1 = "UPDATE dataset SET status = 1 WHERE sampleid IN (SELECT DISTINCT ON (domain) sampleid FROM (SELECT domain, sampleid FROM dataset WHERE status = 0 LIMIT 500000 FOR UPDATE SKIP LOCKED) as \"U\" LIMIT 15000) AND status = 0 RETURNING sampleid"
+    select_stmt1 = "UPDATE dataset SET status = 1 WHERE sampleid IN (SELECT DISTINCT ON (domain) sampleid FROM (SELECT domain, sampleid FROM dataset TABLESAMPLE SYSTEM (0.01) WHERE status = 0 LIMIT 100000 FOR UPDATE SKIP LOCKED) as \"U\" LIMIT 10000) AND status = 0 RETURNING sampleid"
     conn = engine.raw_connection()
     cur = conn.cursor()
     cur.execute(select_stmt1)
