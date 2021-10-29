@@ -26,7 +26,7 @@ def config(filename='database.ini', section='postgresql'):
 def update_hash(params, queue: Queue, cycles: int, engine):
     for _ in range(cycles):
         try:
-            select_stmt1 = "update dataset set url_hash = md5(url) where sampleid in (SELECT sampleid from hash_urls tablesample system (0.001) LIMIT 2 FOR UPDATE SKIP LOCKED);"
+            select_stmt1 = "update dataset set url_hash = md5(url) where sampleid in (SELECT sampleid from dataset tablesample system (0.0001) where url_hash is null LIMIT 1 FOR UPDATE SKIP LOCKED);"
             conn = engine.raw_connection()
             try:
                 cur = conn.cursor()
