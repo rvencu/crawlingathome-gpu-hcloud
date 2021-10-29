@@ -373,7 +373,7 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
             parsed_df["wat"] = int(client.shards[-1][0])
 
             if len(parsed_df) > 0:
-                parsed_df.loc[:,"url_hash"] = parsed_df.apply(lambda row: hashlib.md5(str(row.URL).encode("utf-8")).hexdigest(), axis=1)
+                parsed_df.loc[:,"url_hash"] = parsed_df.url.apply(lambda x: hashlib.md5(str(x).encode("utf-8")).hexdigest())
                 df_columns = list(parsed_df)
                 # create (col1,col2,...)
                 columns = ",".join(df_columns)
@@ -382,7 +382,7 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
                 values = "VALUES({})".format(",".join(["%s" for _ in df_columns]))
 
                 #create INSERT INTO table (columns) VALUES('%s',...)
-                insert_stmt = "INSERT INTO {} ({}) {} ON CONFLICT (url) DO NOTHING".format("dataset", columns, values)
+                insert_stmt = "INSERT INTO {} ({}) {} ON CONFLICT (url_hash) DO NOTHING".format("dataset", columns, values)
                 
                 conn = engine.raw_connection()
                 cur = conn.cursor()
