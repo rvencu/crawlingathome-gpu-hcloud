@@ -1,13 +1,11 @@
 import clip
-import hashlib
 import torch
-import pickle
 from PIL import Image
 from multiprocessing import cpu_count
-from multiprocessing.queues import JoinableQueue
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 use_jit = torch.cuda.is_available() and '1.7.1' in torch.__version__
+
 class CLIPDataset(torch.utils.data.Dataset):
     def __init__(self, dataframe, preprocess):
         self.dataframe = dataframe
@@ -80,7 +78,6 @@ def df_clipfilter(df):
 
     for i, img_embed in enumerate(img_embedding):
         if similarities[i] < sim_threshold:
-            #df.drop(i, inplace=True)
             df.at[i, 'dropped'] = True
             continue
 
@@ -97,13 +94,11 @@ def df_clipfilter(df):
 
         underage_prob = clip_filter.prob(img_embed, clip_filter.underaged_categories)
         if underage_prob[0] < 4 or underage_prob[1] < 4 or any(x in df.at[i, "TEXT"] for x in underaged_text):
-            #df.drop(i, inplace=True)
             df.at[i, 'dropped'] = True
             continue
 
         animal_prob = clip_filter.prob(img_embed, clip_filter.animal_categories)
         if animal_prob[0] > 20:
-            #df.drop(i, inplace=True)
             df.at[i, 'dropped'] = True
             continue
         tmp_embed.append(img_embed)
@@ -113,77 +108,18 @@ def df_clipfilter(df):
     return tmp_embed, df
 
 
-def df_tfrecords(df, output_fname):
-    import tensorflow as tf
-    from tfr_image.utils import bytes_feature, int64_feature
-
-    def image_to_tfexample(sample_id, image_data, image_format, height, width, caption):
-        return tf.train.Example(
-            features=tf.train.Features(
-                feature={
-                    "sampleID": bytes_feature(sample_id),
-                    "image": bytes_feature(image_data),
-                    "format": bytes_feature(image_format),
-                    "label": bytes_feature(caption),
-                    "height": int64_feature(height),
-                    "width": int64_feature(width),
-                }
-            )
-        )
-
-    with tf.io.TFRecordWriter(output_fname) as tfrecord_writer:
-        for i in range(len(df)):
-            df_image = df.iloc[i]
-            image_fname = df_image["PATH"]
-            file_type = image_fname.split(".")[-1]
-            with tf.io.gfile.GFile(image_fname, "rb") as f:
-                image_data = f.read()
-            example = image_to_tfexample(
-                str(df_image["SAMPLE_ID"]).encode("utf_8"),
-                image_data,
-                file_type.encode("utf_8"),
-                int(df_image["HEIGHT"]),
-                int(df_image["WIDTH"]),
-                df_image["TEXT"].encode("utf_8"),
-            )
-            tfrecord_writer.write(example.SerializeToString())
-
-
 def filter(df, out_fname, output_folder):
-    # save hashes
-    # df.loc[:,"hash"] = df.apply(lambda row: hashlib.md5((str(row.URL)+str(row.TEXT)).encode("utf-8")).hexdigest(), axis=1) # seems already set from gpu.py
     with open(f"{output_folder}hashes-{out_fname}.clp", "wt") as f:
         for item in df["hash"]:
             f.write(item + "\n")
     results = []
-    #start0 = start = time.time()
+
     img_embeddings, dff = df_clipfilter(df)
     dff.to_csv(f"{output_folder}{out_fname}.csv", index=False, sep="|")
 
-    #count results for each worker from resulting dff
     dff.loc[:,"shard"] = dff.PATH.apply(lambda x: x.split("/")[1])
     results = dff["shard"].value_counts()
-    #print(f"CLIP ran in {round(time.time()-start,2)}")
-    #start = time.time()
-    '''
-    img_embeds_sampleid = {}
-    for i, img_embed_it in enumerate(img_embeddings):
-        dfid_index = dff.at[i, "SAMPLE_ID"]
-        img_embeds_sampleid[str(dfid_index)] = img_embed_it
-    with open(f"{output_folder}image_embedding_dict-{out_fname}.pkl", "wb") as f:
-        pickle.dump(img_embeds_sampleid, f)
-    '''
-    #print(f"Embeddings ran in {round(time.time()-start,2)}")
-    #start = time.time()
-    '''
-    # we do not need anymore tfrecord files
-    df_tfrecords(
-        dff,
-        f"{output_folder}crawling_at_home_{out_fname}__00000-of-00001.tfrecord",
-    )
-    '''
-    # save hashes
-    #dff.loc[:,"hash"] = dff.apply(lambda row: hashlib.md5((str(row.URL)+str(row.TEXT)).encode("utf-8")).hexdigest(), axis=1)
+
     with open(f"{output_folder}hashes-{out_fname}.hsh", "wt") as f:
         for item in dff["hash"]:
             f.write(item + "\n")

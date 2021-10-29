@@ -177,3 +177,4 @@ test/
 gpuerr.txt
 database.ini
 temp.gz
+gpuout.txt

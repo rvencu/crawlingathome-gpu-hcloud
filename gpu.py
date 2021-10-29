@@ -14,7 +14,6 @@ import pandas as pd
 from glob import glob
 from tqdm import tqdm
 from PIL import Image
-from dashing import *
 from pathlib import Path
 from colorama import Fore
 from statistics import mode
@@ -23,7 +22,7 @@ from sqlalchemy import create_engine
 from configparser import ConfigParser
 sys.path.append('./crawlingathome-worker/')
 from multiprocessing import Queue, JoinableQueue, Process
-from subprocess import Popen, PIPE
+import subprocess
 
 # basic watcher that sends email when the script crashes as it is long ran
 import sentry_sdk
@@ -54,7 +53,6 @@ def config(filename='database.ini', section='postgresql'):
     return db
 
 def log(logqueue:Queue, msg):
-    print (msg)
     logqueue.put(msg)
 
 def os_system(cmd):
@@ -68,7 +66,7 @@ def os_system(cmd):
         with open("gpusys.txt","at") as f:
             f.write(e + "\n")
 
-def monitor(logqueue: Queue):
+def monitor_curses(logqueue: Queue, screen):
     tick = 0
     classic_count = 0
     database_count = 0
@@ -77,6 +75,7 @@ def monitor(logqueue: Queue):
     log = ""
     duration = 0
     pairs = 0
+    qsize = 0
     while True:
         try:
             raw = logqueue.get()
@@ -89,6 +88,8 @@ def monitor(logqueue: Queue):
                 database_count = msg
             elif type == "current_gpu_job":
                 current_gpu_job = msg
+            elif type == "qsize":
+                qsize = msg
             elif type == "group_size":
                 group_size = msg
             elif type == "pairs":
@@ -97,22 +98,27 @@ def monitor(logqueue: Queue):
                 duration = msg
             else:
                 log = msg
-            print_status(tick=tick, classic_count=classic_count, database_count=database_count, current_gpu_job=current_gpu_job, log=log, group_size=group_size, pairs=pairs, duration=duration)
+            print_curses(screen, tick=tick, classic_count=classic_count, database_count=database_count, current_gpu_job=current_gpu_job, log=log, group_size=group_size, pairs=pairs, duration=duration, qsize=qsize)
         except:
             time.sleep(10)
         
 
-def print_status(tick, classic_count, database_count, current_gpu_job, log, group_size, pairs, duration):
-    sys.stdout.write('\033[2J\033[H') #clear screen
-    sys.stdout.write("tick:            %s sec.\n" % (tick))
-    sys.stdout.write("classic count:   %s\n" % (classic_count))
-    sys.stdout.write("database count:  %s\n" % (database_count))
-    sys.stdout.write("current gpu job: %s\n" % (current_gpu_job))
-    sys.stdout.write("group size:      %s\n" % (group_size))
-    sys.stdout.write("last pairs:      %s\n" % (pairs))
-    sys.stdout.write("last speed:      %s\n" % (duration))
-    sys.stdout.write("%s\n" % (log))
-    sys.stdout.flush()
+def print_curses(screen, tick, classic_count, database_count, current_gpu_job, log, group_size, pairs, duration, qsize):
+    screen.erase()
+    screen.addstr(0, 0, "GPU off gap:           %s sec.\n" % (tick))
+    screen.addstr(1, 0, "classic jobs count:    %s jobs\n" % (classic_count))
+    screen.addstr(2, 0, "database jobs count:   %s jobs\n" % (database_count))
+    screen.addstr(3, 0, "current GPU job id:    %s\n" % (current_gpu_job))
+    screen.addstr(4, 0, "GPU queue size:        %s jobs\n" % (qsize))
+    screen.addstr(5, 0, "group target size:     %s jobs\n" % (group_size))
+    screen.addstr(6, 0, "last inference result: %s pairs\n" % (pairs))
+    screen.addstr(7, 0, "last inference speed:  %s sec/job\n" % (duration))
+    screen.addstr(8, 0, "                                                    \n")
+    screen.addstr(9, 0, "%s\n" % (log))
+    screen.addstr(10, 0, "                                                    \n")
+    screen.addstr(11, 0, "                                                    \n")
+    screen.addstr(12, 0, "                                                    \n")
+    screen.refresh()
 
 '''
 GPU workflow:
@@ -194,7 +200,7 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                     try:
                         log(logqueue,f"classic_count:{jobcount}")
                     except:
-                        print("error adding to logqueue")
+                        print("[io {i}] error adding to logqueue")
                     # each thread gets a new job, passes it to GPU then waits for completion
                     jobtype = 0
                     job = ""
@@ -249,7 +255,10 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
 
                         resp = 1
                         for _ in range(5):
-                            resp = os.system(f'rsync -av archiveteam@176.9.4.150::gpujobs/{job}.tar.gz {job}.tar.gz')
+                            p = subprocess.Popen(["rsync", "-av", f"archiveteam@176.9.4.150::gpujobs/{job}.tar.gz", f"{job}.tar.gz"], stdout=subprocess.PIPE)
+                            output = p.communicate()[0]
+                            resp = p.returncode
+                            #resp = os.system(f'rsync -av archiveteam@176.9.4.150::gpujobs/{job}.tar.gz {job}.tar.gz')
                             if resp == 5888:
                                 log(logqueue,'error:[io {i}] rsync job not found')
                                 invalidURL (client, job, jobtype, engine)
@@ -293,7 +302,7 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                         df.to_csv(file, sep="|", index=False)
                         del df
                     
-                    log(logqueue,f"log:[io] job sent to GPU {job}")
+                    log(logqueue,f"log:[io {i}] job sent to GPU {job}")
                     incomingqueue.put((i, job, client.upload_address))
                     
                     # wait until job gets processes
@@ -350,6 +359,8 @@ def io_worker(incomingqueue: JoinableQueue, outgoingqueue: list, groupsize: int,
         else:
             dbcount = get_dbjobscount(engine)
             logqueue.put(f"database_count:{dbcount}")
+            qsize = incomingqueue.qsize()
+            log(logqueue,f"qsize:{qsize}")
             time.sleep(0.1)
 
 # process to upload the results
@@ -359,8 +370,11 @@ def upload_worker(uploadqueue: JoinableQueue, counter: JoinableQueue, outgoingqu
     while True:
         if uploadqueue.qsize() > 0:
             group_id, upload_address, shards, results = uploadqueue.get()
-            response = os.system(f"rsync -av save/*{group_id}* {upload_address}") # to do get target from client
-            if response == 0:
+            p = subprocess.Popen(f"rsync -av save/*{group_id}* {upload_address}", shell=True, stdout=subprocess.PIPE)
+            output = p.communicate()[0]
+            resp = p.returncode
+            #resp = os.system(f"rsync -av save/*{group_id}* {upload_address}") # to do get target from client
+            if resp == 0:
                 #print(f"[io2] sending all jobs to be marked as completed")
                 for i, job, item in shards:
                     cnt = results.get(job)
@@ -380,22 +394,21 @@ def upload_worker(uploadqueue: JoinableQueue, counter: JoinableQueue, outgoingqu
 # main gpu workers. perhaps this worker needs to be run in as many processes as GPUs are present in the system. (todo)
 def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag: JoinableQueue, groupsize: int, logqueue: Queue):
     log(logqueue,f"log:[gpu] worker started")
+    log(logqueue,f"current_gpu_job:preparing...")
     first_groupsize = groupsize
     bloomip = "116.202.162.146"
     tick = time.time()
-    start0 = time.time()
     # watch for the incoming queue, when it is big enough we can trigger processing    
     while True:
-        #print(f"[gpu] testing incoming queue size")
-        if incomingqueue.qsize() >= groupsize:
+        qsize = incomingqueue.qsize()
+        #log(logqueue,f"qsize:{qsize}")
+        log(logqueue,f"group_size:{groupsize}")
+        log(logqueue,f"tick:{round(time.time() - tick, 2)}")
+        if qsize >= groupsize:
             start = time.time()
-            start0 = start
-            log(logqueue,f"tick_timer:{round(start0-tick,2)}")
-            #gpuflag.put(1)
             shards = []
             addresses = []
-            group_id = uuid.uuid4().hex
-            log(logqueue,f"group_size:{groupsize}")
+            group_id = uuid.uuid4().hex            
             log(logqueue,f"current_gpu_job:{group_id}")
             group_parse = None
             for _ in range(groupsize):
@@ -427,11 +440,9 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
                 for i, job, item in shards:
                     f.write(item + "\n")
             
-            duped = len(group_parse.index)
             group_parse.drop_duplicates(subset=["URL","TEXT"], keep='last', inplace=True)
             group_parse.reset_index(inplace=True, drop=True)
-            total = len(group_parse.index)
-
+            
             group_parse.loc[:,"hash"] = group_parse.apply(lambda row: hashlib.md5((str(row.URL)+str(row.TEXT)).encode("utf-8")).hexdigest(), axis=1)
             
             with open('hash.txt', 'w') as f:
@@ -462,16 +473,11 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
 
             group_parse.reset_index(inplace=True, drop=True)
 
-            bloomed = len(group_parse.index)
-
-            #group_parse.to_csv("./stats/" + group_id + "_beforeclip.csv", index=False, sep="|") # I am using these to find out domains to filter from scraping
-
-            log(logqueue,f"log:{Fore.YELLOW}[gpu] preparation done in {round(time.time()-start, 2)} sec.{Fore.RESET}")
+            log(logqueue,f"log:[gpu] preparation done in {round(time.time()-start, 2)} sec.")
 
             start = time.time()
             final_images, results = clip_filter.filter(group_parse, group_id, "./save/")
             
-            dedupe_ratio = round((duped - total) / duped, 4)
             log(logqueue,f"pairs:{final_images}")
             log(logqueue,f"duration:{round((time.time()-start)/groupsize,2)}")
 
@@ -479,6 +485,7 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             upload_address = mode(addresses)
             uploadqueue.put((group_id, upload_address, shards, results))
             tick = time.time()
+            log(logqueue,f"current_gpu_job:not ready")
             
             # dynamic adjustment of groupsize so we can get close to 8000 pairs per group as fast as possible
             gradient = int((final_images-20000)/7000)
@@ -486,10 +493,10 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             groupsize = min( int(3 * first_groupsize) - 5 , groupsize - gradient )
             groupsize = max( groupsize - gradient, 3 )
             if groupsize != oldgroupsize:
-                log(logqueue,f"log:{Fore.YELLOW}[gpu] groupsize changed to {groupsize}{Fore.RESET}")
+                log(logqueue,f"log:[gpu] groupsize changed to {groupsize}")
             
         else:
-            time.sleep(10)
+            time.sleep(1)
 
 if __name__ == "__main__":
     # script initialization
@@ -547,13 +554,15 @@ if __name__ == "__main__":
     logqueue = Queue() # use this to send log lines to monitor
     
     sys.stderr = open('gpuerr.txt', 'a')
-    mon = Process(target=monitor, args=[logqueue], daemon=True).start()
-
+    sys.stdout = open('gpuout.txt', 'a')
+    import curses
+    screen = curses.initscr()
+    #mon = Process(target=monitor, args=[logqueue], daemon=True).start()
+    mon = Process(target=monitor_curses, args=[logqueue, screen], daemon=True).start()
+    
     # launch separate processes with specialized workers
     io = Process(target=io_worker, args=[inbound, outbound, groupsize, logqueue, YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL, engine], daemon=True).start()
     upd = Process(target=upload_worker, args=[uploadqueue, counter, outbound, logqueue], daemon=True).start()
     
-    time.sleep(30)
-
     gpu_worker(inbound, uploadqueue, gpuflag, groupsize, logqueue)
 
