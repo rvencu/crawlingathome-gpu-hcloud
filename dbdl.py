@@ -103,7 +103,7 @@ def process_img_content(response, alt_text, license, sample_id, language):
     error_code = 8
 
     #temp 2 lines
-    if language == "": 
+    if language == "" or language is None:
         language = "en" 
 
     def _resize(im: Image):
