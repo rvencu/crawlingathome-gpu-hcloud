@@ -102,6 +102,10 @@ def process_img_content(response, alt_text, license, sample_id, language):
     img_output_folder = "save/images/"
     error_code = 8
 
+    #temp 2 lines
+    if language == "": 
+        language = "en" 
+
     def _resize(im: Image):
         width, height = im.size
         ratio = min(width, height) / 224
