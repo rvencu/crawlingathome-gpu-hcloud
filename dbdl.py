@@ -1,3 +1,14 @@
+'''
+Encoding image analyzing errors: Add the numbers below to 8 to encode all types of errors (so status=9...23 is reserved to describe the errors)
+- general exception: 1
+- bad format: 2
+- image too big: 4
+- image too small: 8
+- any combination of above 
+
+'''
+
+
 import gc 
 import os
 import ssl
@@ -79,7 +90,7 @@ def log(e):
         f.write(str(e.__class__.__name__) + " " + str(e) + "\n")
 
 
-def process_img_content(response, alt_text, license, sample_id):
+def process_img_content(response, alt_text, license, sample_id, language):
     """
     Function to process downloaded image. Use use PIL from pillow-simd 
         (faster than open cv that in return is faster than original pillow)
@@ -89,6 +100,7 @@ def process_img_content(response, alt_text, license, sample_id):
     output: list of image parameters or None if image is rejected
     """
     img_output_folder = "save/images/"
+    error_code = 8
 
     def _resize(im: Image):
         width, height = im.size
@@ -107,18 +119,18 @@ def process_img_content(response, alt_text, license, sample_id):
     try:
         # reject too small images
         if len(response.content) < 5000:
-            return
+            error_code += 8
         img_data = BytesIO(response.content)
         with Image.open(img_data) as im:
             width, height = im.size
             # reject if too large (might be a DOS decompression bomb)
             if width * height > 89478484:
-                return
+                error_code += 4
             im_format = im.format
             out_fname = f"{img_output_folder}{str(sample_id)}.{im_format.lower()}"
             # reject if format is not in this list
             if im_format not in ["JPEG", "JPG", "PNG", "WEBP"]:
-                return
+                error_code += 2
             if min(width, height) > 224:
                 im = _resize(im)
             
@@ -127,9 +139,12 @@ def process_img_content(response, alt_text, license, sample_id):
                 im = im.convert("RGB")
             im.save(out_fname)
     except (KeyError, UnidentifiedImageError):
-        return
+        error_code += 1
+    
+    if error_code == 8:
+        error_code = 2 # mark succesful lines with status = 2
 
-    return [str(sample_id), out_fname, response.url, alt_text, width, height, license]
+    return [str(sample_id), out_fname, response.url, alt_text, width, height, license, language, error_code]
 
 
 async def request_image(parsed_df):
@@ -170,6 +185,7 @@ async def request_image(parsed_df):
             url = row[1]
             alt_text = row[2]
             license = row[3]
+            language = row[4]
             # the following 2 lines are related to Trio Instrument to capture events from multiple threads
             task = trio.lowlevel.current_task()
             try:
@@ -178,7 +194,7 @@ async def request_image(parsed_df):
                 start=time.time()
                 proces = process_img_content(
                     # tune timeout and connection_timeout to grab more or less files. shorter timeouts will exclude bad performing websites
-                    response, alt_text, license, sample_id
+                    response, alt_text, license, sample_id, language
                 )
                 proctime = round(time.time()-start, 2)
                 task.custom_sleep_data = (0, dltime, proctime) # for success do not count errors
@@ -221,7 +237,7 @@ def dl_wat(parsed_df): # replace valid data and start sampleid with parsed_df
         processed_samples.extend(ujson.load(open(tmpf)))
     return pd.DataFrame(
         processed_samples,
-        columns=["SAMPLE_ID", "PATH", "URL", "TEXT", "HEIGHT", "WIDTH", "LICENSE", "LANGUAGE"],
+        columns=["SAMPLE_ID", "PATH", "URL", "TEXT", "HEIGHT", "WIDTH", "LICENSE", "LANGUAGE", "STATUS"],
     )
 
 def upload(source: str, clientType: str, target: str):
@@ -276,14 +292,13 @@ def completeJob(engine, prefix, parsed_df, dlparse_df):
 
 def completeJob2(engine, prefix, parsed_df, dlparse_df):
     # prepare data for EN
-    #en_dlparse_df = dlparse_df[dlparse_df["LANGUAGE"]=="en"]
-    #int_dlparse_df = dlparse_df[dlparse_df["LANGUAGE"]!="en"]
     values2 = ",".join(parsed_df["sampleid"].astype(str))
     update_stmt1 = ""
     for i, row in dlparse_df.iterrows():
-        update_stmt1 += "UPDATE dataset SET status=2, width={}, height={} where sampleid = {};".format(row["SAMPLE_ID"],row["HEIGHT"],row["WIDTH"])
+        update_stmt1 += "UPDATE dataset SET status={}, width={}, height={} where sampleid = {};".format(row["STATUS"],row["HEIGHT"],row["WIDTH"],row["SAMPLE_ID"])
+        # this is intentional mix between width and heigth to account for the but in previous laion release
+        # the csv will go scrambled but in database we want good values
     insert_stmt = "INSERT INTO jobs (jobid) VALUES ('{}')".format(prefix)
-    update_stmt2 = "UPDATE dataset SET status=9 where status=1 AND sampleid in ({})".format(values2)
 
     if len(dlparse_df.index > 0):
         conn = engine.raw_connection()
@@ -293,6 +308,9 @@ def completeJob2(engine, prefix, parsed_df, dlparse_df):
         conn.commit()
         cur.close()
         conn.close()
+
+    # in case there are samples unaccounted for, we try to mark them with general error status
+    update_stmt2 = "UPDATE dataset SET status=9 where status=1 AND sampleid in ({})".format(values2)
 
     conn = engine.raw_connection()
     cur = conn.cursor()

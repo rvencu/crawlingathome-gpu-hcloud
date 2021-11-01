@@ -442,7 +442,12 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             
             group_parse.drop_duplicates(subset=["URL","TEXT"], keep='last', inplace=True)
             group_parse.reset_index(inplace=True, drop=True)
-            
+            print (f"before en selection {len(group_parse.index)}")
+
+            #force en language to continue with English dataset
+            group_parse = group_parse[group_parse["LANGUAGE"]=="en"]
+            print (f"after en selection {len(group_parse.index)}")
+
             group_parse.loc[:,"hash"] = group_parse.apply(lambda row: hashlib.md5((str(row.URL)+str(row.TEXT)).encode("utf-8")).hexdigest(), axis=1)
             
             with open('hash.txt', 'w') as f:
