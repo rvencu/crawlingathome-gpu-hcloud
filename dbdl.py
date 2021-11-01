@@ -141,7 +141,8 @@ def process_img_content(response, alt_text, license, sample_id, language):
             # convert all images to RGB (necessary for CLIP, also CLIP is doing it again so do we need it here?)
             if im.mode != "RGB":
                 im = im.convert("RGB")
-            im.save(out_fname)
+            if error_code == 8:
+                im.save(out_fname) # do not retain images we do not need
     except (KeyError, UnidentifiedImageError):
         error_code += 1
     
@@ -273,7 +274,7 @@ def newJob(engine):
     conn.close()
     return df
 
-def completeJob(engine, prefix, parsed_df, dlparse_df):
+""" def completeJob(engine, prefix, parsed_df, dlparse_df):
     values1 = ",".join(dlparse_df["SAMPLE_ID"].astype(str))
     values2 = ",".join(parsed_df["sampleid"].astype(str))
     update_stmt1 = "UPDATE dataset SET status=2 where sampleid in ({})".format(values1)
@@ -295,7 +296,7 @@ def completeJob(engine, prefix, parsed_df, dlparse_df):
     conn.commit()
     cur.close()
     conn.close()
-    return
+    return """
 
 def completeJob2(engine, prefix, parsed_df, dlparse_df):
     # prepare data for EN
@@ -366,19 +367,21 @@ if __name__ == "__main__":
         
             # attempt to download validated links and save to disk for stats and blocking lists
             dlparse_df = dl_wat(parsed_df)
+
+            # at this point we finishes the CPU node job, need to make the data available for GPU worker
+            os.mkdir(prefix)
+            os.system(f"mv save/* {prefix}/")
+            result += upload(prefix, "CPU", "archiveteam@176.9.4.150::gpujobs") #todo find the IP and endpoint
+            if result == 0:
+                completeJob2(engine, prefix, parsed_df, dlparse_df)
+
+            dlparse_df = dlparse_df[dlparse_df["status"]==2] # remove rejected items from gpu jobs
             dlparse_df.to_csv(output_folder + out_fname + ".csv", index=False, sep="|")
 
             print (f"[stats] pairs retained {len(dlparse_df)} in {round(time.time() - start, 2)}")
             print (f"[stats] scraping efficiency {len(dlparse_df)/(time.time() - start)} img/sec")
             print (f"[stats] crawling efficiency {len(parsed_df)/(time.time() - start)} links/sec")
 
-            # at this point we finishes the CPU node job, need to make the data available for GPU worker
-            
-            os.mkdir(prefix)
-            os.system(f"mv save/* {prefix}/")
-            result += upload(prefix, "CPU", "archiveteam@176.9.4.150::gpujobs") #todo find the IP and endpoint
-            if result == 0:
-                completeJob2(engine, prefix, parsed_df, dlparse_df)
 
             last = round(time.time() - start0)
 
