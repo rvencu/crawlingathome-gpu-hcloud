@@ -442,12 +442,6 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             
             group_parse.drop_duplicates(subset=["URL","TEXT"], keep='last', inplace=True)
             group_parse.reset_index(inplace=True, drop=True)
-            print (f"before en selection {len(group_parse.index)}")
-
-            #force en language to continue with English dataset
-            group_parse = group_parse[group_parse["LANGUAGE"]=="en"]
-            print (f"after en selection {len(group_parse.index)}")
-
             group_parse.loc[:,"hash"] = group_parse.apply(lambda row: hashlib.md5((str(row.URL)+str(row.TEXT)).encode("utf-8")).hexdigest(), axis=1)
             
             with open('hash.txt', 'w') as f:
@@ -475,13 +469,20 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             log(logqueue,f"log:bloom server has validated {len(valid_hashes)} pairs")
 
             group_parse = group_parse[group_parse.hash.isin(valid_hashes)]
-
             group_parse.reset_index(inplace=True, drop=True)
+
+            print (f"before en selection {len(group_parse.index)}")
+            #force en language to continue with English dataset
+            en_parse = group_parse[group_parse["LANGUAGE"]=="en"]
+            int_parse = group_parse[group_parse["LANGUAGE"] not in ['en', 'bn', 'co', 'eo', 'fil', 'fy', 'gd', 'ha', 'haw', 'hmn', 'ig', 'km', 'ku', 'ky', 'lo', 'mi', 'mn', 'mt', 'ny', 'sd', 'si', 'sm', 'sn', 'so', 'st', 'su', 'sw', 'xh', 'yi', 'zu']]
+            print (f"after en selection {len(en_parse.index)}")
+
 
             log(logqueue,f"log:[gpu] preparation done in {round(time.time()-start, 2)} sec.")
 
             start = time.time()
-            final_images, results = clip_filter.filter(group_parse, group_id, "./save/")
+            final_images, results = clip_filter.filter(en_parse, group_id, "./save/")
+            #TODO: add here processing command for int_parse, perhaps secondary location and different group_id
             
             log(logqueue,f"pairs:{final_images}")
             log(logqueue,f"duration:{round((time.time()-start)/groupsize,2)}")

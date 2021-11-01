@@ -169,8 +169,9 @@ def parse_wat(content, start, line_count, i):
             if len(str(domain)) > 60:
                 continue
             detlang = ""
+            alt_text = ""
             if "alt" in e:
-                # detect ALT text language, we want to retain only English captions
+                # detect ALT text language
                 alt_text = ftfy.fix_text(e["alt"].replace("\n", " ")).strip()
                 detector = gcld3.NNetLanguageIdentifier(min_num_bytes=6, max_num_bytes=1000)
                 
@@ -181,6 +182,9 @@ def parse_wat(content, start, line_count, i):
                     alt_text = remove_bad_chars(alt_text)
                     res = detector.FindLanguage(alt_text)
                     detlang = res.language # keep pair if we made it so far
+            """ if detlang in ['bn', 'co', 'eo', 'fil', 'fy', 'gd', 'ha', 'haw', 'hmn', 'ig', 'km', 'ku', 'ky', 'lo', 'mi', 'mn', 'mt', 'ny', 'sd', 'si', 'sm', 'sn', 'so', 'st', 'su', 'sw', 'xh', 'yi', 'zu']:
+                detlang = ""
+                alt_text = "" """
             if not url.startswith("http"):
                 url = urljoin(base_url, url)
             hash = hashlib.md5((url + alt_text).encode("utf-8")).hexdigest()
