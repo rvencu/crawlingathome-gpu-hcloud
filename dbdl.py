@@ -375,7 +375,7 @@ if __name__ == "__main__":
             if result == 0:
                 completeJob2(engine, prefix, parsed_df, dlparse_df)
 
-            dlparse_df = dlparse_df[dlparse_df["status"]==2] # remove rejected items from gpu jobs
+            dlparse_df = dlparse_df[dlparse_df["STATUS"]==2] # remove rejected items from gpu jobs
             dlparse_df.to_csv(output_folder + out_fname + ".csv", index=False, sep="|")
 
             print (f"[stats] pairs retained {len(dlparse_df)} in {round(time.time() - start, 2)}")
