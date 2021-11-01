@@ -221,7 +221,7 @@ def dl_wat(parsed_df): # replace valid data and start sampleid with parsed_df
         processed_samples.extend(ujson.load(open(tmpf)))
     return pd.DataFrame(
         processed_samples,
-        columns=["SAMPLE_ID", "PATH", "URL", "TEXT", "HEIGHT", "WIDTH", "LICENSE"],
+        columns=["SAMPLE_ID", "PATH", "URL", "TEXT", "HEIGHT", "WIDTH", "LICENSE", "LANGUAGE"],
     )
 
 def upload(source: str, clientType: str, target: str):
@@ -245,7 +245,7 @@ def newJob(engine):
     cur.close()
 
     values = ",".join([str(tuple[0]) for tuple in result])
-    select_stmt2 = "SELECT sampleid, url, text, license FROM dataset WHERE sampleid in ({})".format(values)
+    select_stmt2 = "SELECT sampleid, url, text, license, language FROM dataset WHERE sampleid in ({})".format(values)
     df = pd.read_sql_query(select_stmt2, conn)
     conn.close()
     return df
@@ -256,6 +256,34 @@ def completeJob(engine, prefix, parsed_df, dlparse_df):
     update_stmt1 = "UPDATE dataset SET status=2 where sampleid in ({})".format(values1)
     update_stmt2 = "UPDATE dataset SET status=9 where status=1 AND sampleid in ({})".format(values2)
     insert_stmt = "INSERT INTO jobs (jobid) VALUES ('{}')".format(prefix)
+
+    if len(dlparse_df.index > 0):
+        conn = engine.raw_connection()
+        cur = conn.cursor()
+        cur.execute(update_stmt1)
+        cur.execute(insert_stmt)
+        conn.commit()
+        cur.close()
+        conn.close()
+
+    conn = engine.raw_connection()
+    cur = conn.cursor()
+    cur.execute(update_stmt2)
+    conn.commit()
+    cur.close()
+    conn.close()
+    return
+
+def completeJob2(engine, prefix, parsed_df, dlparse_df):
+    # prepare data for EN
+    #en_dlparse_df = dlparse_df[dlparse_df["LANGUAGE"]=="en"]
+    #int_dlparse_df = dlparse_df[dlparse_df["LANGUAGE"]!="en"]
+    values2 = ",".join(parsed_df["sampleid"].astype(str))
+    update_stmt1 = ""
+    for i, row in dlparse_df.iterrows():
+        update_stmt1 += "UPDATE dataset SET status=2, width={}, height={} where sampleid = {};".format(row["SAMPLE_ID"],row["HEIGHT"],row["WIDTH"])
+    insert_stmt = "INSERT INTO jobs (jobid) VALUES ('{}')".format(prefix)
+    update_stmt2 = "UPDATE dataset SET status=9 where status=1 AND sampleid in ({})".format(values2)
 
     if len(dlparse_df.index > 0):
         conn = engine.raw_connection()
@@ -325,7 +353,7 @@ if __name__ == "__main__":
             os.system(f"mv save/* {prefix}/")
             result += upload(prefix, "CPU", "archiveteam@176.9.4.150::gpujobs") #todo find the IP and endpoint
             if result == 0:
-                completeJob(engine, prefix, parsed_df, dlparse_df)
+                completeJob2(engine, prefix, parsed_df, dlparse_df)
 
             last = round(time.time() - start0)
 

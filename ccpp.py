@@ -154,9 +154,6 @@ def parse_wat(content, start, line_count, i):
         for e in linklist:
             if "url" in e and "creativecommons.org/licenses/" in e["url"]:
                 license = e["url"]
-            # reject links if ALT tag is not present
-            if "alt" not in e:
-                continue
             url = e["url"]
             if not _valid_url(url):
                 continue
@@ -171,24 +168,25 @@ def parse_wat(content, start, line_count, i):
                 continue
             if len(str(domain)) > 60:
                 continue
-            # detect ALT text language, we want to retain only English captions
-            alt_text = ftfy.fix_text(e["alt"].replace("\n", " ")).strip()
-            detector = gcld3.NNetLanguageIdentifier(min_num_bytes=6, max_num_bytes=1000)
             detlang = ""
-            try:
-                res = detector.FindLanguage(alt_text)
-                detlang = res.language
-            except Exception as e:
-                alt_text = remove_bad_chars(alt_text)
-                res = detector.FindLanguage(alt_text)
-                detlang = res.language            # keep pair if we made it so far
-            if detlang == "en":
-                if not url.startswith("http"):
-                    url = urljoin(base_url, url)
-                hash = hashlib.md5((url + alt_text).encode("utf-8")).hexdigest()
-                if url not in check_flag:
-                    valid_data.append((url, alt_text, license, domain, hash))
-                    check_flag.add(url)
+            if "alt" in e:
+                # detect ALT text language, we want to retain only English captions
+                alt_text = ftfy.fix_text(e["alt"].replace("\n", " ")).strip()
+                detector = gcld3.NNetLanguageIdentifier(min_num_bytes=6, max_num_bytes=1000)
+                
+                try:
+                    res = detector.FindLanguage(alt_text)
+                    detlang = res.language
+                except Exception as e:
+                    alt_text = remove_bad_chars(alt_text)
+                    res = detector.FindLanguage(alt_text)
+                    detlang = res.language # keep pair if we made it so far
+            if not url.startswith("http"):
+                url = urljoin(base_url, url)
+            hash = hashlib.md5((url + alt_text).encode("utf-8")).hexdigest()
+            if url not in check_flag:
+                valid_data.append((url, alt_text, license, domain, detlang, hash))
+                check_flag.add(url)
             
     print(f"[{i} parser] lenght of pairs to filter {len(valid_data)}")
     s = time.time()
@@ -259,7 +257,7 @@ def parse_wat(content, start, line_count, i):
 
     valid_urls = response.content.decode("utf-8").split("\n")
 
-    print(f"[{i} parser]  parsed bloom server returned {len(valid_urls)} in {round(time.time()-s,3)} sec")
+    print(f"[{i} parser] parsed bloom server returned {len(valid_urls)} in {round(time.time()-s,3)} sec")
 
     valid_data = [t for t in {tuple(i) for i in kept_data}]
     final_kept_data = []
@@ -297,8 +295,6 @@ def parse_wat(content, start, line_count, i):
         print(f"crash, cannot contact the parsed bloom server, please fix")
 
     return (final_kept_data, clpd, prsd)  # use a dict in order to remove duplicate tuples from list
-
-
 
 class FileData:
     """
@@ -367,7 +363,7 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
             start = time.time()
 
             # convert to dataframe and save to disk (for statistics and generating blocking lists)
-            parsed_df = pd.DataFrame(parsed_data, columns=["url","text","license","domain","hash"])
+            parsed_df = pd.DataFrame(parsed_data, columns=["url","text","license","domain","language","hash"])
             parsed_df = parsed_df.drop_duplicates(subset=["url"])
             parsed_df.insert(0, 'sampleid', range(first_sample_id, first_sample_id + len(parsed_df)))
             parsed_df["wat"] = int(client.shards[-1][0])
