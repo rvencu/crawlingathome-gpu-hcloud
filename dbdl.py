@@ -367,16 +367,14 @@ if __name__ == "__main__":
         
             # attempt to download validated links and save to disk for stats and blocking lists
             dlparse_df = dl_wat(parsed_df)
-
+            dlparse_df_save = dlparse_df[dlparse_df["STATUS"]==2] # remove rejected items from gpu jobs
+            dlparse_df_save.to_csv(output_folder + out_fname + ".csv", index=False, sep="|")
             # at this point we finishes the CPU node job, need to make the data available for GPU worker
             os.mkdir(prefix)
             os.system(f"mv save/* {prefix}/")
             result += upload(prefix, "CPU", "archiveteam@176.9.4.150::gpujobs") #todo find the IP and endpoint
             if result == 0:
                 completeJob2(engine, prefix, parsed_df, dlparse_df)
-
-            dlparse_df = dlparse_df[dlparse_df["STATUS"]==2] # remove rejected items from gpu jobs
-            dlparse_df.to_csv(output_folder + out_fname + ".csv", index=False, sep="|")
 
             print (f"[stats] pairs retained {len(dlparse_df)} in {round(time.time() - start, 2)}")
             print (f"[stats] scraping efficiency {len(dlparse_df)/(time.time() - start)} img/sec")
