@@ -470,13 +470,14 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
 
             group_parse = group_parse[group_parse.hash.isin(valid_hashes)]
             group_parse.reset_index(inplace=True, drop=True)
+            #temporary fix
+            group_parse["LANGUAGE"] = "en"
 
             print (f"before en selection {len(group_parse.index)}")
             #force en language to continue with English dataset
-            en_parse = group_parse[group_parse["LANGUAGE"]=="en"]
-            int_parse = group_parse[group_parse["LANGUAGE"] not in ['en', 'bn', 'co', 'eo', 'fil', 'fy', 'gd', 'ha', 'haw', 'hmn', 'ig', 'km', 'ku', 'ky', 'lo', 'mi', 'mn', 'mt', 'ny', 'sd', 'si', 'sm', 'sn', 'so', 'st', 'su', 'sw', 'xh', 'yi', 'zu']]
+            en_parse = group_parse[group_parse["LANGUAGE"] == "en"]
+            #int_parse = group_parse[~group_parse.LANGUAGE.isin(['en', 'bn', 'co', 'eo', 'fil', 'fy', 'gd', 'ha', 'haw', 'hmn', 'ig', 'km', 'ku', 'ky', 'lo', 'mi', 'mn', 'mt', 'ny', 'sd', 'si', 'sm', 'sn', 'so', 'st', 'su', 'sw', 'xh', 'yi', 'zu', "", None])]
             print (f"after en selection {len(en_parse.index)}")
-
 
             log(logqueue,f"log:[gpu] preparation done in {round(time.time()-start, 2)} sec.")
 

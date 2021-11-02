@@ -376,8 +376,8 @@ if __name__ == "__main__":
             if result == 0:
                 completeJob2(engine, prefix, parsed_df, dlparse_df)
 
-            print (f"[stats] pairs retained {len(dlparse_df)} in {round(time.time() - start, 2)}")
-            print (f"[stats] scraping efficiency {len(dlparse_df)/(time.time() - start)} img/sec")
+            print (f"[stats] pairs retained {len(dlparse_df_save)} in {round(time.time() - start, 2)}")
+            print (f"[stats] scraping efficiency {len(dlparse_df_save)/(time.time() - start)} img/sec")
             print (f"[stats] crawling efficiency {len(parsed_df)/(time.time() - start)} links/sec")
 
 
