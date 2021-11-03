@@ -23,10 +23,10 @@ def config(filename='database.ini', section='postgresql'):
         raise Exception('Section {0} not found in the {1} file'.format(section, filename))
     return db
 
-def update_hash(params, queue: Queue, cycles: int, engine):
-    for _ in range(cycles):
+def update_hash(worker, queue: Queue, cycles: int, engine):
+    for i in range(cycles):
         try:
-            select_stmt1 = "update dataset set url_hash = md5(url) where sampleid in (SELECT sampleid from dataset tablesample system (0.0001) where url_hash is null LIMIT 1 FOR UPDATE SKIP LOCKED);"
+            select_stmt1 = f"update dataset set language = 'en' where sampleid in (select sampleid from dataset where language is null LIMIT 1000 FOR UPDATE SKIP LOCKED);"
             conn = engine.raw_connection()
             try:
                 cur = conn.cursor()
@@ -48,18 +48,19 @@ def update_hash(params, queue: Queue, cycles: int, engine):
 # %%
 params = config()
 queue = Queue()
-cycles = 10000
-pbar = tqdm(total=24*cycles)
+cycles = 8000
+workers = 10
+pbar = tqdm(total=workers*cycles)
 engine = create_engine(f'postgresql://{params["user"]}:{params["password"]}@{params["host"]}:5432/{params["database"]}',pool_size=25, max_overflow=50, pool_pre_ping=True)
 
 processes = []
-for j in range(24):
-    p = Process(target=update_hash, args=[params, queue, cycles, engine], daemon=False)
+for j in range(workers):
+    p = Process(target=update_hash, args=[j, queue, cycles, engine], daemon=False)
     processes.append(p)
     p.start()
 
 done = 1
-while done < 24 * cycles - 1:
+while done < workers * cycles - 1:
     if not queue.empty():
         queue.get()
         done += 1

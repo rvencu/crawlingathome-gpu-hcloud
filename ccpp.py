@@ -178,10 +178,17 @@ def parse_wat(content, start, line_count, i):
                 try:
                     res = detector.FindLanguage(alt_text)
                     detlang = res.language
+                    rel = res.is_reliable
+                    if not rel:
+                        detlang = ""
                 except Exception as e:
                     alt_text = remove_bad_chars(alt_text)
                     res = detector.FindLanguage(alt_text)
-                    detlang = res.language # keep pair if we made it so far
+                    detlang = res.language
+                    rel = res.is_reliable
+                    if not rel:
+                        detlang = ""
+                # keep pair or just url if we made it so far
             """ if detlang in ['bn', 'co', 'eo', 'fil', 'fy', 'gd', 'ha', 'haw', 'hmn', 'ig', 'km', 'ku', 'ky', 'lo', 'mi', 'mn', 'mt', 'ny', 'sd', 'si', 'sm', 'sn', 'so', 'st', 'su', 'sw', 'xh', 'yi', 'zu']:
                 detlang = ""
                 alt_text = "" """

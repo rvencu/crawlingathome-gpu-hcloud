@@ -3,26 +3,26 @@ import re
 import sys
 import time
 import uuid
+import queue
+import curses
 import shutil
 import tarfile
 import hashlib
 import requests
-import queue
 import threading
+import subprocess
 import clip_filter
 import pandas as pd
 from glob import glob
-from tqdm import tqdm
 from PIL import Image
 from pathlib import Path
-from colorama import Fore
 from statistics import mode
 import crawlingathome_client as cah
 from sqlalchemy import create_engine
 from configparser import ConfigParser
 sys.path.append('./crawlingathome-worker/')
 from multiprocessing import Queue, JoinableQueue, Process
-import subprocess
+
 
 # basic watcher that sends email when the script crashes as it is long ran
 import sentry_sdk
@@ -54,17 +54,6 @@ def config(filename='database.ini', section='postgresql'):
 
 def log(logqueue:Queue, msg):
     logqueue.put(msg)
-
-def os_system(cmd):
-    params = cmd.split(" ")
-    try:
-        p = Popen(params, stdout=PIPE, stderr=PIPE, stdin=PIPE)
-        output = p.stdout.read()
-        with open("gpusys.txt","ab") as f:
-            f.write(output)
-    except Exception as e:
-        with open("gpusys.txt","at") as f:
-            f.write(e + "\n")
 
 def monitor_curses(logqueue: Queue, screen):
     tick = 0
@@ -150,7 +139,7 @@ def invalidURL (client, job, jobtype, engine):
     if jobtype == 0:
         client.invalidURL()
     if jobtype == 1:
-        update_stmt1 = "DELETE FROM jobs WHERE jobid='{}'".format(job)
+        update_stmt1 = "UPDATE jobs set status=9 WHERE jobid='{}'".format(job)
         #update_stmt2 = "UPDATE dataset SET status = 0 WHERE prefix='{}'".format(job)
         conn = engine.raw_connection()
         cur = conn.cursor()
@@ -520,7 +509,7 @@ if __name__ == "__main__":
     params = config()
     engine = create_engine(f'postgresql://{params["user"]}:{params["password"]}@{params["host"]}:5432/{params["database"]}',pool_size=50, max_overflow=100)
 
-    groupsize = 40 # how many shards to group for CLIP
+    groupsize = 20 # how many shards to group for CLIP
 
     # folders cleanup (remove previous runs artifacts)
 
@@ -562,7 +551,7 @@ if __name__ == "__main__":
     
     sys.stderr = open('gpuerr.txt', 'a')
     sys.stdout = open('gpuout.txt', 'a')
-    import curses
+
     screen = curses.initscr()
     #mon = Process(target=monitor, args=[logqueue], daemon=True).start()
     mon = Process(target=monitor_curses, args=[logqueue, screen], daemon=True).start()
@@ -572,4 +561,3 @@ if __name__ == "__main__":
     upd = Process(target=upload_worker, args=[uploadqueue, counter, outbound, logqueue], daemon=True).start()
     
     gpu_worker(inbound, uploadqueue, gpuflag, groupsize, logqueue)
-
