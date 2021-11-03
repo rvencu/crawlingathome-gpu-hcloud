@@ -1,6 +1,6 @@
-<mxfile host="app.diagrams.net" modified="2021-11-03T16:52:19.845Z" agent="5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/95.0.4638.54 Safari/537.36 Edg/95.0.1020.30" etag="hRHvs4insxwmEjUuNYGR" version="15.3.8" type="github">
+<mxfile host="app.diagrams.net" modified="2021-11-03T16:53:53.930Z" agent="5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/95.0.4638.54 Safari/537.36 Edg/95.0.1020.30" etag="EqyAiIusWVc6lRFuP06_" version="15.3.8" type="github">
   <diagram id="HWF6cFD_o7p9VQBaK8Nd" name="Page-1">
-    <mxGraphModel dx="1422" dy="850" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" background="#949494" math="0" shadow="0">
+    <mxGraphModel dx="1422" dy="1677" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" background="#949494" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -186,6 +186,12 @@
         </mxCell>
         <mxCell id="q12cR9YonJrgc3rlI6Qn-12" value="DL STAGING 2&amp;nbsp;" style="pointerEvents=1;shadow=0;dashed=0;html=1;strokeColor=none;labelPosition=left;verticalLabelPosition=middle;verticalAlign=middle;outlineConnect=0;align=right;shape=mxgraph.office.servers.server_generic;fillColor=#DA4026;fontColor=#FFFFFF;" vertex="1" parent="1">
           <mxGeometry x="906.5" y="192" width="27" height="52" as="geometry" />
+        </mxCell>
+        <mxCell id="q12cR9YonJrgc3rlI6Qn-15" value="CLASSIC&lt;br&gt;(2 stages workflow)" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontColor=#FFFFFF;" vertex="1" parent="1">
+          <mxGeometry x="550" y="-30" width="120" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="q12cR9YonJrgc3rlI6Qn-16" value="DATABASE&lt;br&gt;(3 stages workflow)" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontColor=#FFFFFF;" vertex="1" parent="1">
+          <mxGeometry x="786.5" y="-30" width="120" height="30" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>
