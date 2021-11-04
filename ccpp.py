@@ -192,6 +192,8 @@ def parse_wat(content, start, line_count, i):
             """ if detlang in ['bn', 'co', 'eo', 'fil', 'fy', 'gd', 'ha', 'haw', 'hmn', 'ig', 'km', 'ku', 'ky', 'lo', 'mi', 'mn', 'mt', 'ny', 'sd', 'si', 'sm', 'sn', 'so', 'st', 'su', 'sw', 'xh', 'yi', 'zu']:
                 detlang = ""
                 alt_text = "" """
+            if alt_text == "" or alt_text is None:
+                continue
             if not url.startswith("http"):
                 url = urljoin(base_url, url)
             hash = hashlib.md5((url + alt_text).encode("utf-8")).hexdigest()
