@@ -143,9 +143,7 @@ def parse_wat(content, start, line_count, i):
         line_str = line.strip()
         data = ujson.loads(line_str)
         # find all links inside the line
-        linklist = data["Envelope"]["Payload-Metadata"]["HTTP-Response-Metadata"][
-            "HTML-Metadata"
-        ]["Links"]
+        linklist = data["Envelope"]["Payload-Metadata"]["HTTP-Response-Metadata"]["HTML-Metadata"]["Links"]
         # get base url
         base_url = os.path.dirname(
             data["Envelope"]["WARC-Header-Metadata"]["WARC-Target-URI"]
@@ -154,6 +152,8 @@ def parse_wat(content, start, line_count, i):
         for e in linklist:
             if "url" in e and "creativecommons.org/licenses/" in e["url"]:
                 license = e["url"]
+            if not "url" in e:
+                continue
             url = e["url"]
             if not _valid_url(url):
                 continue
@@ -305,6 +305,8 @@ def parse_wat(content, start, line_count, i):
     if failure:
         print(f"crash, cannot contact the parsed bloom server, please fix")
 
+    print ("parsing finished")
+
     return (final_kept_data, clpd, prsd)  # use a dict in order to remove duplicate tuples from list
 
 class FileData:
@@ -345,7 +347,7 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
     # this makes a loop to download new jobs while the script is running
     # normally it reads while client.jobCount() > 0
     while True:
-        try:
+        #try:
             print(f"[{i} multicpu] clock is {datetime.now().strftime('%H:%M:%S')}")
 
             start = time.time()
@@ -410,11 +412,11 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
             last = round(time.time() - start0)
             print(f"[{datetime.now().strftime('%H:%M:%S')} {i} stats] WAT job completed in {last} seconds")
            
-        except Exception as e:
-            print (e)
-            print (f"[{datetime.now().strftime('%H:%M:%S')} {i} multicpu] worker crashed")
-            time.sleep(60)
-            client = TempCPUWorker(url=CRAWLINGATHOME_SERVER_URL, nickname=YOUR_NICKNAME_FOR_THE_LEADERBOARD)
+        #except Exception as e:
+        #    print (e)
+        #    print (f"[{datetime.now().strftime('%H:%M:%S')} {i} multicpu] worker crashed")
+        #    time.sleep(60)
+        #    client = TempCPUWorker(url=CRAWLINGATHOME_SERVER_URL, nickname=YOUR_NICKNAME_FOR_THE_LEADERBOARD)
 
 if __name__ == '__main__':
     params = config()
