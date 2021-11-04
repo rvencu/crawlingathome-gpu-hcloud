@@ -154,7 +154,7 @@ def parse_wat(content, start, line_count, i):
                 license = e["url"][0:80]
             if not "url" in e:
                 continue
-            url = e["url"]
+            url = e["url"][0:2000]
             if not _valid_url(url):
                 continue
             # reject links of svg, gif or scripted images content
