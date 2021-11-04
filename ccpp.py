@@ -194,6 +194,8 @@ def parse_wat(content, start, line_count, i):
                 alt_text = "" """
             if alt_text == "" or alt_text is None:
                 continue
+            if len(alt_text) < 5:
+                continue
             if not url.startswith("http"):
                 url = urljoin(base_url, url)
             hash = hashlib.md5((url + alt_text).encode("utf-8")).hexdigest()
