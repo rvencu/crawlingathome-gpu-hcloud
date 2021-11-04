@@ -151,7 +151,7 @@ def parse_wat(content, start, line_count, i):
         license = "?"
         for e in linklist:
             if "url" in e and "creativecommons.org/licenses/" in e["url"]:
-                license = e["url"]
+                license = e["url"][0:80]
             if not "url" in e:
                 continue
             url = e["url"]
