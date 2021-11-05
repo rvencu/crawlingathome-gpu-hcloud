@@ -145,7 +145,8 @@ def parse_wat(content, start, line_count, i, debug):
     valid_data = []
     check_flag = set() # track urls and make them unique
     content.seek(start)
-    for _ in range(line_count):
+    print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] loop size is {line_count}")
+    for j in range(line_count):
         line = content.readline()
         if "IMG@" not in line:
             continue
@@ -208,6 +209,8 @@ def parse_wat(content, start, line_count, i, debug):
             if url not in check_flag:
                 valid_data.append((url, alt_text, license, domain, detlang, hash))
                 check_flag.add(url)
+            if j%50000 == 0:
+                print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] finished {j} out of {line_count} loops")
 
     tick = timeit(debug, tick, "loop finished")        
     print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] lenght of pairs to filter {len(valid_data)}")
