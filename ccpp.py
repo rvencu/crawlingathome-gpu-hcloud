@@ -405,11 +405,12 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
             tick = timeit(debug, tick, "dataframe preparation done")
 
             if len(parsed_df) > 0:
-                tick = timeit(debug, tick, "before sql copy")                
+                tick = timeit(debug, tick, "before sql copy")
+                parsed_df.to_csv(f"export_sql.txt", sep='\t', index=False, header=False)
                 conn = engine.raw_connection()
                 cur = conn.cursor()
                 with open(f"export_sql.txt", "rt") as f:
-                    cur.copy_from(f, 'dataset_test', columns=("sampleid","url","text","license","domain","wat","hash","language"))
+                    cur.copy_from(f, 'dataset', columns=("sampleid","url","text","license","domain","wat","hash","language"))
                 conn.commit()
                 cur.close()
                 conn.close()
