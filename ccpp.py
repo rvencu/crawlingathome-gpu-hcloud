@@ -45,8 +45,16 @@ def remove_bad_chars(text):
     # cleanup text so language can be detected
     return "".join(c for c in text if c.isprintable())
 
+def timeit(debug, tick, msg):
+    if not debug:
+        return
+    else:
+        print (f"{msg} time chunk {round(time.time()-tick,2)} sec.")
+        return time.time()
 
-def parse_wat(content, start, line_count, i):
+
+def parse_wat(content, start, line_count, i, debug):
+    tick = time.time()
     """
     This function checks the wat file content and attempts to extract valid candidates of image urls and alt texts
 
@@ -130,7 +138,8 @@ def parse_wat(content, start, line_count, i):
     bloomip = "116.202.162.146"
     bloom2ip = "94.130.167.172"
 
-    print (f"[{i} parser] start parsing")  
+    print (f"[{i} parser] start parsing")
+    tick = timeit(debug, tick, "start parsing")
 
     clpd = 0
     valid_data = []
@@ -154,7 +163,7 @@ def parse_wat(content, start, line_count, i):
                 license = e["url"][0:80]
             if not "url" in e:
                 continue
-            url = e["url"][0:2000]
+            url = e["url"][0:2000].replace("\n","").replace('\\','\\\\')
             if not _valid_url(url):
                 continue
             # reject links of svg, gif or scripted images content
@@ -185,18 +194,22 @@ def parse_wat(content, start, line_count, i):
             """ if detlang in ['bn', 'co', 'eo', 'fil', 'fy', 'gd', 'ha', 'haw', 'hmn', 'ig', 'km', 'ku', 'ky', 'lo', 'mi', 'mn', 'mt', 'ny', 'sd', 'si', 'sm', 'sn', 'so', 'st', 'su', 'sw', 'xh', 'yi', 'zu']:
                 detlang = ""
                 alt_text = "" """
+            # get rid of Latn suffix when detected
+            if detlang != "":
+                detlang = detlang.split("-")[0]
             if alt_text == "" or alt_text is None:
                 continue
             if len(alt_text) < 5:
                 continue
-            alt_text = alt_text[0:2000]
+            alt_text = alt_text[0:2000].replace("\t"," ").replace("\n"," ").replace('\\','\\\\') # will use tab as field separator for copy source
             if not url.startswith("http"):
                 url = urljoin(base_url, url)
             hash = hashlib.md5((url + alt_text).encode("utf-8")).hexdigest()
             if url not in check_flag:
                 valid_data.append((url, alt_text, license, domain, detlang, hash))
                 check_flag.add(url)
-            
+
+    tick = timeit(debug, tick, "loop finished")        
     print(f"[{i} parser] lenght of pairs to filter {len(valid_data)}")
     s = time.time()
 
@@ -209,6 +222,7 @@ def parse_wat(content, start, line_count, i):
         'key': (None, 'clipped'),
     }
     
+    tick = timeit(debug, tick, "clip bloom prepared")
     failure = True
     for _ in range(10):
         try:
@@ -225,9 +239,10 @@ def parse_wat(content, start, line_count, i):
         print(f"[{i} parser] crash, cannot contact the clipped bloom server, please fix")
         return  (None, 0, 0)
 
-    valid_hashes = response.content.decode("utf-8").split("\n")
+    valid_hashes = set(response.content.decode("utf-8").split("\n"))
 
-    print(f"[{i} parser]  clipped bloom server returned {len(valid_hashes)} in {round(time.time()-s,3)} sec")
+    print(f"[{i} parser] clipped bloom server returned {len(valid_hashes)} in {round(time.time()-s,3)} sec")
+    tick = timeit(debug, tick, "clip bloom done")
 
     valid_data = [t for t in {tuple(i) for i in valid_data}]
     kept_data = []
@@ -248,6 +263,7 @@ def parse_wat(content, start, line_count, i):
         'key': (None, 'parsed'),
     }
     
+    tick = timeit(debug, tick, "parsed bloom prepared")
     failure = True
     for _ in range(10):
         try:
@@ -264,9 +280,10 @@ def parse_wat(content, start, line_count, i):
         print(f"[{i} parser] crash, cannot contact the parsed bloom server, please fix")
         return (None, 0, 0)
 
-    valid_urls = response.content.decode("utf-8").split("\n")
+    valid_urls = set(response.content.decode("utf-8").split("\n"))
 
     print(f"[{i} parser] parsed bloom server returned {len(valid_urls)} in {round(time.time()-s,3)} sec")
+    tick = timeit(debug, tick, "parsed bloom done")
 
     valid_data = [t for t in {tuple(i) for i in kept_data}]
     final_kept_data = []
@@ -288,6 +305,7 @@ def parse_wat(content, start, line_count, i):
         'key': (None, 'parsed'),
     }
     
+    tick = timeit(debug, tick, "add to parsed bloom prepared")
     failure = True
     for _ in range(10):
         try:
@@ -303,7 +321,7 @@ def parse_wat(content, start, line_count, i):
     if failure:
         print(f"crash, cannot contact the parsed bloom server, please fix")
 
-    print ("parsing finished")
+    tick = timeit(debug, tick, "add to parsed bloom done")
 
     return (final_kept_data, clpd, prsd)  # use a dict in order to remove duplicate tuples from list
 
@@ -328,7 +346,7 @@ class FileData:
     def __len__(self):
         return self._length
 
-def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVER_URL, engine, host):
+def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVER_URL, engine, host, debug):
     # initialize working folders
     tmp_folder = f"./{i}/.tmp/"
 
@@ -346,6 +364,7 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
     # normally it reads while client.jobCount() > 0
     while True:
         #try:
+            tick = time.time()
             print(f"[{i} multicpu] clock is {datetime.now().strftime('%H:%M:%S')}")
 
             start = time.time()
@@ -353,7 +372,9 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
 
             # get new job and download the wat file
             client.newJob()
+            tick = timeit(debug, tick, "got new job")
             client.downloadWat(tmp_folder)
+            tick = timeit(debug, tick, "downloaded wat")
 
             print (f"[{datetime.now().strftime('%H:%M:%S')} {i} multicpu] downloaded wat in {round(time.time()-start,2)}")
             start = time.time()
@@ -365,10 +386,11 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
                         
             # parse valid links from wat file
             with open(tmp_folder + "shard.wat", "r") as infile:
-                parsed_data, clpd, prsd = parse_wat(infile, start_index, lines, i)
+                parsed_data, clpd, prsd = parse_wat(infile, start_index, lines, i, debug)
 
             if parsed_data is None:
                 continue
+            tick = timeit(debug, tick, "parsing finalized")
 
             print (f"[{datetime.now().strftime('%H:%M:%S')} {i} multicpu] parsed wat in {round(time.time()-start,2)}")
             start = time.time()
@@ -378,32 +400,20 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
             parsed_df = parsed_df.drop_duplicates(subset=["url"])
             parsed_df.insert(0, 'sampleid', range(first_sample_id, first_sample_id + len(parsed_df)))
             parsed_df["wat"] = int(client.shards[-1][0])
+            parsed_df = parsed_df[["sampleid","url","text","license","domain","wat","hash","language"]]
+
+            tick = timeit(debug, tick, "dataframe preparation done")
 
             if len(parsed_df) > 0:
-                #parsed_df.loc[:,"url_hash"] = parsed_df.url.apply(lambda x: hashlib.md5(str(x).encode("utf-8")).hexdigest())
-                df_columns = list(parsed_df)
-                # create (col1,col2,...)
-                columns = ",".join(df_columns)
-
-                # create VALUES('%s', '%s",...) one '%s' per column
-                values = "VALUES({})".format(",".join(["%s" for _ in df_columns]))
-
-                #create INSERT INTO table (columns) VALUES('%s',...)
-                insert_stmt = "INSERT INTO {} ({}) {}".format("dataset", columns, values)
-
-                # alternative start
-                parsed_df.to_csv(f"export_sql.txt", sep='\t', index=False)
-
-                # alternative end
-                
+                tick = timeit(debug, tick, "before sql copy")                
                 conn = engine.raw_connection()
                 cur = conn.cursor()
-                psycopg2.extras.execute_batch(cur, insert_stmt, parsed_df.values)
-                #with open(f"export_sql.txt", "rt") as f:
-                #    cur.copy_from(f, 'dataset_test')
+                with open(f"export_sql.txt", "rt") as f:
+                    cur.copy_from(f, 'dataset_test', columns=("sampleid","url","text","license","domain","wat","hash","language"))
                 conn.commit()
                 cur.close()
                 conn.close()
+                tick = timeit(debug, tick, "finished sql copy")
             print (f"[{datetime.now().strftime('%H:%M:%S')} {i} multicpu] saved links in {round(time.time()-start,2)}")
 
             lastlinks = len(parsed_data)
@@ -413,6 +423,7 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
             prefixes[str(client.shards[0][0])] = f"postgres {host}"
             prefixes[str(client.shards[1][0])] = f"postgres {host}"
             client.completeJob(prefixes)
+            tick = timeit(debug, tick, "executed complete job")
 
             last = round(time.time() - start0)
             print(f"[{datetime.now().strftime('%H:%M:%S')} {i} stats] WAT job completed in {last} seconds")
@@ -429,9 +440,6 @@ if __name__ == '__main__':
     # initialize client variables
     YOUR_NICKNAME_FOR_THE_LEADERBOARD = os.getenv('CAH_NICKNAME')
 
-    if len(sys.argv) > 2:
-        YOUR_NICKNAME_FOR_THE_LEADERBOARD = sys.argv[2]
-
     if YOUR_NICKNAME_FOR_THE_LEADERBOARD is None:
         YOUR_NICKNAME_FOR_THE_LEADERBOARD = "ccpp-dev"
     CRAWLINGATHOME_SERVER_URL = "http://cah.io.community/"
@@ -439,14 +447,17 @@ if __name__ == '__main__':
     print (f"starting session under `{YOUR_NICKNAME_FOR_THE_LEADERBOARD}` nickname")
 
     procs = cpu_count()
+    debug = False
     if len(sys.argv) > 1:
         procs = int(sys.argv[1])
+    if len(sys.argv) > 2:
+        debug = True
 
     engine = create_engine(f'postgresql://{params["user"]}:{params["password"]}@{params["host"]}:5432/{params["database"]}', pool_size=procs, max_overflow=int(procs*1.5), pool_pre_ping=True)
     workers = []
     for i in range ( procs ):
         #use this queue to annount that bloom is currently processing and please do not update filters. if queue is not empty please wait, if queue is empty you may update filters
-        workers.append(Process(target=proc_worker, args= [i, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVER_URL, engine, params["host"]], daemon=True))
+        workers.append(Process(target=proc_worker, args= [i, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVER_URL, engine, params["host"], debug], daemon=True))
 
     time.sleep(10)
 
@@ -457,7 +468,3 @@ if __name__ == '__main__':
     while True:
         #keep main process alive
         time.sleep(60)
-
-
-
-
