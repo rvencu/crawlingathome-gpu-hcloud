@@ -389,11 +389,18 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
                 values = "VALUES({})".format(",".join(["%s" for _ in df_columns]))
 
                 #create INSERT INTO table (columns) VALUES('%s',...)
-                insert_stmt = "INSERT INTO {} ({}) {} ON CONFLICT (url_hash) DO NOTHING".format("dataset", columns, values)
+                insert_stmt = "INSERT INTO {} ({}) {}".format("dataset", columns, values)
+
+                # alternative start
+                parsed_df.to_csv(f"export_sql.txt", sep='\t', index=False)
+
+                # alternative end
                 
                 conn = engine.raw_connection()
                 cur = conn.cursor()
                 psycopg2.extras.execute_batch(cur, insert_stmt, parsed_df.values)
+                #with open(f"export_sql.txt", "rt") as f:
+                #    cur.copy_from(f, 'dataset_test')
                 conn.commit()
                 cur.close()
                 conn.close()
