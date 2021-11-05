@@ -138,7 +138,7 @@ def parse_wat(content, start, line_count, i, debug):
     bloomip = "116.202.162.146"
     bloom2ip = "94.130.167.172"
 
-    print (f"[{i} parser] start parsing")
+    print (f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] start parsing")
     tick = timeit(debug, tick, "start parsing")
 
     clpd = 0
@@ -190,10 +190,10 @@ def parse_wat(content, start, line_count, i, debug):
                 rel = res.is_reliable
                 if not rel:
                     detlang = ""
-                # keep pair or just url if we made it so far
-            """ if detlang in ['bn', 'co', 'eo', 'fil', 'fy', 'gd', 'ha', 'haw', 'hmn', 'ig', 'km', 'ku', 'ky', 'lo', 'mi', 'mn', 'mt', 'ny', 'sd', 'si', 'sm', 'sn', 'so', 'st', 'su', 'sw', 'xh', 'yi', 'zu']:
-                detlang = ""
-                alt_text = "" """
+            # keep pair or just url if we made it so far
+            """ 
+            if detlang in ['bn', 'co', 'eo', 'fil', 'fy', 'gd', 'ha', 'haw', 'hmn', 'ig', 'km', 'ku', 'ky', 'lo', 'mi', 'mn', 'mt', 'ny', 'sd', 'si', 'sm', 'sn', 'so', 'st', 'su', 'sw', 'xh', 'yi', 'zu']:
+            """
             # get rid of Latn suffix when detected
             if detlang != "":
                 detlang = detlang.split("-")[0]
@@ -210,7 +210,7 @@ def parse_wat(content, start, line_count, i, debug):
                 check_flag.add(url)
 
     tick = timeit(debug, tick, "loop finished")        
-    print(f"[{i} parser] lenght of pairs to filter {len(valid_data)}")
+    print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] lenght of pairs to filter {len(valid_data)}")
     s = time.time()
 
     # remove from valid_data elements rejected by clipped bloom server
@@ -228,7 +228,7 @@ def parse_wat(content, start, line_count, i, debug):
         try:
             response = requests.post(f'http://{bloomip}:8000/deduplicate/', files=post)
             if response.status_code != 200:
-                print(f"[{i} parser] bloom server error, retrying...")
+                print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] bloom server error, retrying...")
                 time.sleep(15)            
             else:
                 failure = False
@@ -236,12 +236,12 @@ def parse_wat(content, start, line_count, i, debug):
         except:
             time.sleep(15)
     if failure:
-        print(f"[{i} parser] crash, cannot contact the clipped bloom server, please fix")
+        print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] crash, cannot contact the clipped bloom server, please fix")
         return  (None, 0, 0)
 
     valid_hashes = set(response.content.decode("utf-8").split("\n"))
 
-    print(f"[{i} parser] clipped bloom server returned {len(valid_hashes)} in {round(time.time()-s,3)} sec")
+    print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] clipped bloom server returned {len(valid_hashes)} in {round(time.time()-s,3)} sec")
     tick = timeit(debug, tick, "clip bloom done")
 
     valid_data = [t for t in {tuple(i) for i in valid_data}]
@@ -269,7 +269,7 @@ def parse_wat(content, start, line_count, i, debug):
         try:
             response = requests.post(f'http://{bloom2ip}:8000/deduplicate/', files=post)
             if response.status_code != 200:
-                print(f"[{i} parser] bloom server error, retrying...")
+                print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] bloom server error, retrying...")
                 time.sleep(15)            
             else:
                 failure = False
@@ -277,12 +277,12 @@ def parse_wat(content, start, line_count, i, debug):
         except:
             time.sleep(15)
     if failure:
-        print(f"[{i} parser] crash, cannot contact the parsed bloom server, please fix")
+        print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] crash, cannot contact the parsed bloom server, please fix")
         return (None, 0, 0)
 
     valid_urls = set(response.content.decode("utf-8").split("\n"))
 
-    print(f"[{i} parser] parsed bloom server returned {len(valid_urls)} in {round(time.time()-s,3)} sec")
+    print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] parsed bloom server returned {len(valid_urls)} in {round(time.time()-s,3)} sec")
     tick = timeit(debug, tick, "parsed bloom done")
 
     valid_data = [t for t in {tuple(i) for i in kept_data}]
@@ -294,7 +294,7 @@ def parse_wat(content, start, line_count, i, debug):
             final_kept_data.append(item)
             prsd -= 1
 
-    print(f"[{i} parser] lenght of deduplicated pairs to return {len(final_kept_data)}")
+    print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] lenght of deduplicated pairs to return {len(final_kept_data)}")
 
     # add parsed urls to parsed bloom server
     with open('hash.txt', 'w') as f:
@@ -311,7 +311,7 @@ def parse_wat(content, start, line_count, i, debug):
         try:
             response = requests.post(f'http://{bloom2ip}:8000/add/', files=post)
             if response.status_code != 200:
-                print(f"bloom server error, retrying...")
+                print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] bloom server error, retrying...")
                 time.sleep(15)            
             else:
                 failure = False
@@ -319,7 +319,7 @@ def parse_wat(content, start, line_count, i, debug):
         except:
             time.sleep(15)
     if failure:
-        print(f"crash, cannot contact the parsed bloom server, please fix")
+        print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] crash, cannot contact the parsed bloom server, please fix")
 
     tick = timeit(debug, tick, "add to parsed bloom done")
 
@@ -363,9 +363,9 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
     # this makes a loop to download new jobs while the script is running
     # normally it reads while client.jobCount() > 0
     while True:
-        #try:
+        try:
             tick = time.time()
-            print(f"[{i} multicpu] clock is {datetime.now().strftime('%H:%M:%S')}")
+            print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] clock is {datetime.now().strftime('%H:%M:%S')}")
 
             start = time.time()
             start0 = start
@@ -376,7 +376,7 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
             client.downloadWat(tmp_folder)
             tick = timeit(debug, tick, "downloaded wat")
 
-            print (f"[{datetime.now().strftime('%H:%M:%S')} {i} multicpu] downloaded wat in {round(time.time()-start,2)}")
+            print (f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] downloaded wat in {round(time.time()-start,2)}")
             start = time.time()
 
             fd = FileData(tmp_folder + 'shard.wat')
@@ -392,7 +392,7 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
                 continue
             tick = timeit(debug, tick, "parsing finalized")
 
-            print (f"[{datetime.now().strftime('%H:%M:%S')} {i} multicpu] parsed wat in {round(time.time()-start,2)}")
+            print (f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] parsed wat in {round(time.time()-start,2)}")
             start = time.time()
 
             # convert to dataframe and save to disk (for statistics and generating blocking lists)
@@ -415,10 +415,10 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
                 cur.close()
                 conn.close()
                 tick = timeit(debug, tick, "finished sql copy")
-            print (f"[{datetime.now().strftime('%H:%M:%S')} {i} multicpu] saved links in {round(time.time()-start,2)}")
+            print (f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] saved links in {round(time.time()-start,2)}")
 
             lastlinks = len(parsed_data)
-            print (f"[{datetime.now().strftime('%H:%M:%S')} {i} multicpu] this job has {lastlinks} links left after removing {clpd} already clipped and {prsd} already parsed")
+            print (f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] this job has {lastlinks} links left after removing {clpd} already clipped and {prsd} already parsed")
 
             prefixes = {}
             prefixes[str(client.shards[0][0])] = f"postgres {host}"
@@ -429,11 +429,11 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
             last = round(time.time() - start0)
             print(f"[{datetime.now().strftime('%H:%M:%S')} {i} stats] WAT job completed in {last} seconds")
            
-        #except Exception as e:
-        #    print (e)
-        #    print (f"[{datetime.now().strftime('%H:%M:%S')} {i} multicpu] worker crashed")
-        #    time.sleep(60)
-        #    client = TempCPUWorker(url=CRAWLINGATHOME_SERVER_URL, nickname=YOUR_NICKNAME_FOR_THE_LEADERBOARD)
+        except Exception as e:
+            print (f"[{datetime.now().strftime('%H:%M:%S')} exception {i} parser] {e}")
+            print (f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] worker crashed")
+            time.sleep(60)
+            client = TempCPUWorker(url=CRAWLINGATHOME_SERVER_URL, nickname=YOUR_NICKNAME_FOR_THE_LEADERBOARD)
 
 if __name__ == '__main__':
     params = config()
