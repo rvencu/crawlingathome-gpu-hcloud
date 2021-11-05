@@ -168,7 +168,7 @@ def parse_wat(content, start, line_count, i, debug):
             if not _valid_url(url):
                 continue
             # reject links of svg, gif or scripted images content
-            if any( x in url for x in [".svg", ".gif", "data:image", "javascript:"] ):
+            if any( x in url for x in {".svg", ".gif", "data:image", "javascript:"} ):
                 continue
             try:
                 domain = urlparse(url).hostname
@@ -209,8 +209,8 @@ def parse_wat(content, start, line_count, i, debug):
             if url not in check_flag:
                 valid_data.append((url, alt_text, license, domain, detlang, hash))
                 check_flag.add(url)
-            if j%50000 == 0:
-                print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] finished {j} out of {line_count} loops")
+        if j%50000 == 0:
+            print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] finished {j} out of {line_count} loops")
 
     tick = timeit(debug, tick, "loop finished")        
     print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] lenght of pairs to filter {len(valid_data)}")
