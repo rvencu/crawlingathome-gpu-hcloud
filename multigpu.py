@@ -633,7 +633,7 @@ if __name__ == "__main__":
 
     time.sleep(10)
 
-    groupsize = 30 # how many shards to group for CLIP
+    groupsize = 17 # how many shards to group for CLIP
 
     gpuid = 0
     if len(sys.argv) > 1:
@@ -642,7 +642,6 @@ if __name__ == "__main__":
     params = config()
     engine = create_engine(f'postgresql://{params["user"]}:{params["password"]}@{params["host"]}:5432/{params["database"]}',pool_size=50, max_overflow=100)
 
-    groupsize = 20 # how many shards to group for CLIP
     # folders cleanup (remove previous runs artifacts)
 
     if not os.path.exists("./stats/"):

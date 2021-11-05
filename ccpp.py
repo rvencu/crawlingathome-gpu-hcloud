@@ -380,7 +380,7 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
             parsed_df["wat"] = int(client.shards[-1][0])
 
             if len(parsed_df) > 0:
-                parsed_df.loc[:,"url_hash"] = parsed_df.url.apply(lambda x: hashlib.md5(str(x).encode("utf-8")).hexdigest())
+                #parsed_df.loc[:,"url_hash"] = parsed_df.url.apply(lambda x: hashlib.md5(str(x).encode("utf-8")).hexdigest())
                 df_columns = list(parsed_df)
                 # create (col1,col2,...)
                 columns = ",".join(df_columns)
