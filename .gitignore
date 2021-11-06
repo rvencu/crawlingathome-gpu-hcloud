@@ -178,3 +178,5 @@ gpuerr.txt
 database.ini
 temp.gz
 gpuout.txt
+[0-9]/
+[1-9][0-9]/

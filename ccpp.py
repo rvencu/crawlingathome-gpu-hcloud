@@ -1,5 +1,4 @@
 import os
-import re
 import sys
 import time
 import ftfy
@@ -16,6 +15,8 @@ from datetime import datetime
 from sqlalchemy import create_engine
 from configparser import ConfigParser
 from urllib.parse import urlparse, urljoin
+from django.core.validators import URLValidator
+from django.core.exceptions import ValidationError
 from multiprocessing import Process, cpu_count
 from crawlingathome_client.temp import TempCPUWorker
 
@@ -37,6 +38,13 @@ def config(filename='database.ini', section='postgresql'):
 
     return db
 
+def is_valid_url(url_string: str) -> bool:
+    validate_url = URLValidator()
+    try:
+        validate_url(url_string)
+    except ValidationError as e:
+        return False
+    return True
 
 def log(e):
     with open("errors.txt","a") as f:
@@ -54,7 +62,7 @@ def timeit(debug, tick, msg):
         return time.time()
 
 
-def parse_wat(content, start, line_count, i, debug):
+def parse_wat(content, i, debug):
     tick = time.time()
     """
     This function checks the wat file content and attempts to extract valid candidates of image urls and alt texts
@@ -65,76 +73,6 @@ def parse_wat(content, start, line_count, i, debug):
     
     output: a list of tuples (url, text, license, domain, hash)
     """
-
-    ip_middle_octet = u"(?:\.(?:1?\d{1,2}|2[0-4]\d|25[0-5]))"
-    ip_last_octet = u"(?:\.(?:[1-9]\d?|1\d\d|2[0-4]\d|25[0-4]))"
-
-    regex = re.compile(
-        u"^"
-        # protocol identifier
-        u"(?:(?:https?|ftp)://)"
-        # user:pass authentication
-        u"(?:\S+(?::\S*)?@)?"
-        u"(?:"
-        u"(?P<private_ip>"
-        # IP address exclusion
-        # private & local networks
-        u"(?:(?:10|127)" + ip_middle_octet + u"{2}" + ip_last_octet + u")|"
-        u"(?:(?:169\.254|192\.168)" + ip_middle_octet + ip_last_octet + u")|"
-        u"(?:172\.(?:1[6-9]|2\d|3[0-1])" + ip_middle_octet + ip_last_octet + u"))"
-        u"|"
-        # IP address dotted notation octets
-        # excludes loopback network 0.0.0.0
-        # excludes reserved space >= 224.0.0.0
-        # excludes network & broadcast addresses
-        # (first & last IP address of each class)
-        u"(?P<public_ip>"
-        u"(?:[1-9]\d?|1\d\d|2[01]\d|22[0-3])"
-        u"" + ip_middle_octet + u"{2}"
-        u"" + ip_last_octet + u")"
-        u"|"
-        # host name
-        u"(?:(?:[a-z\u00a1-\uffff0-9]-?)*[a-z\u00a1-\uffff0-9]+)"
-        # domain name
-        u"(?:\.(?:[a-z\u00a1-\uffff0-9]-?)*[a-z\u00a1-\uffff0-9]+)*"
-        # TLD identifier
-        u"(?:\.(?:[a-z\u00a1-\uffff]{2,}))"
-        u")"
-        # port number
-        u"(?::\d{2,5})?"
-        # resource path
-        u"(?:/\S*)?"
-        # query string
-        u"(?:\?\S*)?"
-        u"$",
-        re.UNICODE | re.IGNORECASE
-    )
-
-    pattern = re.compile(regex)
-
-    def _valid_url(value, public=True):
-        """
-        Return whether or not given value is a valid URL.
-        This validator is based on the wonderful `URL validator of dperini`_.
-        .. _URL validator of dperini:
-            https://gist.github.com/dperini/729294
-        Examples::
-            >>> url('http://foobar.dk')
-            True
-            >>> url('http://10.0.0.1')
-            True
-            >>> url('http://foobar.d')
-            ValidationFailure(func=url, ...)
-            >>> url('http://10.0.0.1', public=True)
-            ValidationFailure(func=url, ...)
-        :param value: URL address string to validate
-        :param public: (default=False) Set True to only allow a public IP address
-        """
-        result = pattern.match(value)
-        if not public:
-            return result
-
-        return result and not result.groupdict()["private_ip"]
 
     bloomip = "116.202.162.146"
     bloom2ip = "94.130.167.172"
@@ -147,10 +85,9 @@ def parse_wat(content, start, line_count, i, debug):
     clpd = 0
     valid_data = []
     check_flag = set() # track urls and make them unique
-    content.seek(start)
-    print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] loop size is {line_count}")
-    for j in tqdm(range(line_count), position=i, desc=f"{i} parser"):
-        line = content.readline()
+    content.seek(0)
+
+    for line in tqdm(content, position=i, desc=f"{i} parser"):
         if "IMG@" not in line:
             continue
         line_str = line.strip()
@@ -168,7 +105,10 @@ def parse_wat(content, start, line_count, i, debug):
             if not "url" in e:
                 continue
             url = e["url"][0:2000].replace("\n","").replace('\\','\\\\')
-            if not _valid_url(url):
+            try:
+                if not is_valid_url(url):
+                    continue
+            except:
                 continue
             # reject links of svg, gif or scripted images content
             if any( x in url for x in {".svg", ".gif", "data:image", "javascript:"} ):
@@ -214,7 +154,6 @@ def parse_wat(content, start, line_count, i, debug):
                 valid_data.append((url, alt_text, license, domain, detlang, hash))
                 check_flag.add(url)
 
-    #detector.close()
 
     tick = timeit(debug, tick, "loop finished")        
     print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] lenght of pairs to filter {len(valid_data)}")
@@ -332,27 +271,6 @@ def parse_wat(content, start, line_count, i, debug):
 
     return (final_kept_data, clpd, prsd)  # use a dict in order to remove duplicate tuples from list
 
-class FileData:
-    """
-    Helper class to easily find wat file size, mid position, etc
-    """
-
-    def __init__(self, filename):
-        self._filename = filename
-        self._line_to_position = [0]
-        self._length = 0
-
-        with open(self._filename, 'r') as f:
-            while f.readline():
-                self._line_to_position.append(f.tell())
-                self._length += 1
-    
-    def __getitem__(self, line):
-        return self._line_to_position[line]
-
-    def __len__(self):
-        return self._length
-
 def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVER_URL, engine, host, debug):
     # initialize working folders
     tmp_folder = f"./{i}/.tmp/"
@@ -386,14 +304,11 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
             print (f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] downloaded wat in {round(time.time()-start,2)}")
             start = time.time()
 
-            fd = FileData(tmp_folder + 'shard.wat')
-            lines = len(fd)
-            start_index = fd[0]
             first_sample_id = np.int64(client.shards[0][1]["start_id"])
                         
             # parse valid links from wat file
             with open(tmp_folder + "shard.wat", "r") as infile:
-                parsed_data, clpd, prsd = parse_wat(infile, start_index, lines, i, debug)
+                parsed_data, clpd, prsd = parse_wat(infile, i, debug)
 
             if parsed_data is None:
                 continue
