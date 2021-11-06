@@ -11,6 +11,7 @@ import psycopg2
 import requests
 import numpy as np
 import pandas as pd
+from tqdm.auto import tqdm
 from datetime import datetime
 from sqlalchemy import create_engine
 from configparser import ConfigParser
@@ -141,16 +142,14 @@ def parse_wat(content, start, line_count, i, debug):
     print (f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] start parsing")
     tick = timeit(debug, tick, "start parsing")
 
-    detector = gcld3.NNetLanguageIdentifier(min_num_bytes=6, max_num_bytes=1000)
+    detector = gcld3.NNetLanguageIdentifier(min_num_bytes=5, max_num_bytes=2000)
 
     clpd = 0
     valid_data = []
     check_flag = set() # track urls and make them unique
     content.seek(start)
     print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] loop size is {line_count}")
-    for j in range(line_count):
-        if j%50000 == 0:
-            print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] started {j} out of {line_count} loops")
+    for j in tqdm(range(line_count), position=i, desc=f"{i} parser"):
         line = content.readline()
         if "IMG@" not in line:
             continue
@@ -178,21 +177,24 @@ def parse_wat(content, start, line_count, i, debug):
                 domain = urlparse(url).hostname
             except:
                 continue
-            if domain is None:
+            if domain is None or domain == "":
                 continue
             if len(str(domain)) > 60:
                 continue
             detlang = ""
             alt_text = ""
-            if "alt" in e:
-                # detect ALT text language
-                alt_text = ftfy.fix_text(e["alt"].replace("\n", " ")).strip()
-                alt_text = remove_bad_chars(alt_text)
-                res = detector.FindLanguage(alt_text)
-                detlang = res.language
-                rel = res.is_reliable
-                if not rel:
-                    detlang = ""
+            try:
+                if "alt" in e:
+                    # detect ALT text language
+                    alt_text = ftfy.fix_text(e["alt"].replace("\n", " ")).strip()
+                    alt_text = remove_bad_chars(alt_text)
+                    res = detector.FindLanguage(alt_text)
+                    detlang = res.language
+                    rel = res.is_reliable
+                    if not rel:
+                        detlang = ""
+            except:
+                pass
             # keep pair or just url if we made it so far
             """ 
             if detlang in ['bn', 'co', 'eo', 'fil', 'fy', 'gd', 'ha', 'haw', 'hmn', 'ig', 'km', 'ku', 'ky', 'lo', 'mi', 'mn', 'mt', 'ny', 'sd', 'si', 'sm', 'sn', 'so', 'st', 'su', 'sw', 'xh', 'yi', 'zu']:
@@ -211,8 +213,8 @@ def parse_wat(content, start, line_count, i, debug):
             if url not in check_flag:
                 valid_data.append((url, alt_text, license, domain, detlang, hash))
                 check_flag.add(url)
-        if j%50000 == 0:
-            print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] finished {j} out of {line_count} loops")
+
+    #detector.close()
 
     tick = timeit(debug, tick, "loop finished")        
     print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] lenght of pairs to filter {len(valid_data)}")
