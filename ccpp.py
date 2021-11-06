@@ -141,12 +141,16 @@ def parse_wat(content, start, line_count, i, debug):
     print (f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] start parsing")
     tick = timeit(debug, tick, "start parsing")
 
+    detector = gcld3.NNetLanguageIdentifier(min_num_bytes=6, max_num_bytes=1000)
+
     clpd = 0
     valid_data = []
     check_flag = set() # track urls and make them unique
     content.seek(start)
     print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] loop size is {line_count}")
     for j in range(line_count):
+        if j%50000 == 0:
+            print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] started {j} out of {line_count} loops")
         line = content.readline()
         if "IMG@" not in line:
             continue
@@ -161,7 +165,7 @@ def parse_wat(content, start, line_count, i, debug):
         license = "?"
         for e in linklist:
             if "url" in e and "creativecommons.org/licenses/" in e["url"]:
-                license = e["url"][0:80]
+                license = e["url"][0:80].replace("\n","").replace('\\','\\\\')
             if not "url" in e:
                 continue
             url = e["url"][0:2000].replace("\n","").replace('\\','\\\\')
@@ -183,8 +187,6 @@ def parse_wat(content, start, line_count, i, debug):
             if "alt" in e:
                 # detect ALT text language
                 alt_text = ftfy.fix_text(e["alt"].replace("\n", " ")).strip()
-                detector = gcld3.NNetLanguageIdentifier(min_num_bytes=6, max_num_bytes=1000)
-
                 alt_text = remove_bad_chars(alt_text)
                 res = detector.FindLanguage(alt_text)
                 detlang = res.language
