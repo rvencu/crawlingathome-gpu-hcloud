@@ -5,6 +5,7 @@ import ftfy
 import ujson
 import gcld3
 import shutil
+import argparse
 import hashlib
 import psycopg2
 import requests
@@ -21,11 +22,15 @@ from multiprocessing import Process, cpu_count
 from crawlingathome_client.temp import TempCPUWorker
 
 
-def config(filename='database.ini', section='postgresql'):
+def config(filename='database.ini', mode="test"):
     # create a parser
     parser = ConfigParser()
     # read config file
     parser.read(filename)
+
+    section='postgresql'
+    if mode == "production":
+        section='cah_production'
 
     # get section, default to postgresql
     db = {}
@@ -358,23 +363,34 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
             client = TempCPUWorker(url=CRAWLINGATHOME_SERVER_URL, nickname=YOUR_NICKNAME_FOR_THE_LEADERBOARD)
 
 if __name__ == '__main__':
-    params = config()
+    
+    parser = argparse.ArgumentParser(prog=sys.argv[0], usage='%(prog)s -m/--mode -c/--cpus -n/--name -d/--debug')
+    parser.add_argument("-n","--name",action='append',help="Your leaderboard nickname",required=False)
+    parser.add_argument("-c","--cpus",action='append',help="How many cpus to use",required=False)
+    parser.add_argument("-d","--debug",action='append',help="Print debug lines?",required=False)
+    parser.add_argument("-m","--mode",action='append',help="Mode to run",required=True)
+    args = parser.parse_args()
 
     # initialize client variables
-    YOUR_NICKNAME_FOR_THE_LEADERBOARD = os.getenv('CAH_NICKNAME')
+    YOUR_NICKNAME_FOR_THE_LEADERBOARD = None
+    if args.name is not None:
+        YOUR_NICKNAME_FOR_THE_LEADERBOARD = " ".join(args.name)
 
-    if YOUR_NICKNAME_FOR_THE_LEADERBOARD is None:
+    if YOUR_NICKNAME_FOR_THE_LEADERBOARD in (None,""):
         YOUR_NICKNAME_FOR_THE_LEADERBOARD = "ccpp-dev"
     CRAWLINGATHOME_SERVER_URL = "http://cah.io.community/"
 
     print (f"starting session under `{YOUR_NICKNAME_FOR_THE_LEADERBOARD}` nickname")
 
     procs = cpu_count()
+    if args.cpus is not None and int(args.cpus[0]) > 1:
+        procs = int(args.cpus[0])
+
     debug = False
-    if len(sys.argv) > 1:
-        procs = int(sys.argv[1])
-    if len(sys.argv) > 2:
+    if args.debug is not None and  args.debug[0] == "true":
         debug = True
+
+    params = config(mode=args.mode[0])
 
     engine = create_engine(f'postgresql://{params["user"]}:{params["password"]}@{params["host"]}:5432/{params["database"]}', pool_size=procs, max_overflow=int(procs*1.5), pool_pre_ping=True)
     workers = []

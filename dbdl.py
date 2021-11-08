@@ -274,30 +274,6 @@ def newJob(engine):
     conn.close()
     return df
 
-""" def completeJob(engine, prefix, parsed_df, dlparse_df):
-    values1 = ",".join(dlparse_df["SAMPLE_ID"].astype(str))
-    values2 = ",".join(parsed_df["sampleid"].astype(str))
-    update_stmt1 = "UPDATE dataset SET status=2 where sampleid in ({})".format(values1)
-    update_stmt2 = "UPDATE dataset SET status=9 where status=1 AND sampleid in ({})".format(values2)
-    insert_stmt = "INSERT INTO jobs (jobid) VALUES ('{}')".format(prefix)
-
-    if len(dlparse_df.index > 0):
-        conn = engine.raw_connection()
-        cur = conn.cursor()
-        cur.execute(update_stmt1)
-        cur.execute(insert_stmt)
-        conn.commit()
-        cur.close()
-        conn.close()
-
-    conn = engine.raw_connection()
-    cur = conn.cursor()
-    cur.execute(update_stmt2)
-    conn.commit()
-    cur.close()
-    conn.close()
-    return """
-
 def completeJob2(engine, prefix, parsed_df, dlparse_df):
     # prepare data for EN
     values2 = ",".join(parsed_df["sampleid"].astype(str))
