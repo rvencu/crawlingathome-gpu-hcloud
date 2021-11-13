@@ -10,3 +10,4 @@ glances
 sqlalchemy
 psycopg2-binary
 django
+tqdm

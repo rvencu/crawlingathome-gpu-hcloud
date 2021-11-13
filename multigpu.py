@@ -157,7 +157,7 @@ def filter(df, out_fname, output_folder, clip_filter):
     return len(dff), results
 
 
-def config(filename='database.ini', section='postgresql'):
+def config(filename='database.ini', section='cah_production'):
     # create a parser
     parser = ConfigParser()
     # read config file

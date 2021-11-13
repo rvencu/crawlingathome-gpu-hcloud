@@ -30,12 +30,14 @@ from hcloud.server_types.client import ServerType
 from pssh.clients import ParallelSSHClient, SSHClient
 from gevent import joinall
 
-def config(filename='database.ini', section='postgresql'):
+def config(filename='database.ini', mode="test"):
     # create a parser
     parser = ConfigParser()
     # read config file
     parser.read(filename)
-
+    section='postgresql'
+    if mode == "production":
+        section = "cah_production"
     # get section, default to postgresql
     db = {}
     if parser.has_section(section):
@@ -44,7 +46,6 @@ def config(filename='database.ini', section='postgresql'):
             db[param[0]] = param[1]
     else:
         raise Exception('Section {0} not found in the {1} file'.format(section, filename))
-
     return db
 
 async def list_servers(tok=""):
@@ -260,7 +261,7 @@ if __name__ == "__main__":
     if len(sys.argv) > 4:
         location = sys.argv[4]
 
-    params = config()
+    params = config(mode="production")
     
     if command == "up":
         try:
