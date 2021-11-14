@@ -258,9 +258,9 @@ def upload(source: str, clientType: str, target: str):
 
 def newJob(engine):
     # strict selection of distinct domains
-    select_stmt1 = "UPDATE dataset SET status = 1 WHERE sampleid IN (SELECT DISTINCT ON (domain) sampleid FROM (SELECT domain, sampleid FROM dataset TABLESAMPLE SYSTEM (0.05) WHERE status = 0 LIMIT 1000000 FOR UPDATE SKIP LOCKED) as \"U\" LIMIT 10000) AND status = 0 RETURNING sampleid"
+    #select_stmt1 = "UPDATE dataset SET status = 1 WHERE sampleid IN (SELECT DISTINCT ON (domain) sampleid FROM (SELECT domain, sampleid FROM dataset TABLESAMPLE SYSTEM (0.05) WHERE status = 0 LIMIT 1000000 FOR UPDATE SKIP LOCKED) as \"U\" LIMIT 10000) AND status = 0 RETURNING sampleid"
     # selection on domains based on distribution of URLs per domain
-    select_stmt1 = "UPDATE dataset SET status = 1 WHERE sampleid IN (SELECT sampleid FROM dataset TABLESAMPLE SYSTEM (0.05) WHERE status = 0 and language = 'en' LIMIT 10000 FOR UPDATE SKIP LOCKED) AND status = 0 RETURNING sampleid"
+    select_stmt1 = "UPDATE dataset_en SET status = 1 WHERE sampleid IN (SELECT sampleid FROM dataset_en TABLESAMPLE SYSTEM (0.05) WHERE status = 0 and language = 'en' LIMIT 10000 FOR UPDATE SKIP LOCKED) AND status = 0 RETURNING sampleid"
     conn = engine.raw_connection()
     cur = conn.cursor()
     cur.execute(select_stmt1)
@@ -269,7 +269,7 @@ def newJob(engine):
     cur.close()
 
     values = ",".join([str(tuple[0]) for tuple in result])
-    select_stmt2 = "SELECT sampleid, url, text, license, language FROM dataset WHERE sampleid in ({})".format(values)
+    select_stmt2 = "SELECT sampleid, url, text, license, language FROM dataset_en WHERE sampleid in ({})".format(values)
     #select_stmt2 = "UPDATE dataset_en SET status = 1 WHERE sampleid IN (SELECT sampleid FROM dataset_en TABLESAMPLE SYSTEM (0.1) WHERE status = 0 LIMIT 10000 FOR UPDATE SKIP LOCKED) AND status = 0 RETURNING sampleid, url, text, license, language"
     df = pd.read_sql_query(select_stmt2, conn)
     conn.close()
