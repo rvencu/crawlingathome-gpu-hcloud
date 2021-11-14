@@ -7,6 +7,7 @@ import gcld3
 import shutil
 import argparse
 import hashlib
+import tarfile
 import psycopg2
 import requests
 import numpy as np
@@ -329,11 +330,17 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
             parsed_df["wat"] = int(client.shards[-1][0])
             parsed_df = parsed_df[["sampleid","url","text","license","domain","wat","hash","language"]]
 
-            tick = timeit(debug, tick, "dataframe preparation done")
+            # postgres should only ingest current working data not all
+            en_df = parsed_df[parsed_df["language"]=="en"]
+            nolang_df = parsed_df[parsed_df["language"]==""]
+            multilang_df = parsed_df[parsed_df["language"]!="en" & parsed_df["language"]!=""]
 
-            if len(parsed_df) > 0:
+            tick = timeit(debug, tick, "dataframe preparation done")
+            current = en_df # change here current working data
+
+            if len(current.index) > 0:
                 tick = timeit(debug, tick, "before sql copy")
-                parsed_df.to_csv(f"{i}/export_sql.txt", sep='\t', index=False, header=False)
+                current.to_csv(f"{i}/export_sql.txt", sep='\t', index=False, header=False)
                 conn = engine.raw_connection()
                 cur = conn.cursor()
                 with open(f"{i}/export_sql.txt", "rt") as f:
@@ -342,6 +349,21 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
                 cur.close()
                 conn.close()
                 tick = timeit(debug, tick, "finished sql copy")
+
+            uuid = uuid.uuid(4)
+            if not current.equals(en_df):
+                en_df.to_csv(f"{i}/en-{uuid}.txt", sep='\t', index=False, header=False)
+            if not current.equals(nolang_df):
+                nolang_df.to_csv(f"{i}/nolang-{uuid}.txt", sep='\t', index=False, header=False)
+            if not current.equals(multilang_df):
+                multilang_df.to_csv(f"{i}/intl-{uuid}.txt", sep='\t', index=False, header=False)
+            
+            with tarfile.open(f"{uuid}.tar.gz", "w:gz") as tar:
+                for filename in os.path.basename(i):
+                    if uuid in filename:
+                        tar.add(filename)
+            os.system(f"rsync -av {uuid}.tar.gz postgres:185.154.158.196::aidb")
+
             print (f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] saved links in {round(time.time()-start,2)}")
 
             lastlinks = len(parsed_data)
@@ -387,7 +409,7 @@ if __name__ == '__main__':
         procs = int(args.cpus[0])
 
     debug = False
-    if args.debug is not None and  args.debug[0] == "true":
+    if args.debug is not None and args.debug[0] == "true":
         debug = True
 
     params = config(mode=args.mode[0])
