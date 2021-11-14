@@ -280,7 +280,7 @@ def completeJob2(engine, prefix, parsed_df, dlparse_df):
     values2 = ",".join(parsed_df["sampleid"].astype(str))
     update_stmt1 = ""
     for i, row in dlparse_df.iterrows():
-        update_stmt1 += "UPDATE dataset SET status={}, width={}, height={} where sampleid = {};".format(row["STATUS"],row["HEIGHT"],row["WIDTH"],row["SAMPLE_ID"])
+        update_stmt1 += "UPDATE dataset_en SET status={}, width={}, height={} where sampleid = {};".format(row["STATUS"],row["HEIGHT"],row["WIDTH"],row["SAMPLE_ID"])
         # this is intentional mix between width and heigth to account for the but in previous laion release
         # the csv will go scrambled but in database we want good values
     insert_stmt = "INSERT INTO jobs (jobid) VALUES ('{}')".format(prefix)
@@ -295,7 +295,7 @@ def completeJob2(engine, prefix, parsed_df, dlparse_df):
         conn.close()
 
     # in case there are samples unaccounted for, we try to mark them with general error status
-    update_stmt2 = "UPDATE dataset SET status=9 where status=1 AND sampleid in ({})".format(values2)
+    update_stmt2 = "UPDATE dataset_en SET status=9 where status=1 AND sampleid in ({})".format(values2)
 
     conn = engine.raw_connection()
     cur = conn.cursor()
