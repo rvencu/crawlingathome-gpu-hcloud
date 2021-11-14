@@ -4,6 +4,7 @@ import time
 import ftfy
 import ujson
 import gcld3
+import uuid
 import shutil
 import argparse
 import hashlib
@@ -277,13 +278,12 @@ def parse_wat(content, i, debug):
 
     return (final_kept_data, clpd, prsd)  # use a dict in order to remove duplicate tuples from list
 
-def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVER_URL, engine, host, debug):
+def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVER_URL, engine, host, debug, current_set):
     # initialize working folders
     tmp_folder = f"./{i}/.tmp/"
 
     if os.path.exists(tmp_folder):
         shutil.rmtree(tmp_folder)
-    os.makedirs(tmp_folder)
 
     # connect to C@H server and initialize client
     client = TempCPUWorker(url=CRAWLINGATHOME_SERVER_URL, nickname=YOUR_NICKNAME_FOR_THE_LEADERBOARD)
@@ -295,6 +295,11 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
     # normally it reads while client.jobCount() > 0
     while True:
         try:
+            # clean the folder
+            if os.path.exists(f"{i}"):
+                shutil.rmtree(f"{i}", ignore_errors=True)
+            os.makedirs(tmp_folder)
+
             tick = time.time()
             print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] clock is {datetime.now().strftime('%H:%M:%S')}")
 
@@ -333,10 +338,16 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
             # postgres should only ingest current working data not all
             en_df = parsed_df[parsed_df["language"]=="en"]
             nolang_df = parsed_df[parsed_df["language"]==""]
-            multilang_df = parsed_df[parsed_df["language"]!="en" & parsed_df["language"]!=""]
+            multilang_df = parsed_df[(parsed_df["language"]!="en") & (parsed_df["language"]!="")]
 
             tick = timeit(debug, tick, "dataframe preparation done")
-            current = en_df # change here current working data
+            current = en_df
+            if current_set == "":
+                current = nolang_df
+                print(f"currently working on nolang dataset")
+            if current_set == "multilang":
+                current = multilang_df
+                print(f"currently working on multilang dataset")
 
             if len(current.index) > 0:
                 tick = timeit(debug, tick, "before sql copy")
@@ -350,24 +361,24 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
                 conn.close()
                 tick = timeit(debug, tick, "finished sql copy")
 
-            uuid = uuid.uuid(4)
+            uid = uuid.uuid4().hex
             if not current.equals(en_df):
-                en_df.to_csv(f"{i}/en-{uuid}.txt", sep='\t', index=False, header=False)
+                en_df.to_csv(f"{i}/en-{uid}.txt", sep='\t', index=False, header=False)
             if not current.equals(nolang_df):
-                nolang_df.to_csv(f"{i}/nolang-{uuid}.txt", sep='\t', index=False, header=False)
+                nolang_df.to_csv(f"{i}/nolang-{uid}.txt", sep='\t', index=False, header=False)
             if not current.equals(multilang_df):
-                multilang_df.to_csv(f"{i}/intl-{uuid}.txt", sep='\t', index=False, header=False)
+                multilang_df.to_csv(f"{i}/intl-{uid}.txt", sep='\t', index=False, header=False)
             
-            with tarfile.open(f"{uuid}.tar.gz", "w:gz") as tar:
-                for filename in os.path.basename(i):
-                    if uuid in filename:
-                        tar.add(filename)
-            os.system(f"rsync -av {uuid}.tar.gz postgres:185.154.158.196::aidb")
+            os.system(f"rsync -amv --include='*{uid}.txt' --include='*/' --exclude='*' ./{i}/ postgres@185.154.158.196::aidb")
 
             print (f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] saved links in {round(time.time()-start,2)}")
 
             lastlinks = len(parsed_data)
+            en_pairs = len(en_df.index)
+            nolang_pairs = len(nolang_df.index)
+            intl_pairs = len(multilang_df.index)
             print (f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] this job has {lastlinks} links left after removing {clpd} already clipped and {prsd} already parsed")
+            print (f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] links are split into {en_pairs} english, {intl_pairs} multilanguage and {nolang_pairs} without language")
 
             prefixes = {}
             prefixes[str(client.shards[0][0])] = f"postgres {host}"
@@ -391,6 +402,7 @@ if __name__ == '__main__':
     parser.add_argument("-c","--cpus",action='append',help="How many cpus to use",required=False)
     parser.add_argument("-d","--debug",action='append',help="Print debug lines?",required=False)
     parser.add_argument("-m","--mode",action='append',help="Mode to run",required=True)
+    parser.add_argument("-s","--set",action='append',help="Choose current set (en, nolang, multilang)",required=True)
     args = parser.parse_args()
 
     # initialize client variables
@@ -405,7 +417,7 @@ if __name__ == '__main__':
     print (f"starting session under `{YOUR_NICKNAME_FOR_THE_LEADERBOARD}` nickname")
 
     procs = cpu_count()
-    if args.cpus is not None and int(args.cpus[0]) > 1:
+    if args.cpus is not None and int(args.cpus[0]) > 0:
         procs = int(args.cpus[0])
 
     debug = False
@@ -418,7 +430,7 @@ if __name__ == '__main__':
     workers = []
     for i in range ( procs ):
         #use this queue to annount that bloom is currently processing and please do not update filters. if queue is not empty please wait, if queue is empty you may update filters
-        workers.append(Process(target=proc_worker, args= [i, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVER_URL, engine, params["host"], debug], daemon=True))
+        workers.append(Process(target=proc_worker, args= [i, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVER_URL, engine, params["host"], debug, args.set[0]], daemon=True))
 
     time.sleep(10)
 
