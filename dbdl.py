@@ -39,7 +39,7 @@ ssl_ctx = ssl.create_default_context()
 ssl_ctx.check_hostname = False
 ssl_ctx.verify_mode = ssl.CERT_NONE
 
-def config(filename='database.ini', section='postgresql'):
+def config(filename='database.ini', section='cah_production'):
     # create a parser
     parser = ConfigParser()
     # read config file
