@@ -314,7 +314,7 @@ if __name__ == "__main__":
     print (f"starting session")
     
     params = config()
-    engine = create_engine(f'postgresql://{params["user"]}:{params["password"]}@{params["host"]}:5432/{params["database"]}')
+    engine = create_engine(f'postgresql://{params["user"]}:{params["password"]}@{params["host"]}:5432/{params["database"]}', pool_recycle=60, pool_pre_ping=True )
 
     while True:
         try:
