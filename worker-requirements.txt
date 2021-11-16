@@ -8,6 +8,6 @@ bloom-filter2
 pillow
 glances
 sqlalchemy
-psycopg2-binary
+psycopg2
 django
 tqdm

@@ -22,6 +22,7 @@ packages:
  - libtiff-dev 
  - libopenjp2-7-dev 
  - zlib1g-dev
+ - libpq-dev
  - knot-dnsutils
  - resolvconf
  - protobuf-compiler
