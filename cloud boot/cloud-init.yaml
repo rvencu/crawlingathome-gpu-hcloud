@@ -72,7 +72,7 @@ write_files:
 - path: /home/crawl/database.ini
   permissions: '0744'
   content: |
-    [postgresql]
+    [cah_production]
     host=<<host>>
     database=<<database>>
     user=<<dbuser>>
