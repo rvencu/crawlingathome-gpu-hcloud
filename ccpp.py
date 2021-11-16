@@ -14,6 +14,7 @@ import requests
 import numpy as np
 import pandas as pd
 from tqdm.auto import tqdm
+from random import randint
 from datetime import datetime
 from sqlalchemy import create_engine
 from configparser import ConfigParser
@@ -181,13 +182,13 @@ def parse_wat(content, i, debug):
         try:
             response = requests.post(f'http://{bloomip}:8000/deduplicate/', files=post)
             if response.status_code != 200:
-                print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] bloom server error, retrying...")
-                time.sleep(15)            
+                print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] bloom server error, retrying... got {response.status_code}")
+                time.sleep(randint(5,30))
             else:
                 failure = False
                 break
         except:
-            time.sleep(15)
+            time.sleep(30)
     if failure:
         print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] crash, cannot contact the clipped bloom server, please fix")
         return  (None, 0, 0)
@@ -222,13 +223,13 @@ def parse_wat(content, i, debug):
         try:
             response = requests.post(f'http://{bloom2ip}:8000/deduplicate/', files=post)
             if response.status_code != 200:
-                print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] bloom server error, retrying...")
-                time.sleep(15)            
+                print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] bloom server error, retrying... got {response.status_code}")
+                time.sleep(randint(5,30))
             else:
                 failure = False
                 break
         except:
-            time.sleep(15)
+            time.sleep(30)
     if failure:
         print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] crash, cannot contact the parsed bloom server, please fix")
         return (None, 0, 0)
@@ -264,8 +265,8 @@ def parse_wat(content, i, debug):
         try:
             response = requests.post(f'http://{bloom2ip}:8000/add/', files=post)
             if response.status_code != 200:
-                print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] bloom server error, retrying...")
-                time.sleep(15)            
+                print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] bloom server error, retrying... got {response.status_code}")
+                time.sleep(randint(5,30))
             else:
                 failure = False
                 break
@@ -273,6 +274,7 @@ def parse_wat(content, i, debug):
             time.sleep(15)
     if failure:
         print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] crash, cannot contact the parsed bloom server, please fix")
+        return (None, 0, 0)
 
     tick = timeit(debug, tick, "add to parsed bloom done")
 

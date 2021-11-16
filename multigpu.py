@@ -21,6 +21,7 @@ from glob import glob
 from PIL import Image
 from pathlib import Path
 from statistics import mode
+from random import randint
 from datetime import datetime
 import crawlingathome_client as cah
 from sqlalchemy import create_engine
@@ -567,8 +568,8 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             for _ in range(10):
                 response = requests.post(f'http://{bloomip}:8000/deduplicate/', files=post)
                 if response.status_code != 200:
-                    log(logqueue,f"error:[gpu] bloom server error, retrying...")
-                    time.sleep(15)            
+                    log(logqueue,f"error:[gpu] bloom server error, retrying... got {response.status_code}")
+                    time.sleep(randint(5,30))
                 else:
                     failure = False
                     break

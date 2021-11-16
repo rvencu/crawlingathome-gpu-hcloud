@@ -20,6 +20,7 @@ from glob import glob
 from uuid import uuid1
 from io import BytesIO
 from requests import get
+from random import randint
 #import crawlingathome_client as cah
 from urllib.parse import urljoin, urlparse
 from PIL import Image, ImageFile, UnidentifiedImageError 
@@ -173,8 +174,8 @@ def parse_wat(content, start, line_count):
         try:
             response = requests.post(f'http://{bloomip}:8000/deduplicate/', files=post)
             if response.status_code != 200:
-                print(f"bloom server error, retrying...")
-                time.sleep(15)            
+                print(f"bloom server error, retrying... got {response.status_code}")
+                time.sleep(randint(5,30))
             else:
                 failure = False
                 break
@@ -182,7 +183,7 @@ def parse_wat(content, start, line_count):
             time.sleep(15)
     if failure:
         print(f"crash, cannot contact the clipped bloom server, please fix")
-        return
+        return None
 
     valid_hashes = response.content.decode("utf-8").split("\n")
 
@@ -212,8 +213,8 @@ def parse_wat(content, start, line_count):
         try:
             response = requests.post(f'http://{bloom2ip}:8000/deduplicate/', files=post)
             if response.status_code != 200:
-                print(f"bloom server error, retrying...")
-                time.sleep(15)            
+                print(f"bloom server error, retrying... got {response.status_code}")
+                time.sleep(randint(5,30))
             else:
                 failure = False
                 break
@@ -221,7 +222,7 @@ def parse_wat(content, start, line_count):
             time.sleep(15)
     if failure:
         print(f"crash, cannot contact the parsed bloom server, please fix")
-        sys.exit() # maybe fallback to file based filters? too depressing...
+        return None
 
     valid_urls = response.content.decode("utf-8").split("\n")
 
@@ -375,8 +376,8 @@ async def request_image(datas, start_sampleid):
         try:
             response = requests.post(f'http://{bloom2ip}:8000/add/', files=post)
             if response.status_code != 200:
-                print(f"bloom server error, retrying...")
-                time.sleep(15)            
+                print(f"bloom server error, retrying... got {response.status_code}")
+                time.sleep(randint(5,30))
             else:
                 failure = False
                 break
