@@ -381,6 +381,8 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
             intl_pairs = len(multilang_df.index)
             print (f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] this job has {lastlinks} links left after removing {clpd} already clipped and {prsd} already parsed")
             print (f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] links are split into {en_pairs} english, {intl_pairs} multilanguage and {nolang_pairs} without language")
+            with open("datapoints.txt", "a") as f:
+                f.write(f"{time.time()}\t{en_pairs}\t{intl_pairs}\t{nolang_pairs}\n")
 
             prefixes = {}
             prefixes[str(client.shards[0][0])] = f"postgres {host}"
