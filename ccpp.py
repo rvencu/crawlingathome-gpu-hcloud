@@ -253,7 +253,7 @@ def parse_wat(content, i, debug):
     # add parsed urls to parsed bloom server
     with open('hash.txt', 'w') as f:
         for url in final_kept_data:
-            f.write(item[0].strip()+"\n")
+            f.write(url[0].strip()+"\n")
     post = {
         'file': ('hash.txt', open('hash.txt', 'rb')),
         'key': (None, 'parsed'),
@@ -269,6 +269,7 @@ def parse_wat(content, i, debug):
                 time.sleep(randint(5,30))
             else:
                 failure = False
+                print(f"bloom add response: {response.text}")
                 break
         except:
             time.sleep(15)
