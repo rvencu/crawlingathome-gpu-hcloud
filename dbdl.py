@@ -327,9 +327,9 @@ def worker(engine, params, i):
             if os.path.exists(tmp_folder):
                 shutil.rmtree(tmp_folder, ignore_errors=True)
 
-            os.mkdir(output_folder)
-            os.mkdir(img_output_folder)
-            os.mkdir(tmp_folder)
+            os.makedirs(output_folder)
+            os.makedirs(img_output_folder)
+            os.makedirs(tmp_folder)
 
             # compute output file names base
             out_fname = f"3_staged_workflow_job_{prefix}_full_wat"
