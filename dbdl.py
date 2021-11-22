@@ -28,6 +28,7 @@ from configparser import ConfigParser
 from PIL import Image, ImageFile, UnidentifiedImageError 
 from random_user_agent.user_agent import UserAgent
 from random_user_agent.params import SoftwareName, OperatingSystem
+from multiprocessing import Process, cpu_count
 
 sys.path.append('./crawlingathome-worker/')
 
@@ -90,7 +91,7 @@ def log(e):
         f.write(str(e.__class__.__name__) + " " + str(e) + "\n")
 
 
-def process_img_content(response, alt_text, license, sample_id, language):
+def process_img_content(response, alt_text, license, sample_id, language, i):
     """
     Function to process downloaded image. Use use PIL from pillow-simd 
         (faster than open cv that in return is faster than original pillow)
@@ -99,7 +100,7 @@ def process_img_content(response, alt_text, license, sample_id, language):
 
     output: list of image parameters or None if image is rejected
     """
-    img_output_folder = "save/images/"
+    img_output_folder = f"{i}/save/images/"
     error_code = 8
 
     #temp 2 lines
@@ -152,7 +153,7 @@ def process_img_content(response, alt_text, license, sample_id, language):
     return [str(sample_id), out_fname, response.url, alt_text, width, height, license, language, error_code]
 
 
-async def request_image(parsed_df):
+async def request_image(parsed_df, i):
     """
     This function initiates many parallel async connections to try download the images from provided links
     
@@ -183,7 +184,7 @@ async def request_image(parsed_df):
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     }
 
-    async def _request(row):
+    async def _request(row, i):
         while True:
             start=time.time()
             sample_id = row[0]
@@ -199,7 +200,7 @@ async def request_image(parsed_df):
                 start=time.time()
                 proces = process_img_content(
                     # tune timeout and connection_timeout to grab more or less files. shorter timeouts will exclude bad performing websites
-                    response, alt_text, license, sample_id, language
+                    response, alt_text, license, sample_id, language, i
                 )
                 proctime = round(time.time()-start, 2)
                 task.custom_sleep_data = (0, dltime, proctime) # for success do not count errors
@@ -213,17 +214,17 @@ async def request_image(parsed_df):
     async with trio.open_nursery() as n:
         for index, row in parsed_df.iterrows():
             async with limit:
-                n.start_soon(_request, row)
+                n.start_soon(_request, row, i)
             
     # trio makes sure at this point all async tasks were executed
-    with open(f".tmp/{uuid1()}.json", "w") as f:
+    with open(f"{i}/.tmp/{uuid1()}.json", "w") as f:
         ujson.dump(tmp_data, f)
     gc.collect()
 
     return
 
 
-def dl_wat(parsed_df): # replace valid data and start sampleid with parsed_df
+def dl_wat(parsed_df, i): # replace valid data and start sampleid with parsed_df
     """
     This function initiates download attempt of validated parsed links
     It launches multithreaded tasks by using trio module
@@ -236,9 +237,9 @@ def dl_wat(parsed_df): # replace valid data and start sampleid with parsed_df
     # Download every image available
     processed_samples = []
     #trio.run(request_image, valid_data, first_sample_id, instruments=[TrioProgress(len(valid_data), False)] )
-    trio.run( request_image, parsed_df, instruments=[Tracer()] )
+    trio.run( request_image, parsed_df, i, instruments=[Tracer()] )
 
-    for tmpf in glob(".tmp/*.json"):
+    for tmpf in glob(f"{i}/.tmp/*.json"):
         processed_samples.extend(ujson.load(open(tmpf)))
     return pd.DataFrame(
         processed_samples,
@@ -248,7 +249,6 @@ def dl_wat(parsed_df): # replace valid data and start sampleid with parsed_df
 def upload(source: str, clientType: str, target: str):
     with tarfile.open(f"{source}.tar.gz", "w:gz") as tar:
         tar.add(source, arcname=os.path.basename(source))
-    print(f"client type is {clientType}")
     result = os.system(f"rsync -av {source}.tar.gz {target}")
     if os.path.exists(f"{source}.tar.gz"):
         os.remove(f"{source}.tar.gz")
@@ -305,16 +305,12 @@ def completeJob2(engine, prefix, parsed_df, dlparse_df):
     conn.close()
     return
 
-if __name__ == "__main__":
+def worker(engine, params, i):
 
     # initialize working folders
-    output_folder = "./save/"
+    tmp_folder = f"./{i}/.tmp/"
+    output_folder = f"./{i}/save/"
     img_output_folder = output_folder + "images/"
-
-    print (f"starting session")
-    
-    params = config()
-    engine = create_engine(f'postgresql://{params["user"]}:{params["password"]}@{params["host"]}:5432/{params["database"]}', pool_recycle=60, pool_pre_ping=True )
 
     while True:
         try:
@@ -328,41 +324,58 @@ if __name__ == "__main__":
             # clear working folders for a new job
             if os.path.exists(output_folder):
                 shutil.rmtree(output_folder, ignore_errors=True)
-            if os.path.exists(".tmp"):
-                shutil.rmtree(".tmp")
+            if os.path.exists(tmp_folder):
+                shutil.rmtree(tmp_folder, ignore_errors=True)
 
             os.mkdir(output_folder)
             os.mkdir(img_output_folder)
-            os.mkdir(".tmp")
+            os.mkdir(tmp_folder)
 
             # compute output file names base
             out_fname = f"3_staged_workflow_job_{prefix}_full_wat"
-            print(f"[stats] Job acquired in {round(time.time()-start,2)} sec")
+            print(f"[stats {i}] Job acquired in {round(time.time()-start,2)} sec")
             start = time.time()
 
-            print (f"[stats] This job has {len(parsed_df)} candidates")
+            print (f"[stats {i}] This job has {len(parsed_df)} candidates")
         
             # attempt to download validated links and save to disk for stats and blocking lists
-            dlparse_df = dl_wat(parsed_df)
+            dlparse_df = dl_wat(parsed_df, i)
             dlparse_df_save = dlparse_df[dlparse_df["STATUS"]==2] # remove rejected items from gpu jobs
             dlparse_df_save.to_csv(output_folder + out_fname + ".csv", index=False, sep="|")
             # at this point we finishes the CPU node job, need to make the data available for GPU worker
             os.mkdir(prefix)
-            os.system(f"mv save/* {prefix}/")
+            os.system(f"mv {i}/save/* {prefix}/")
             result += upload(prefix, "CPU", "archiveteam@176.9.4.150::gpujobs") #todo find the IP and endpoint
             if result == 0:
                 completeJob2(engine, prefix, parsed_df, dlparse_df)
 
-            print (f"[stats] pairs retained {len(dlparse_df_save)} in {round(time.time() - start, 2)}")
-            print (f"[stats] scraping efficiency {len(dlparse_df_save)/(time.time() - start)} img/sec")
-            print (f"[stats] crawling efficiency {len(parsed_df)/(time.time() - start)} links/sec")
+            print (f"[stats {i}] pairs retained {len(dlparse_df_save)} in {round(time.time() - start, 2)}")
+            print (f"[stats {i}] scraping efficiency {len(dlparse_df_save)/(time.time() - start)} img/sec")
+            print (f"[stats {i}] crawling efficiency {len(parsed_df)/(time.time() - start)} links/sec")
 
 
             last = round(time.time() - start0)
 
-            print(f"[stats] Job completed in {last} seconds")
+            print(f"[stats {i}] Job completed in {last} seconds")
         
         except Exception as e:
             print (e)
             print ("Worker crashed")
             time.sleep(60)
+
+if __name__ == "__main__":
+
+    print (f"starting session")
+    
+    procs = cpu_count()
+    params = config()
+    engine = create_engine(f'postgresql://{params["user"]}:{params["password"]}@{params["host"]}:5432/{params["database"]}', pool_size=procs, max_overflow=int(procs*1.5), pool_recycle=60, pool_pre_ping=True )
+
+    for i in range(procs):
+        Process(target=worker, args=[engine, params, i], daemon=True).start()
+
+    try:
+        while True:
+            time.sleep(30)
+    except KeyboardInterrupt:
+        sys.exit()
