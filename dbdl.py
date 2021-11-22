@@ -100,7 +100,7 @@ def process_img_content(response, alt_text, license, sample_id, language, i):
 
     output: list of image parameters or None if image is rejected
     """
-    img_output_folder = f"{i}/save/images/"
+    img_output_folder = f"./{i}/save/images/"
     error_code = 8
 
     #temp 2 lines
@@ -217,7 +217,7 @@ async def request_image(parsed_df, i):
                 n.start_soon(_request, row, i)
             
     # trio makes sure at this point all async tasks were executed
-    with open(f"{i}/.tmp/{uuid1()}.json", "w") as f:
+    with open(f"./{i}/.tmp/{uuid1()}.json", "w") as f:
         ujson.dump(tmp_data, f)
     gc.collect()
 
@@ -239,7 +239,7 @@ def dl_wat(parsed_df, i): # replace valid data and start sampleid with parsed_df
     #trio.run(request_image, valid_data, first_sample_id, instruments=[TrioProgress(len(valid_data), False)] )
     trio.run( request_image, parsed_df, i, instruments=[Tracer()] )
 
-    for tmpf in glob(f"{i}/.tmp/*.json"):
+    for tmpf in glob(f"./{i}/.tmp/*.json"):
         processed_samples.extend(ujson.load(open(tmpf)))
     return pd.DataFrame(
         processed_samples,
@@ -344,7 +344,7 @@ def worker(engine, params, i):
             dlparse_df_save.to_csv(output_folder + out_fname + ".csv", index=False, sep="|")
             # at this point we finishes the CPU node job, need to make the data available for GPU worker
             os.mkdir(prefix)
-            os.system(f"mv {i}/save/* {prefix}/")
+            os.system(f"mv ./{i}/save/* {prefix}/")
             result += upload(prefix, "CPU", "archiveteam@176.9.4.150::gpujobs") #todo find the IP and endpoint
             if result == 0:
                 completeJob2(engine, prefix, parsed_df, dlparse_df)
