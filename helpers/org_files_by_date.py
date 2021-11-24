@@ -1,4 +1,3 @@
-# Import the following modules
 import os
 import time
 import shutil
@@ -6,14 +5,16 @@ import shutil
 
 # Change the directory and jump to the location
 # where you want to arrange the files
-os.chdir(r"/home/rvencu/gpuhcloud/crawlingathome-gpu-hcloud/a6832812d10c41a18cdc4551e0503bcc/images")
+os.chdir(r"/mnt/md1/export/rsync")
 
+files = os.listdir('.')
 # files in the current directory
-for files in os.listdir('.'):
-    if os.path.isfile(files) and os.path.getmtime(files) < time.time() - 60*60:
+i = 0
+for file in files:
+    if os.path.isfile(file) and os.path.getmtime(file) < time.time() - 60*60 and file.endswith("gz"):
         # Get all the details of the file creation
         # and modification
-        time_format = time.gmtime(os.path.getmtime(files))
+        time_format = time.gmtime(os.path.getmtime(file))
 
         # Give the name of the folder
         dir_name = str(time_format.tm_year) + "-" + \
@@ -28,6 +29,13 @@ for files in os.listdir('.'):
         dest = dir_name
 
         # Move all the files to their respective folders
-        shutil.move(files, dest)
+        try:
+            shutil.move(file, dest)
+            files.remove(file)
+            i += 1
+            if i%1000 == 0:
+                print ("+1000 files")
+        except:
+            pass
 
 print("successfully moved...")
