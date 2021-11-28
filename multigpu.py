@@ -28,6 +28,7 @@ from sqlalchemy import create_engine
 from configparser import ConfigParser
 sys.path.append('./crawlingathome-worker/')
 from multiprocessing import JoinableQueue, Process, Queue
+from sentence_transformers import SentenceTransformer
 
 # basic watcher that sends email when the script crashes as it is long ran
 import sentry_sdk
@@ -58,10 +59,13 @@ class CLIPDataset(torch.utils.data.Dataset):
         )
 
 class CLIP:
-    def __init__(self, gpuid):
+    def __init__(self, gpuid, use_mclip=False):
         self.device = f"cuda:{gpuid}" if torch.cuda.is_available() else "cpu"
         self.model, self.preprocess = clip.load("ViT-B/32", device=self.device, jit=use_jit)
         self.cosine_similarity = torch.nn.CosineSimilarity(dim=1, eps=1e-6)
+        self.use_mclip = use_mclip
+        if self.use_mclip:
+            self.mclip =  SentenceTransformer("sentence-transformers/clip-ViT-B-32-multilingual-v1")
         with torch.no_grad():
             self.categories = self.model.encode_text(clip.tokenize(["neutral","selfie", "illustration, drawing", "toys, play, kids, children", "teddy bear, puppet", "animal, bird, mammal, insect" "fashion, clothes", "logo, commercial, ad, advertisement", "drawing, painting","anime, cartoon","comedy, fun","romance, love story","thriller, suspense, crime story","action, action movie", "horror, monster movie", "documentary", "news, journalism", "entertainment", "talk show", "porn, sex, sperm, nipples, breats, tits, boops, penis, dick, cock, clitoris, vagina, fuck, lust, horny, sexual, lick, licking",  "porn, sex, sperm, nipples", "porn, sex, sperm, penis, dick, cock", "nipples, breasts, tits, boops, sexy", "penis, dick, cock", "clitoris, vagina", "sex, fuck, lust, horny, sexual, lick, licking", "porn, sex, sexy","sexy, hot","sperm, skin","lust, horny, sexual","lick, licking, body", "anime, hentai, sexy", "cartoon, sexy, sex", "hentai", "anime, sexy, breasts", "hentai"]).to(self.device))
             self.underaged_categories = self.model.encode_text(clip.tokenize(["teenager, teen", "kid, child, teenager, teen, baby or toddler, underaged, little girl, little boy", "kid, child, little girl, little boy", "baby, toddler","adult, woman, man, grownup, grown person,full-aged of legal age","full-aged, of legal age, adult","woman, man","adult, woman, man, grownup, grown person,full-aged of legal age"]).to(self.device))
@@ -70,7 +74,10 @@ class CLIP:
     def similarity_imgalt(self, image_tensor, text_tokens):
         with torch.no_grad():
             image_features = self.model.encode_image(image_tensor.to(self.device)).float()
-            text_features = self.model.encode_text(text_tokens.to(self.device)).float()
+            if self.use_mclip:
+                text_features = torch.from_numpy(self.mclip.encode(text_tokens)).to(self.device).float()
+            else:
+                text_features = self.model.encode_text(text_tokens.to(self.device)).float()
             similarity = self.cosine_similarity(image_features, text_features).tolist()
 
         image_features = image_features.detach().cpu().numpy()
@@ -504,7 +511,7 @@ def upload_worker(uploadqueue: JoinableQueue, counter: JoinableQueue, outgoingqu
             time.sleep(5)
 
 # main gpu workers. perhaps this worker needs to be run in as many processes as GPUs are present in the system. (todo)
-def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag: JoinableQueue, groupsize: int, logqueue: Queue, gpuid: int):
+def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag: JoinableQueue, groupsize: int, logqueue: Queue, gpuid: int, use_mclip:bool):
     log(logqueue,f"log:[gpu] worker started")
     log(logqueue,f"current_gpu_job:preparing...")
     first_groupsize = groupsize
@@ -594,7 +601,7 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             log(logqueue,f"log:[gpu] preparation done in {round(time.time()-start, 2)} sec.")
 
             start = time.time()
-            clip_filter_obj = CLIP(gpuid)
+            clip_filter_obj = CLIP(gpuid, use_mclip=use_mclip)
             final_images, results = filter(en_parse, group_id, "./save/", clip_filter_obj)
             #TODO: add here processing command for int_parse, perhaps secondary location and different group_id
             
@@ -639,6 +646,9 @@ if __name__ == "__main__":
     gpuid = 0
     if len(sys.argv) > 1:
         gpuid = sys.argv[1]
+
+    if len(sys.argv) > 2:
+        use_mclip = sys.argv[2] == "True"
 
     params = config()
     engine = create_engine(f'postgresql://{params["user"]}:{params["password"]}@{params["host"]}:5432/{params["database"]}',pool_size=50, max_overflow=100)
@@ -692,4 +702,4 @@ if __name__ == "__main__":
     io = Process(target=io_worker, args=[inbound, outbound, groupsize, logqueue, YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL, engine], daemon=True).start()
     upd = Process(target=upload_worker, args=[uploadqueue, counter, outbound, logqueue], daemon=True).start()
     
-    gpu_worker(inbound, uploadqueue, gpuflag, groupsize, logqueue, gpuid)
+    gpu_worker(inbound, uploadqueue, gpuflag, groupsize, logqueue, gpuid, use_mclip)
