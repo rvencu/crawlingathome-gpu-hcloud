@@ -23,6 +23,7 @@ import pandas as pd
 from glob import glob
 from uuid import uuid1
 from io import BytesIO
+from datetime import datetime
 from sqlalchemy import create_engine
 from configparser import ConfigParser
 from PIL import Image, ImageFile, UnidentifiedImageError 
@@ -145,6 +146,7 @@ def process_img_content(response, alt_text, license, sample_id, language, i):
             if error_code == 8:
                 im.save(out_fname) # do not retain images we do not need
     except (KeyError, UnidentifiedImageError):
+        out_fname = ""
         error_code += 1
     
     if error_code == 8:
@@ -333,10 +335,10 @@ def worker(engine, params, i):
 
             # compute output file names base
             out_fname = f"3_staged_workflow_job_{prefix}_full_wat"
-            print(f"[stats {i}] Job acquired in {round(time.time()-start,2)} sec")
+            print(f"[{datetime.now().strftime('%H:%M:%S')} stats {i}] Job acquired in {round(time.time()-start,2)} sec")
             start = time.time()
 
-            print (f"[stats {i}] This job has {len(parsed_df)} candidates")
+            print (f"[{datetime.now().strftime('%H:%M:%S')} stats {i}] This job has {len(parsed_df)} candidates")
         
             # attempt to download validated links and save to disk for stats and blocking lists
             dlparse_df = dl_wat(parsed_df, i)
@@ -349,18 +351,18 @@ def worker(engine, params, i):
             if result == 0:
                 completeJob2(engine, prefix, parsed_df, dlparse_df)
 
-            print (f"[stats {i}] pairs retained {len(dlparse_df_save)} in {round(time.time() - start, 2)}")
-            print (f"[stats {i}] scraping efficiency {len(dlparse_df_save)/(time.time() - start)} img/sec")
-            print (f"[stats {i}] crawling efficiency {len(parsed_df)/(time.time() - start)} links/sec")
+            print (f"[{datetime.now().strftime('%H:%M:%S')} stats {i}] pairs retained {len(dlparse_df_save)} in {round(time.time() - start, 2)}")
+            print (f"[{datetime.now().strftime('%H:%M:%S')} stats {i}] scraping efficiency {len(dlparse_df_save)/(time.time() - start)} img/sec")
+            print (f"[{datetime.now().strftime('%H:%M:%S')} stats {i}] crawling efficiency {len(parsed_df)/(time.time() - start)} links/sec")
 
 
             last = round(time.time() - start0)
 
-            print(f"[stats {i}] Job completed in {last} seconds")
+            print(f"[{datetime.now().strftime('%H:%M:%S')} stats {i}] Job completed in {last} seconds")
         
         except Exception as e:
             print (e)
-            print ("Worker crashed")
+            print (f"{datetime.now().strftime('%H:%M:%S')} Worker {i} crashed")
             time.sleep(60)
 
 if __name__ == "__main__":
