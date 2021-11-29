@@ -296,6 +296,7 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
 
     # this makes a loop to download new jobs while the script is running
     # normally it reads while client.jobCount() > 0
+    conn = engine.raw_connection()
     while True:
         try:
             # clean the folder
@@ -355,13 +356,13 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
             if len(current.index) > 0:
                 tick = timeit(debug, tick, "before sql copy")
                 current.to_csv(f"{i}/export_sql.txt", sep='\t', index=False, header=False)
-                conn = engine.raw_connection()
+                
                 cur = conn.cursor()
                 with open(f"{i}/export_sql.txt", "rt") as f:
                     cur.copy_from(f, 'dataset_buffer', columns=("sampleid","url","text","license","domain","wat","hash","language"))
                 conn.commit()
                 cur.close()
-                conn.close()
+                
                 tick = timeit(debug, tick, "finished sql copy")
 
             uid = uuid.uuid4().hex
@@ -399,6 +400,7 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
             print (f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] worker crashed")
             time.sleep(60)
             client = TempCPUWorker(url=CRAWLINGATHOME_SERVER_URL, nickname=YOUR_NICKNAME_FOR_THE_LEADERBOARD)
+    conn.close()
 
 if __name__ == '__main__':
     

@@ -371,7 +371,7 @@ if __name__ == "__main__":
     
     procs = cpu_count()
     params = config()
-    engine = create_engine(f'postgresql://{params["user"]}:{params["password"]}@{params["host"]}:5432/{params["database"]}', pool_size=procs, max_overflow=int(procs*1.5), pool_recycle=60, pool_pre_ping=True )
+    engine = create_engine(f'postgresql://{params["user"]}:{params["password"]}@{params["host"]}:5432/{params["database"]}', pool_size=procs, max_overflow=int(procs*1.5), pool_pre_ping=True )
 
     for i in range(procs):
         Process(target=worker, args=[engine, params, i], daemon=True).start()
