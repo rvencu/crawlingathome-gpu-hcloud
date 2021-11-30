@@ -14,6 +14,7 @@ import curses
 import tarfile
 import hashlib
 import requests
+import argparse
 import threading
 import subprocess
 import pandas as pd
@@ -265,36 +266,37 @@ GPU workflow:
     The monitor displays the status of the workers as well as performance metrics about the jobs performed
 '''
 
-def invalidURL (client, job, jobtype, engine):
-    if jobtype == 0:
-        client.invalidURL()
-    if jobtype == 1:
-        update_stmt1 = "UPDATE jobs set status=9 WHERE jobid='{}'".format(job)
-        #update_stmt2 = "UPDATE dataset SET status = 0 WHERE prefix='{}'".format(job)
-        conn = engine.raw_connection()
-        cur = conn.cursor()
-        cur.execute(update_stmt1)
-        #cur.execute(update_stmt2)
-        conn.commit()
-        cur.close()
-        conn.close()
+def invalidURL (job, engine, jobset="en"):
+    jobstable = "jobs"
+    if jobset != "en":
+        jobstable = f"jobs_{jobset}"
+    update_stmt1 = f"UPDATE {jobstable} set status=9 WHERE jobid='{job}'"
+    conn = engine.raw_connection()
+    cur = conn.cursor()
+    cur.execute(update_stmt1)
+    conn.commit()
+    cur.close()
+    conn.close()
     return
 
-def completeJob (client, job, jobtype, engine, pairs):
-    if jobtype == 0:
-        client.completeJob(int(pairs))
-    if jobtype == 1:
-        update_stmt1 = "UPDATE jobs SET status = 2 WHERE jobid='{}'".format(job)
-        conn = engine.raw_connection()
-        cur = conn.cursor()
-        cur.execute(update_stmt1)
-        conn.commit()
-        cur.close()
-        conn.close()
+def completeJob (job, engine, jobset="en"):
+    jobstable = "jobs"
+    if jobset != "en":
+        jobstable = f"jobs_{jobset}"
+    update_stmt1 = f"UPDATE {jobstable} SET status = 2 WHERE jobid='{job}'"
+    conn = engine.raw_connection()
+    cur = conn.cursor()
+    cur.execute(update_stmt1)
+    conn.commit()
+    cur.close()
+    conn.close()
     return
 
-def get_dbjobscount(engine):
-    select_stmt1 = "select count(*) from jobs where status = 0"
+def get_dbjobscount(engine, jobset="en"):
+    jobstable = "jobs"
+    if jobset != "en":
+        jobstable = f"jobs_{jobset}"
+    select_stmt1 = f"select count(*) from {jobstable} where status = 0"
     conn = engine.raw_connection()
     cur = conn.cursor()
     cur.execute(select_stmt1)
@@ -305,170 +307,130 @@ def get_dbjobscount(engine):
     return jobcount[0]
 
 # spawn this interface to double or more than shard groups so they can download jobs and communicate with the tracker in parallel with GPU processing. this will keep GPU busy almost continuously
-def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: JoinableQueue, logqueue: queue.Queue, YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL, engine):
-    # initiate and reinitiate a GPU type client if needed
-    # print(f"   |___ inbound worker started")
+def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: JoinableQueue, logqueue: queue.Queue, engine, jobset="en"):
+    jobstable = "jobs"
+    if jobset != "en":
+        jobstable = f"jobs_{jobset}"
+    rsynctarget = "gpujobs"
+    if jobset == "intl":
+        rsynctarget = f"gpujobsml"
+    if jobset == "nolang":
+        rsynctarget = f"gpujobsnolang"
+
     while True:
-        client = cah.init(
-            url=CRAWLINGATHOME_SERVER_URL, nickname=YOUR_NICKNAME_FOR_THE_LEADERBOARD, type="GPU"
-        )
         try:
-            while client.isAlive():
-                jobcount = client.jobCount()
-                while jobcount > 0:
+            log(logqueue,f"log:[io {i}] started DATABASE job")
+            jobtype = 1
+            select_stmt1 = f"UPDATE {jobstable} SET status = 1 WHERE jobid in (SELECT jobid from {jobstable} where status = 0 LIMIT 1 FOR UPDATE SKIP LOCKED) RETURNING jobid"
+            conn = engine.raw_connection()
+            cur = conn.cursor()
+            cur.execute(select_stmt1)
+            job = cur.fetchone()
+            conn.commit()
+            cur.close()
+            conn.close()
+
+            # if there are no database jobs available
+            if job is None:
+                time.sleep(60)
+                continue
+
+            job = job[0]
+
+            # found repeating shards, need to clear old files before continuing
+            if os.path.exists("./"+ job):
+                shutil.rmtree("./"+ job, ignore_errors=True)
+
+            resp = 1
+            for _ in range(5):
+                p = subprocess.Popen(["rsync", "-av", f"archiveteam@176.9.4.150::{rsynctarget}/{job}.tar.gz", f"{job}.tar.gz"], stdout=subprocess.PIPE)
+                output = p.communicate()[0]
+                resp = p.returncode
+                if resp == 5888:
+                    log(logqueue,'error:[io {i}] rsync job not found')
+                    invalidURL (job, engine, jobset)
+                if resp == 0:
+                    with tarfile.open(f"{job}.tar.gz", "r:gz") as tar:
+                        tar.extractall()
+                    break
+
+            # test for csv and for images folder
+            if len(glob(f"{job}/*.csv")) == 0 or not os.path.exists(f"./{job}/images"):
+                invalidURL (job, engine, jobset)
+                log(logqueue,f"error:[io {i}] invalid job detected {job}")
+                continue
+            for file in glob(f"{job}/*_parsed.csv"):
+                os.system(f"mv {file} stats/")
+            for file in glob(f"{job}/*_unfiltered.csv"):
+                os.system(f"rm {file}")
+            for file in glob(f"{job}/*.csv"):
+                # Read in the file
+                with open(file, 'rt') as f :
+                    filedata = f.read()
+                # Replace the target string
+                filedata = filedata.replace('\n|', '|')
+                # Write the file out again
+                with open(file, 'wt') as f:
+                    f.write(filedata)
+            # search for corrupt images
+            for file in glob(f"{job}/*.csv"):
+                df = pd.read_csv(file, sep="|")
+                df["PATH"] = df.PATH.apply(lambda x: re.sub(r"^(.*)./save/[-]?[0-9][0-9]?[0-9]?/(.*)$", r"save/\2", x)) # when path is like /save/12/images/name.jpg
+                df["PATH"] = df.PATH.apply(lambda x: re.sub(r"^(.*)./[-]?[0-9][0-9]?[0-9]?/save/(.*)$", r"save/\2", x)) # when path is like /12/save/images/name.jpg
+                df["PATH"] = df.PATH.apply(lambda x: "./" + job + "/" + x.strip("save/"))
+                for index, row in df.iterrows():
                     try:
-                        log(logqueue,f"classic_count:{jobcount}")
-                    except:
-                        print("[io {i}] error adding to logqueue")
-                    # each thread gets a new job, passes it to GPU then waits for completion
-                    jobtype = 0
-                    job = ""
-                    if jobcount > 10000: 
-                        log(logqueue,f"log:[io {i}] started CLASSIC job")
+                        im = Image.open(row["PATH"])
+                        im.close()
+                    except Exception as e:
+                        if index < 10:
+                            log(logqueue,f"error:[io {i}] invalid image {row['PATH']} because {e}")
+                        df = df.drop(index)
+                df.to_csv(file, sep="|", index=False)
+                del df
+            
+            log(logqueue,f"log:[io {i}] job sent to GPU {job}")
+            incomingqueue.put((i, job))
+            
+            # wait until job gets processes
+            while True:
+                if outgoingqueue.qsize() > 0:
+                    outjob, pairs = outgoingqueue.get() # I am poping out from queue only if my current job is finished
+                    if pairs >= 0:
+                        #print(f"[io {i}] mark job as complete: {job}")
+                        # cleanup temp storage now
+                        if pairs == 0:
+                            pairs = 1
                         try:
-                            client.newJob()
+                            completeJob (job, engine, jobset)
                         except:
-                            time.sleep(10)
-                            continue
-                        if client.shard.startswith('rsync'):
-                            try:
-                                job = client.shard.split(" ")[1]
-                            except:
-                                invalidURL (client, job, jobtype, engine)
-                                log(logqueue,f"error:[io {i}] invalid job detected {job}")
-                                continue
-                            # found repeating shards, need to clear old files before continuing
-                            if os.path.exists("./"+ job):
-                                shutil.rmtree("./"+ job, ignore_errors=True)
-                            #os.mkdir("./"+ job)
-                            client.downloadShard()
-                        elif client.shard.startswith('postgres'):
-                            log(logqueue,f"error:[io {i}] this is a database job not classic, marking it complete in tracker since progress continues to be tracked in database")
-                            try:
-                                completeJob (client, job, jobtype, engine, 0)
-                            except:
-                                pass
-                            continue
+                            log(logqueue,f"log:[io {i}] invalid trying to complete with {pairs} pairs")
+                            invalidURL (job, engine, jobset)
                     else:
-                        log(logqueue,f"log:[io {i}] started DATABASE job")
-                        jobtype = 1
-                        select_stmt1 = "UPDATE jobs SET status = 1 WHERE jobid in (SELECT jobid from jobs where status = 0 LIMIT 1 FOR UPDATE SKIP LOCKED) RETURNING jobid"
-                        conn = engine.raw_connection()
-                        cur = conn.cursor()
-                        cur.execute(select_stmt1)
-                        job = cur.fetchone()
-                        conn.commit()
-                        cur.close()
-                        conn.close()
-
-                        # if there are no database jobs available
-                        if job is None:
-                            time.sleep(60)
-                            continue
-
-                        job = job[0]
-
-                        # found repeating shards, need to clear old files before continuing
-                        if os.path.exists("./"+ job):
-                            shutil.rmtree("./"+ job, ignore_errors=True)
-
-                        resp = 1
-                        for _ in range(5):
-                            p = subprocess.Popen(["rsync", "-av", f"archiveteam@176.9.4.150::gpujobs/{job}.tar.gz", f"{job}.tar.gz"], stdout=subprocess.PIPE)
-                            output = p.communicate()[0]
-                            resp = p.returncode
-                            #resp = os.system(f'rsync -av archiveteam@176.9.4.150::gpujobs/{job}.tar.gz {job}.tar.gz')
-                            if resp == 5888:
-                                log(logqueue,'error:[io {i}] rsync job not found')
-                                invalidURL (client, job, jobtype, engine)
-                            if resp == 0:
-                                with tarfile.open(f"{job}.tar.gz", "r:gz") as tar:
-                                    tar.extractall()
-                                break
-
-                    # test for csv and for images folder
-                    if len(glob(f"{job}/*.csv")) == 0 or not os.path.exists(f"./{job}/images"):
-                        invalidURL (client, job, jobtype, engine)
-                        log(logqueue,f"error:[io {i}] invalid job detected {job}")
-                        continue
-                    for file in glob(f"{job}/*_parsed.csv"):
-                        os.system(f"mv {file} stats/")
-                    for file in glob(f"{job}/*_unfiltered.csv"):
-                        os.system(f"rm {file}")
-                    for file in glob(f"{job}/*.csv"):
-                        # Read in the file
-                        with open(file, 'rt') as f :
-                            filedata = f.read()
-                        # Replace the target string
-                        filedata = filedata.replace('\n|', '|')
-                        # Write the file out again
-                        with open(file, 'wt') as f:
-                            f.write(filedata)
-                    # search for corrupt images
-                    for file in glob(f"{job}/*.csv"):
-                        df = pd.read_csv(file, sep="|")
-                        df["PATH"] = df.PATH.apply(lambda x: re.sub(r"^(.*)./save/[-]?[0-9][0-9]?[0-9]?/(.*)$", r"save/\2", x)) # when path is like /save/12/images/name.jpg
-                        df["PATH"] = df.PATH.apply(lambda x: re.sub(r"^(.*)./[-]?[0-9][0-9]?[0-9]?/save/(.*)$", r"save/\2", x)) # when path is like /12/save/images/name.jpg
-                        df["PATH"] = df.PATH.apply(lambda x: "./" + job + "/" + x.strip("save/"))
-                        for index, row in df.iterrows():
-                            try:
-                                im = Image.open(row["PATH"])
-                                im.close()
-                            except Exception as e:
-                                if index < 10:
-                                    log(logqueue,f"error:[io {i}] invalid image {row['PATH']} because {e}")
-                                df = df.drop(index)
-                        df.to_csv(file, sep="|", index=False)
-                        del df
-                    
-                    log(logqueue,f"log:[io {i}] job sent to GPU {job}")
-                    incomingqueue.put((i, job, client.upload_address))
-                    
-                    # wait until job gets processes
-                    while True:
-                        if outgoingqueue.qsize() > 0:
-                            outjob, pairs = outgoingqueue.get() # I am poping out from queue only if my current job is finished
-                            if pairs >= 0:
-                                #print(f"[io {i}] mark job as complete: {job}")
-                                # cleanup temp storage now
-                                if pairs == 0:
-                                    pairs = 1
-                                try:
-                                    completeJob (client, job, jobtype, engine, pairs)
-                                except:
-                                    log(logqueue,f"log:[io {i}] invalid trying to complete with {pairs} pairs")
-                                    invalidURL (client, job, jobtype, engine)
-                            else:
-                                log(logqueue,f"log:[io {i}] invalid with negative {pairs} pairs?")
-                                invalidURL (client, job, jobtype, engine)
-                            if os.path.exists("./"+ job):
-                                shutil.rmtree("./"+ job)
-                            if os.path.exists(f"{job}.tar.gz"):
-                                os.remove(f"{job}.tar.gz")
-                            outgoingqueue.task_done()
-                            break # we can let the worker request a new job
-                        else:
-                            time.sleep(1)
+                        log(logqueue,f"log:[io {i}] invalid with negative {pairs} pairs?")
+                        invalidURL (job, engine, jobset)
+                    if os.path.exists("./"+ job):
+                        shutil.rmtree("./"+ job)
+                    if os.path.exists(f"{job}.tar.gz"):
+                        os.remove(f"{job}.tar.gz")
+                    outgoingqueue.task_done()
+                    break # we can let the worker request a new job
                 else:
-                    log(logqueue,f"error:[io {i}] no classic jobs, switching to database jobs")
-                    time.sleep(120)
-            else:
-                log(logqueue,f"error:[io {i}] client forgotten")
-                time.sleep(30)
+                    time.sleep(1)
         except Exception as e:
             log(logqueue,f"error:[io {i}] client crashed, respawning...")
             log(logqueue,f"error:{e}") #see why clients crashes
             time.sleep(30)
 
 # process to spawn many interfaces with the tracker
-def io_worker(incomingqueue: JoinableQueue, outgoingqueue: list, groupsize: int, logqueue: Queue, YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL, engine):
+def io_worker(incomingqueue: JoinableQueue, outgoingqueue: list, groupsize: int, logqueue: Queue, engine, jobset="en"):
     # separate process to initialize threaded workers
     log(logqueue,f"log:[io] inbound workers")
     thqueue = queue.Queue()
     try:
         # just launch how many threads we need to group jobs into single output
         for i in range(int(2.7 * groupsize)):
-            threading.Thread(target=gpu_cah_interface, args=(i, incomingqueue, outgoingqueue[i], thqueue, YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL, engine)).start()
+            threading.Thread(target=gpu_cah_interface, args=(i, incomingqueue, outgoingqueue[i], thqueue, engine, jobset)).start()
     except Exception as e:
         log(logqueue,f"error:[io] some inbound problem occured {e}")
     while True:
@@ -484,13 +446,18 @@ def io_worker(incomingqueue: JoinableQueue, outgoingqueue: list, groupsize: int,
 
 
 # process to upload the results
-def upload_worker(uploadqueue: JoinableQueue, counter: JoinableQueue, outgoingqueue: list, logqueue: Queue):
+def upload_worker(uploadqueue: JoinableQueue, counter: JoinableQueue, outgoingqueue: list, logqueue: Queue, jobset="en"):
     log(logqueue,f"log:upload worker started")
+    target = "CAH"
+    if jobset == 'intl':
+        target = "CAHINTL"
+    if jobset == 'nolang':
+        target = "CAHNOLANG"
 
     while True:
         if uploadqueue.qsize() > 0:
-            group_id, upload_address, shards, results = uploadqueue.get()
-            p = subprocess.Popen(f"rsync -av save/*{group_id}* {upload_address}", shell=True, stdout=subprocess.PIPE)
+            group_id, shards, results = uploadqueue.get()
+            p = subprocess.Popen(f"rsync -av save/*{group_id}* archiveteam@88.198.2.17::{target}", shell=True, stdout=subprocess.PIPE)
             output = p.communicate()[0]
             resp = p.returncode
             #resp = os.system(f"rsync -av save/*{group_id}* {upload_address}") # to do get target from client
@@ -512,7 +479,7 @@ def upload_worker(uploadqueue: JoinableQueue, counter: JoinableQueue, outgoingqu
             time.sleep(5)
 
 # main gpu workers. perhaps this worker needs to be run in as many processes as GPUs are present in the system. (todo)
-def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag: JoinableQueue, groupsize: int, logqueue: Queue, gpuid: int, use_mclip:bool):
+def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag: JoinableQueue, groupsize: int, logqueue: Queue, gpuid: int, jobset="en"):
     log(logqueue,f"log:[gpu] worker started")
     log(logqueue,f"current_gpu_job:preparing...")
     first_groupsize = groupsize
@@ -532,7 +499,7 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             log(logqueue,f"current_gpu_job:{group_id}")
             group_parse = None
             for _ in range(groupsize):
-                i, job, address = incomingqueue.get()
+                i, job = incomingqueue.get()
 
                 all_csv_files = []
                 for path, subdir, files in os.walk(job):
@@ -543,7 +510,6 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
                 out_path = all_csv_files[0]
                 out_path = Path(out_path).stem
                 shards.append((i, job, out_path))
-                addresses.append(address)
 
                 incomingqueue.task_done()
 
@@ -595,23 +561,24 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
 
             print (f"before en selection {len(group_parse.index)}")
             #force en language to continue with English dataset
-            en_parse = group_parse[group_parse["LANGUAGE"] == "en"]
+            #en_parse = group_parse[group_parse["LANGUAGE"] == "en"]
             #int_parse = group_parse[~group_parse.LANGUAGE.isin(['en', 'bn', 'co', 'eo', 'fil', 'fy', 'gd', 'ha', 'haw', 'hmn', 'ig', 'km', 'ku', 'ky', 'lo', 'mi', 'mn', 'mt', 'ny', 'sd', 'si', 'sm', 'sn', 'so', 'st', 'su', 'sw', 'xh', 'yi', 'zu', "", None])]
-            print (f"after en selection {len(en_parse.index)}")
+            print (f"after en selection {len(group_parse.index)}")
 
             log(logqueue,f"log:[gpu] preparation done in {round(time.time()-start, 2)} sec.")
 
             start = time.time()
-            clip_filter_obj = CLIP(gpuid, use_mclip=use_mclip)
-            final_images, results = filter(en_parse, group_id, "./save/", clip_filter_obj)
+            use_mclip = False
+            if jobset != "en":
+                use_mclip = True
+            clip_filter_obj = CLIP(gpuid, use_mclip)
+            final_images, results = filter(group_parse, group_id, "./save/", clip_filter_obj)
             #TODO: add here processing command for int_parse, perhaps secondary location and different group_id
             
             log(logqueue,f"pairs:{final_images}")
             log(logqueue,f"duration:{round((time.time()-start)/groupsize,2)}")
 
-            # find most required upload address among the grouped shards
-            upload_address = mode(addresses)
-            uploadqueue.put((group_id, upload_address, shards, results))
+            uploadqueue.put((group_id, shards, results))
             tick = time.time()
             log(logqueue,f"current_gpu_job:not ready")
             
@@ -628,28 +595,22 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
 
 if __name__ == "__main__":
     # script initialization
-    YOUR_NICKNAME_FOR_THE_LEADERBOARD = os.getenv('CAH_NICKNAME')
-    if YOUR_NICKNAME_FOR_THE_LEADERBOARD is None:
-        YOUR_NICKNAME_FOR_THE_LEADERBOARD = "anonymous"
-    CRAWLINGATHOME_SERVER_URL = "http://cah.io.community/"
+    parser = argparse.ArgumentParser(prog=sys.argv[0], usage='%(prog)s -g/--gpuid -s/--set')
+    parser.add_argument("-g","--gpuid",action='append',help="Choose gpu id",required=False)
+    parser.add_argument("-s","--set",action='append',help="Choose current set (en, nolang, multilang)",required=False)
+    args = parser.parse_args()
+
+    print (f"starting session")
     
     gpuid = 0
-    if len(sys.argv) > 1:
-        gpuid = sys.argv[1]
+    if args.gpuid and int(args.gpuid) > 0:
+        gpuid = int(args.gpuid)
+
+    jobset = "en"
+    if args.set and args.set != "en":
+        jobset = args.set
     
-    print(
-        f"[{datetime.now().strftime('%H:%M:%S')} GPU{gpuid}] starting session under `{YOUR_NICKNAME_FOR_THE_LEADERBOARD}` nickname")
-
-    time.sleep(10)
-
     groupsize = 17 # how many shards to group for CLIP
-
-    gpuid = 0
-    if len(sys.argv) > 1:
-        gpuid = sys.argv[1]
-
-    if len(sys.argv) > 2:
-        use_mclip = sys.argv[2] == "True"
 
     params = config()
     engine = create_engine(f'postgresql://{params["user"]}:{params["password"]}@{params["host"]}:5432/{params["database"]}',pool_size=50, max_overflow=100)
@@ -700,7 +661,7 @@ if __name__ == "__main__":
     mon = Process(target=monitor_curses, args=[logqueue, screen], daemon=True).start()
 
     # launch separate processes with specialized workers
-    io = Process(target=io_worker, args=[inbound, outbound, groupsize, logqueue, YOUR_NICKNAME_FOR_THE_LEADERBOARD, CRAWLINGATHOME_SERVER_URL, engine], daemon=True).start()
-    upd = Process(target=upload_worker, args=[uploadqueue, counter, outbound, logqueue], daemon=True).start()
+    io = Process(target=io_worker, args=[inbound, outbound, groupsize, logqueue, engine, jobset], daemon=True).start()
+    upd = Process(target=upload_worker, args=[uploadqueue, counter, outbound, logqueue, jobset], daemon=True).start()
     
-    gpu_worker(inbound, uploadqueue, gpuflag, groupsize, logqueue, gpuid, use_mclip)
+    gpu_worker(inbound, uploadqueue, gpuflag, groupsize, logqueue, gpuid, jobset)

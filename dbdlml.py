@@ -262,7 +262,7 @@ def newJob(engine):
     # strict selection of distinct domains
     #select_stmt1 = "UPDATE dataset SET status = 1 WHERE sampleid IN (SELECT DISTINCT ON (domain) sampleid FROM (SELECT domain, sampleid FROM dataset TABLESAMPLE SYSTEM (0.05) WHERE status = 0 LIMIT 1000000 FOR UPDATE SKIP LOCKED) as \"U\" LIMIT 10000) AND status = 0 RETURNING sampleid"
     # selection on domains based on distribution of URLs per domain
-    select_stmt1 = "UPDATE dataset_en SET status = 1 WHERE sampleid IN (SELECT sampleid FROM dataset_en TABLESAMPLE SYSTEM (0.05) WHERE status = 0 and language = 'en' LIMIT 10000 FOR UPDATE SKIP LOCKED) AND status = 0 RETURNING sampleid"
+    select_stmt1 = "UPDATE dataset_intl SET status = 1 WHERE sampleid IN (SELECT sampleid FROM dataset_intl TABLESAMPLE SYSTEM (0.05) WHERE status = 0 and language != 'en' LIMIT 10000 FOR UPDATE SKIP LOCKED) AND status = 0 RETURNING sampleid"
     conn = engine.raw_connection()
     cur = conn.cursor()
     cur.execute(select_stmt1)
@@ -271,7 +271,7 @@ def newJob(engine):
     cur.close()
 
     values = ",".join([str(tuple[0]) for tuple in result])
-    select_stmt2 = "SELECT sampleid, url, text, license, language FROM dataset_en WHERE sampleid in ({})".format(values)
+    select_stmt2 = "SELECT sampleid, url, text, license, language FROM dataset_intl WHERE sampleid in ({})".format(values)
     #select_stmt2 = "UPDATE dataset_en SET status = 1 WHERE sampleid IN (SELECT sampleid FROM dataset_en TABLESAMPLE SYSTEM (0.1) WHERE status = 0 LIMIT 10000 FOR UPDATE SKIP LOCKED) AND status = 0 RETURNING sampleid, url, text, license, language"
     df = pd.read_sql_query(select_stmt2, conn)
     conn.close()
@@ -282,10 +282,10 @@ def completeJob2(engine, prefix, parsed_df, dlparse_df):
     values2 = ",".join(parsed_df["sampleid"].astype(str))
     update_stmt1 = ""
     for i, row in dlparse_df.iterrows():
-        update_stmt1 += "UPDATE dataset_en SET status={}, width={}, height={} where sampleid = {};".format(row["STATUS"],row["HEIGHT"],row["WIDTH"],row["SAMPLE_ID"])
+        update_stmt1 += "UPDATE dataset_intl SET status={}, width={}, height={} where sampleid = {};".format(row["STATUS"],row["HEIGHT"],row["WIDTH"],row["SAMPLE_ID"])
         # this is intentional mix between width and heigth to account for the but in previous laion release
         # the csv will go scrambled but in database we want good values
-    insert_stmt = "INSERT INTO jobs (jobid) VALUES ('{}')".format(prefix)
+    insert_stmt = "INSERT INTO jobs_intl (jobid) VALUES ('{}')".format(prefix)
 
     if len(dlparse_df.index > 0):
         conn = engine.raw_connection()
@@ -297,7 +297,7 @@ def completeJob2(engine, prefix, parsed_df, dlparse_df):
         conn.close()
 
     # in case there are samples unaccounted for, we try to mark them with general error status
-    update_stmt2 = "UPDATE dataset_en SET status = 9 where status = 1 AND sampleid in ({})".format(values2)
+    update_stmt2 = "UPDATE dataset_intl SET status = 9 where status = 1 AND sampleid in ({})".format(values2)
 
     conn = engine.raw_connection()
     cur = conn.cursor()
@@ -347,7 +347,7 @@ def worker(engine, params, i):
             # at this point we finishes the CPU node job, need to make the data available for GPU worker
             os.mkdir(prefix)
             os.system(f"mv ./{i}/save/* {prefix}/")
-            result += upload(prefix, "CPU", "archiveteam@176.9.4.150::gpujobs") #todo find the IP and endpoint
+            result += upload(prefix, "CPU", "archiveteam@176.9.4.150::gpujobsml") #todo find the IP and endpoint
             if result == 0:
                 completeJob2(engine, prefix, parsed_df, dlparse_df)
 
@@ -371,10 +371,7 @@ if __name__ == "__main__":
     
     procs = cpu_count()
     params = config()
-    engine = create_engine(f'postgresql://{params["user"]}:{params["password"]}@{params["host"]}:5432/{params["database"]}', pool_size=procs, max_overflow=int(procs*1.5), pool_pre_ping=True )
-
-    #this log file can grow quite a lot
-    os.system("rm errors.txt")
+    engine = create_engine(f'postgresql://{params["user"]}:{params["password"]}@{params["host"]}:5432/{params["database"]}', pool_size=procs, max_overflow=int(procs*1.5), pool_recycle=60, pool_pre_ping=True )
 
     for i in range(procs):
         Process(target=worker, args=[engine, params, i], daemon=True).start()
