@@ -1,7 +1,8 @@
 
 # run as: python3 multigpu.py 0 and python3 multigpu.py 1 where 0 and 1 are GPU ids
-
 import os
+os.environ["TOKENIZER_PARALLELISM"] = "false"
+
 import re
 import sys
 import time
@@ -111,6 +112,8 @@ class CLIP:
 
 def df_clipfilter(df, clip_filter):
     sim_threshold = 0.28
+    if clip_filter.use_mclip:
+        sim_threshold = 0.24
     underaged_text = ["teen", "kid", "child", "baby"]
 
     img_embedding, similarities = clip_filter.preprocess_images(df)
@@ -439,7 +442,7 @@ def io_worker(incomingqueue: JoinableQueue, outgoingqueue: list, groupsize: int,
             logqueue.put(thqueue.get())
             thqueue.task_done()
         else:
-            dbcount = get_dbjobscount(engine)
+            dbcount = get_dbjobscount(engine, jobset)
             logqueue.put(f"database_count:{dbcount}")
             qsize = incomingqueue.qsize()
             log(logqueue,f"qsize:{qsize}")
@@ -602,18 +605,20 @@ if __name__ == "__main__":
     # script initialization
     parser = argparse.ArgumentParser(prog=sys.argv[0], usage='%(prog)s -g/--gpuid -s/--set')
     parser.add_argument("-g","--gpuid",action='append',help="Choose gpu id",required=False)
-    parser.add_argument("-s","--set",action='append',help="Choose current set (en, nolang, multilang)",required=False)
+    parser.add_argument("-s","--set",action='append',help="Choose current set (en, nolang, intl)",required=False)
     args = parser.parse_args()
-
-    print (f"starting session")
     
     gpuid = 0
-    if args.gpuid and int(args.gpuid) > 0:
-        gpuid = int(args.gpuid)
+    if args.gpuid and int(args.gpuid[0]) > 0:
+        gpuid = int(args.gpuid[0])
 
     jobset = "en"
     if args.set and args.set != "en":
-        jobset = args.set
+        jobset = args.set[0]
+
+    print (f"starting session for {jobset}")
+
+    time.sleep(5)
     
     groupsize = 17 # how many shards to group for CLIP
 

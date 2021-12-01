@@ -353,9 +353,9 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
                 current = multilang_df
                 print(f"currently working on multilang dataset")
 
-            if len(current.index) > 0:
+            if len(parsed_df.index) > 0:
                 tick = timeit(debug, tick, "before sql copy")
-                current.to_csv(f"{i}/export_sql.txt", sep='\t', index=False, header=False)
+                parsed_df.to_csv(f"{i}/export_sql.txt", sep='\t', index=False, header=False)
                 
                 cur = conn.cursor()
                 with open(f"{i}/export_sql.txt", "rt") as f:
@@ -366,6 +366,8 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
                 tick = timeit(debug, tick, "finished sql copy")
 
             uid = uuid.uuid4().hex
+            
+            '''
             if not current.equals(en_df):
                 en_df.to_csv(f"{i}/en-{uid}.txt", sep='\t', index=False, header=False)
             if not current.equals(nolang_df):
@@ -374,6 +376,7 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
                 multilang_df.to_csv(f"{i}/intl-{uid}.txt", sep='\t', index=False, header=False)
             
             os.system(f"rsync -amv --include='*{uid}.txt' --include='*/' --exclude='*' ./{i}/ postgres@185.154.158.196::aidb")
+            '''
 
             print (f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] saved links in {round(time.time()-start,2)}")
 
