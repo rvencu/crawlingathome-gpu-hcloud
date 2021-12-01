@@ -21,79 +21,99 @@ from pathlib import Path
 from datetime import datetime
 from bloom_filter2 import BloomFilter
 
-# update the bloom server filters too
-bloomip = "116.202.162.146"
+with open("bloomlog.txt","a") as log:
 
-serverbloom = BloomFilter(max_elements=10000000, error_rate=0.01, filename=(f"/home/archiveteam/bloom-{bloomip}.bin",-1))
-serverclip = BloomFilter(max_elements=10000000, error_rate=0.01, filename=(f"/home/archiveteam/clip-{bloomip}.bin",-1))
+    # update the bloom server filters too
+    bloomip = "116.202.162.146"
 
-start = time.time()
-now = datetime.now().strftime("%Y/%m/%d_%H:%M")
+    serverbloom = BloomFilter(max_elements=10000000, error_rate=0.01, filename=(f"/home/archiveteam/bloom-{bloomip}.bin",-1))
+    intlbloom = BloomFilter(max_elements=10000000, error_rate=0.01, filename=(f"/home/archiveteam/intl-{bloomip}.bin",-1))
+    serverclip = BloomFilter(max_elements=10000000, error_rate=0.01, filename=(f"/home/archiveteam/clip-{bloomip}.bin",-1))
 
-failed = BloomFilter(max_elements=10000000, error_rate=0.01, filename=("/home/archiveteam/CAH/bloom/failed-domains.bin",-1))
-filesfailed = BloomFilter(max_elements=100000, error_rate=0.01, filename=("/home/archiveteam/filesfailed.bin",-1))
+    start = time.time()
+    now = datetime.now().strftime("%Y/%m/%d_%H:%M")
 
-time.sleep(5)
-counter = 0
-uniques = 0
-for file in glob("/home/archiveteam/CAH/hashes/*.hsh"):
-    stem = Path(file).stem.strip(".")
-    if stem not in serverbloom:
-        with open(file,"rt") as f:
-            for line in f.readlines():
-                counter += 1
-        post = {
-            'file': (stem, open(file, 'rb')),
-            'key': (None, 'main'),
-        }
-        response = requests.post(f'http://{bloomip}:8000/add/', files=post)
-        if response.status_code == 200:
-            serverbloom.add(stem)
-            uniques = int(response.text)
+    time.sleep(5)
+    counter = 0
+    counterintl = 0
+    uniques = 0
+    uniquesintl = 0
+    main = [(0,0)]
+    intl = [(0,0)]
+    for file in glob("/home/archiveteam/CAH/hashes/*.hsh"):
+        stem = Path(file).stem.strip(".")
+        if stem not in serverbloom:
+            with open(file,"rt") as f:
+                for line in f.readlines():
+                    counter += 1
+            post = {
+                'file': (stem, open(file, 'rb')),
+                'key': (None, 'main'),
+            }
+            response = requests.post(f'http://{bloomip}:8000/add/', files=post)
+            if response.status_code == 200:
+                serverbloom.add(stem)
+                uniques += int(response.text)
+            main.append(tuple(map(lambda i, j: i - j, (counter,uniques), main[-1])))
+    del(main[0])
+    #log.write(str(main) + "\n")
+    for file in glob("/home/archiveteam/CAH/hashesintl/*.hsh"):
+        stem = Path(file).stem.strip(".")
+        if stem not in intlbloom:
+            with open(file,"rt") as f:
+                for line in f.readlines():
+                    counterintl += 1
+            post = {
+                'file': (stem, open(file, 'rb')),
+                'key': (None, 'multilanguage'),
+            }
+            response = requests.post(f'http://{bloomip}:8000/add/', files=post)
+            if response.status_code == 200:
+                intlbloom.add(stem)
+                uniquesintl += int(response.text)
+            intl.append(tuple(map(lambda i, j: i - j, (counterintl,uniquesintl), intl[-1])))
+    del(intl[0])
 
-failed_counter = 0
-for file in glob("/home/archiveteam/CAH/bloom/*.txt"):
-    stem = Path(file).stem.strip(".")
-    if stem not in filesfailed:
-        with open(file,"rt") as f:
-            for line in f.readlines():
-                line = line.strip()
-                if line not in failed:
-                    failed.add(line)
-                    failed_counter += 1
-        filesfailed.add(stem)
+    clippedlist=[0]
+    clipped_counter = 0
+    for file in glob("/home/archiveteam/CAH/clipped/*.clp"):
+        stem = Path(file).stem.strip(".")
+        if stem not in serverclip:
+            post = {
+                'file': (stem, open(file, 'rb')),
+                'key': (None, 'clipped'),
+            }
+            response = requests.post(f'http://{bloomip}:8000/add/', files=post)
+            if response.status_code == 200:
+                serverclip.add(stem)
+                clipped_counter += int(response.text)
+            clippedlist.append(clipped_counter-clippedlist[-1])
+    del clippedlist[0]
+    #log.write(str(clippedlist) + "\n")
 
-clipped_counter = 0
-for file in glob("/home/archiveteam/CAH/clipped/*.clp"):
-    stem = Path(file).stem.strip(".")
-    if stem not in serverclip:
-        post = {
-            'file': (stem, open(file, 'rb')),
-            'key': (None, 'clipped'),
-        }
-        response = requests.post(f'http://{bloomip}:8000/add/', files=post)
-        if response.status_code == 200:
-            serverclip.add(stem)
-            clipped_counter = int(response.text)
+    pd.set_option('precision', 2)
+    df = pd.read_csv("bloom.log", sep=" ",header=None, names=["Date", "a", "unique pairs (5%)", "b", "total including duplicates","c","clipped filter (5%)","d","failed filter","e"])
+    df["Date"]=df.Date.apply(lambda x: datetime.strptime(x, "[%Y/%m/%d_%H:%M]"))
+    df["unique pairs (5%)"]=df["unique pairs (5%)"]/1000000
+    df["total including duplicates"]=df["total including duplicates"]/1000000
+    df["clipped filter (5%)"]=df["clipped filter (5%)"]/1000000
 
-pd.set_option('precision', 2)
-df = pd.read_csv("bloom.log", sep=" ",header=None, names=["Date", "a", "unique pairs (5%)", "b", "total including duplicates","c","clipped filter (5%)","d","failed filter","e"])
-df["Date"]=df.Date.apply(lambda x: datetime.strptime(x, "[%Y/%m/%d_%H:%M]"))
-df["unique pairs (5%)"]=df["unique pairs (5%)"]/1000000
-df["total including duplicates"]=df["total including duplicates"]/1000000
-df["clipped filter (5%)"]=df["clipped filter (5%)"]/1000000
+    #log.write("Done df calc \n")
+    if uniques + uniquesintl + clipped_counter > 0:
+        print(f"[{now}] added {uniques + uniquesintl} \"from total of\" {counter + counterintl} \"( {str(main)} i.e. {round((counter +  counterintl - uniques - uniquesintl)*100/(counter + counterintl + sys.float_info.epsilon), 2)}% duplication in {round(time.time()-start,2)} sec) Also added \" {clipped_counter} \" {str(clippedlist)} clipped\" and 0 failed")
 
-if uniques > 0:
-    print(f"[{now}] added {uniques} \"from total of\" {counter} \"(i.e. {round((counter-uniques)*100/(counter+sys.float_info.epsilon),2)}% duplication in {round(time.time()-start,2)} sec) Also added \" {clipped_counter} \"clipped and\" {failed_counter} failed")
-    with open('dashboard.txt', 'w') as file:
-        file.write("<h5><a href='http://cah.io.community'>Crawling at Home project</a></h5>\n")
-        file.write("<h1>Bloom filters status</h1>\n")
-        file.write("<h2>All time stats</h2>\n")
-        file.write("<h5>initialized from first parquet files</h5>\n")
-        file.write(str(df.sum(axis=0, numeric_only=True)).replace("\n","<br/>"))
-        file.write("<br/><br/>")
-        file.write("<h2>Last day stats</h2>\n")
-        file.write(str(df[df.Date > datetime.now() - pd.to_timedelta("1day")].sum(axis=0, numeric_only=True)).replace("\n","<br/>"))
-        file.write("<h2>Last week stats</h2>\n")
-        file.write("<h5>Last reset date: 02 August 2021</h5>\n")
-        file.write(str(df[df.Date > datetime.now() - pd.to_timedelta("7day")].sum(axis=0, numeric_only=True)).replace("\n","<br/>"))
+        #log.write("Printed stats \n")
+
+        with open('dashboard.txt', 'w') as file:
+            file.write("<h5><a href='http://cah.io.community'>Crawling at Home project</a></h5>\n")
+            file.write("<h1>Bloom filters status</h1>\n")
+            file.write("<h2>All time stats</h2>\n")
+            file.write("<h5>initialized from first parquet files</h5>\n")
+            file.write(str(df.sum(axis=0, numeric_only=True)).replace("\n","<br/>"))
+            file.write("<br/><br/>")
+            file.write("<h2>Last day stats</h2>\n")
+            file.write(str(df[df.Date > datetime.now() - pd.to_timedelta("1day")].sum(axis=0, numeric_only=True)).replace("\n","<br/>"))
+            file.write("<h2>Last week stats</h2>\n")
+            file.write("<h5>Last reset date: 01 December 2021</h5>\n")
+            file.write(str(df[df.Date > datetime.now() - pd.to_timedelta("7day")].sum(axis=0, numeric_only=True)).replace("\n","<br/>"))
+        #log.write("Printed dashboard \n")
