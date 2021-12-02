@@ -113,7 +113,7 @@ class CLIP:
 def df_clipfilter(df, clip_filter):
     sim_threshold = 0.28
     if clip_filter.use_mclip:
-        sim_threshold = 0.24
+        sim_threshold = 0.26
     underaged_text = ["teen", "kid", "child", "baby"]
 
     img_embedding, similarities = clip_filter.preprocess_images(df)
