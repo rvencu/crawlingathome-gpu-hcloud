@@ -589,7 +589,7 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             if jobset != "en":
                 use_mclip = True
             clip_filter_obj = CLIP(gpuid, use_mclip)
-            log(logqueue,f"dfsize:{len(group_parse.index)}")
+            log(logqueue,f"dfsize:{len(group_parse)}")
             final_images, results = filter(group_parse, group_id, "./save/", clip_filter_obj)
             #TODO: add here processing command for int_parse, perhaps secondary location and different group_id
             
