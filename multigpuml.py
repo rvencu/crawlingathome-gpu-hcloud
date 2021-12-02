@@ -217,15 +217,15 @@ def monitor_curses(logqueue: Queue, screen):
             elif type == "current_gpu_job":
                 current_gpu_job = msg
             elif type == "qsize":
-                qsize = msg
+                qsize = int(msg)
             elif type == "group_size":
-                group_size = msg
+                group_size = int(msg)
             elif type == "pairs":
                 pairs = msg
             elif type == "dfsize":
-                dfsize = msg
+                dfsize = int(msg)
             elif type == "duration":
-                duration = msg
+                duration = float(msg)
             else:
                 log = msg
             print_curses(screen, tick=tick, classic_count=classic_count, database_count=database_count, current_gpu_job=current_gpu_job, log=log, group_size=group_size, pairs=pairs, duration=duration, qsize=qsize, lastsize=lastsize, lastgroupsize=lastgroupsize)
@@ -245,7 +245,7 @@ def print_curses(screen, tick, classic_count, database_count, current_gpu_job, l
     screen.addstr(6, 0, "last inference result: %s pairs\n" % (pairs))
     screen.addstr(7, 0, "last inference speed:  %s sec/job\n" % (duration))
     screen.addstr(8, 0, "last inference size:  %s sec/job\n" % (lastsize))
-    screen.addstr(9, 0, "last inference speed:  %s samples/sec\n" % (round(float(lastsize)/(float(duration*lastgroupsize) + sys.float_info.epsilon),0)))
+    screen.addstr(9, 0, "last inference speed:  %s samples/sec\n" % (round(float(lastsize)/(duration * lastgroupsize + sys.float_info.epsilon),0)))
     screen.addstr(10, 0, "                                                    \n")
     screen.addstr(11, 0, "%s\n" % (log))
     screen.addstr(12, 0, "                                                    \n")
