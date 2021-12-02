@@ -73,12 +73,12 @@ class CLIP:
             self.underaged_categories = self.model.encode_text(clip.tokenize(["teenager, teen", "kid, child, teenager, teen, baby or toddler, underaged, little girl, little boy", "kid, child, little girl, little boy", "baby, toddler","adult, woman, man, grownup, grown person,full-aged of legal age","full-aged, of legal age, adult","woman, man","adult, woman, man, grownup, grown person,full-aged of legal age"]).to(self.device))
             self.animal_categories = self.model.encode_text(clip.tokenize(["lifeless object, thing", "thing, object", "material", "furniture","wall", "house", "tree", "wood","ground","industry", "table", "bed", "tool", "dress, clothes", "door", "chair", "rock, stone", "human", "man", "woman", "man, woman", "animal","cat","dog", "cow", "pig", "goat", "sheep", "elephant", "horse", "horse, elephant, pig, dog, cat, sheep, goat, animal", "life", "wildlife"]).to(self.device))
 
-    def similarity_imgalt(self, image_tensor, text_tokens, text):
+    def similarity_imgalt(self, image_tensor, text_tokens, text, batch_size):
         with torch.no_grad():
             image_features = self.model.encode_image(image_tensor.to(self.device)).float()
 
             if self.use_mclip:
-                text_features = torch.from_numpy(self.mclip.encode(text)).to(self.device).float()
+                text_features = torch.from_numpy(self.mclip.encode(text, batch_size=batch_size )).to(self.device).float()
             else:
                 text_features = self.model.encode_text(text_tokens.to(self.device)).float()
             
@@ -94,7 +94,7 @@ class CLIP:
         dataset = CLIPDataset(df, self.preprocess)
         dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=12, pin_memory=True, prefetch_factor=4)
         for tensors, tokens, text in dataloader:
-            image_features, similarities = self.similarity_imgalt(tensors, tokens, text)
+            image_features, similarities = self.similarity_imgalt(tensors, tokens, text, batch_size)
             ret_image_features.extend(image_features)
             ret_similarity.extend(similarities)
         return ret_image_features, ret_similarity
@@ -244,7 +244,7 @@ def print_curses(screen, tick, classic_count, database_count, current_gpu_job, l
     screen.addstr(5, 0, "group target size:     %s jobs\n" % (group_size))
     screen.addstr(6, 0, "last inference result: %s pairs\n" % (pairs))
     screen.addstr(7, 0, "last inference speed:  %s sec/job\n" % (duration))
-    screen.addstr(8, 0, "last inference size:  %s sec/job\n" % (lastsize))
+    screen.addstr(8, 0, "last inference size:   %s samples\n" % (lastsize))
     screen.addstr(9, 0, "last inference speed:  %s samples/sec\n" % (round(float(lastsize)/(duration * lastgroupsize + sys.float_info.epsilon),0)))
     screen.addstr(10, 0, "                                                    \n")
     screen.addstr(11, 0, "%s\n" % (log))
