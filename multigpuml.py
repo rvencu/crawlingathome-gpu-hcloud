@@ -244,7 +244,7 @@ def print_curses(screen, tick, classic_count, database_count, current_gpu_job, l
     screen.addstr(5, 0, "group target size:     %s jobs\n" % (group_size))
     screen.addstr(6, 0, "last inference result: %s pairs\n" % (pairs))
     screen.addstr(7, 0, "last inference speed:  %s sec/job\n" % (duration))
-    screen.addstr(8, 0, "last inference size:  %s sec/job\n" % (lastsize))
+    screen.addstr(8, 0, "last inference size:   %s samples\n" % (lastsize))
     screen.addstr(9, 0, "last inference speed:  %s samples/sec\n" % (round(float(lastsize)/(duration * lastgroupsize + sys.float_info.epsilon),0)))
     screen.addstr(10, 0, "                                                    \n")
     screen.addstr(11, 0, "%s\n" % (log))
