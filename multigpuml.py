@@ -197,10 +197,13 @@ def monitor_curses(logqueue: Queue, screen):
     database_count = 0
     current_gpu_job = ""
     group_size = 0
+    lastsize=0
+    lastgroupsize=0
     log = ""
     duration = 0
     pairs = 0
     qsize = 0
+    dfsize = 0
     while True:
         try:
             raw = logqueue.get()
@@ -219,15 +222,19 @@ def monitor_curses(logqueue: Queue, screen):
                 group_size = msg
             elif type == "pairs":
                 pairs = msg
+            elif type == "dfsize":
+                dfsize = msg
             elif type == "duration":
                 duration = msg
             else:
                 log = msg
-            print_curses(screen, tick=tick, classic_count=classic_count, database_count=database_count, current_gpu_job=current_gpu_job, log=log, group_size=group_size, pairs=pairs, duration=duration, qsize=qsize)
+            print_curses(screen, tick=tick, classic_count=classic_count, database_count=database_count, current_gpu_job=current_gpu_job, log=log, group_size=group_size, pairs=pairs, duration=duration, qsize=qsize, lastsize=lastsize, lastgroupsize=lastgroupsize)
+            lastsize = dfsize
+            lastgroupsize = group_size
         except:
             time.sleep(10)
 
-def print_curses(screen, tick, classic_count, database_count, current_gpu_job, log, group_size, pairs, duration, qsize):
+def print_curses(screen, tick, classic_count, database_count, current_gpu_job, log, group_size, pairs, duration, qsize, lastsize, lastgroupsize):
     screen.erase()
     screen.addstr(0, 0, "GPU off gap:           %s sec.\n" % (tick))
     screen.addstr(1, 0, "classic jobs count:    %s jobs\n" % (classic_count))
@@ -237,11 +244,13 @@ def print_curses(screen, tick, classic_count, database_count, current_gpu_job, l
     screen.addstr(5, 0, "group target size:     %s jobs\n" % (group_size))
     screen.addstr(6, 0, "last inference result: %s pairs\n" % (pairs))
     screen.addstr(7, 0, "last inference speed:  %s sec/job\n" % (duration))
-    screen.addstr(8, 0, "                                                    \n")
-    screen.addstr(9, 0, "%s\n" % (log))
+    screen.addstr(8, 0, "last inference size:  %s sec/job\n" % (lastsize))
+    screen.addstr(9, 0, "last inference speed:  %s samples/sec\n" % (round(lastsize/(duration*lastgroupsize),0)))
     screen.addstr(10, 0, "                                                    \n")
-    screen.addstr(11, 0, "                                                    \n")
+    screen.addstr(11, 0, "%s\n" % (log))
     screen.addstr(12, 0, "                                                    \n")
+    screen.addstr(13, 0, "                                                    \n")
+    screen.addstr(14, 0, "                                                    \n")
     screen.refresh()
 
 '''
@@ -580,6 +589,7 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             if jobset != "en":
                 use_mclip = True
             clip_filter_obj = CLIP(gpuid, use_mclip)
+            log(logqueue,f"dfsize:{len(group_parse.index)}")
             final_images, results = filter(group_parse, group_id, "./save/", clip_filter_obj)
             #TODO: add here processing command for int_parse, perhaps secondary location and different group_id
             
