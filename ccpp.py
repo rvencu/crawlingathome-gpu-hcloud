@@ -344,6 +344,8 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
             nolang_df = parsed_df[parsed_df["language"]==""]
             multilang_df = parsed_df[(parsed_df["language"]!="en") & (parsed_df["language"]!="")]
 
+            not_nolang = parsed_df[(parsed_df["language"]!="")]
+
             tick = timeit(debug, tick, "dataframe preparation done")
             current = en_df
             if current_set == "":
@@ -355,7 +357,7 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
 
             if len(parsed_df.index) > 0:
                 tick = timeit(debug, tick, "before sql copy")
-                parsed_df.to_csv(f"{i}/export_sql.txt", sep='\t', index=False, header=False)
+                not_nolang.to_csv(f"{i}/export_sql.txt", sep='\t', index=False, header=False)
                 
                 cur = conn.cursor()
                 with open(f"{i}/export_sql.txt", "rt") as f:
@@ -366,6 +368,9 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
                 tick = timeit(debug, tick, "finished sql copy")
 
             uid = uuid.uuid4().hex
+
+            nolang_df.to_csv(f"{i}/nolang-{uid}.txt", sep='\t', index=False, header=False)
+            os.system(f"rsync -amv --include='*{uid}.txt' --include='*/' --exclude='*' ./{i}/ postgres@185.154.158.196::aidb")
             
             '''
             if not current.equals(en_df):
