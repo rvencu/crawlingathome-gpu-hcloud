@@ -493,7 +493,11 @@ def upload_worker(uploadqueue: JoinableQueue, counter: JoinableQueue, outgoingqu
 
 # main gpu workers. perhaps this worker needs to be run in as many processes as GPUs are present in the system. (todo)
 def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag: JoinableQueue, groupsize: int, logqueue: Queue, gpuid: int, jobset="en"):
-    
+    use_mclip = False
+    if jobset != "en":
+        use_mclip = True
+    clip_filter_obj = CLIP(gpuid, use_mclip)
+
     bloomip = "116.202.162.146"
     bloomkey  = "main"
     if jobset == "intl":
@@ -585,10 +589,7 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             log(logqueue,f"log:[gpu] preparation done in {round(time.time()-start, 2)} sec.")
 
             start = time.time()
-            use_mclip = False
-            if jobset != "en":
-                use_mclip = True
-            clip_filter_obj = CLIP(gpuid, use_mclip)
+            
             log(logqueue,f"dfsize:{len(group_parse)}")
             final_images, results = filter(group_parse, group_id, "./save/", clip_filter_obj)
             #TODO: add here processing command for int_parse, perhaps secondary location and different group_id
