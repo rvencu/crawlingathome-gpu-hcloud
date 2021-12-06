@@ -167,6 +167,7 @@ def parse_wat(content, i, debug):
     print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] lenght of pairs to filter {len(valid_data)}")
     s = time.time()
 
+    '''
     # remove from valid_data elements rejected by clipped bloom server
     with open(f'{i}/hash.txt', 'w') as f:
         for item in valid_data:
@@ -175,6 +176,7 @@ def parse_wat(content, i, debug):
         'file': ('hash.txt', open(f'{i}/hash.txt', 'rb')),
         'key': (None, 'clipped'),
     }
+    
     
     tick = timeit(debug, tick, "clip bloom prepared")
     failure = True
@@ -206,11 +208,11 @@ def parse_wat(content, i, debug):
         if item[-1].strip() in valid_hashes:
             kept_data.append(item)
             clpd -= 1
-    
+    '''
     s = time.time()
     # remove from valid_data elements rejected by parsed bloom server
     with open(f'{i}/hash.txt', 'w') as f:
-        for item in kept_data:
+        for item in valid_data:
             f.write(item[0].strip()+"\n")
     post = {
         'file': ('hash.txt', open(f'{i}/hash.txt', 'rb')),
@@ -239,11 +241,11 @@ def parse_wat(content, i, debug):
     print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] parsed bloom server returned {len(valid_urls)} in {round(time.time()-s,3)} sec")
     tick = timeit(debug, tick, "parsed bloom done")
 
-    valid_data = [t for t in {tuple(i) for i in kept_data}]
+    valid_data = [t for t in {tuple(i) for i in valid_data}]
     final_kept_data = []
-    prsd = len(kept_data)
+    prsd = len(valid_data)
 
-    for item in kept_data:
+    for item in valid_data:
         if item[0].strip() in valid_urls:
             final_kept_data.append(item)
             prsd -= 1
