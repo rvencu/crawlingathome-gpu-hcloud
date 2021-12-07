@@ -6,7 +6,6 @@ from redis.client import Redis
 r = Redis()
 
 def make_dump(r, key, path):
-    chunks = []
     iter = 0
 
     while True:
@@ -21,13 +20,12 @@ def make_dump(r, key, path):
 def restore_dump(r, key, path):
     # Load it back
     chunks = []
-    iter = 0
     files = glob.glob(f"{path}/*.bloom")
     for file in files:
         i, k, b = file.split("/")[-1].split(".")
         if k == key:
             chunks.append(i)
-    # reorder chunks by iter ascending
+    # reorder chunks ascending
     chunks.sort(key=lambda x: int(x))
     for chunk in chunks:
         with open(f"{path}/{chunk}.{key}.bloom","rb") as f:
