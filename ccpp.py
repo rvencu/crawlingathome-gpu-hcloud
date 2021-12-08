@@ -154,7 +154,7 @@ def parse_wat(content, i, debug):
                 continue
             if len(alt_text) < 5:
                 continue
-            alt_text = alt_text[0:2000].replace("\t"," ").replace("\n"," ").replace('\\','\\\\') # will use tab as field separator for copy source
+            alt_text = alt_text[0:2000].replace("\t"," ").replace("\n"," ").replace('\\','\\\\').replace('|', ' ') # will use tab as field separator for copy source
             if not url.startswith("http"):
                 url = urljoin(base_url, url)
             hash = hashlib.md5((url + alt_text).encode("utf-8")).hexdigest()
