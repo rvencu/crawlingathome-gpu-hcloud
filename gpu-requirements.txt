@@ -6,4 +6,7 @@ trio
 ujson
 colorama
 dashing
+psycopg2-binary
 sqlalchemy
+sentence_transformers
+sentry_sdk

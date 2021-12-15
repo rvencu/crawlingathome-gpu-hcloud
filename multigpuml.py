@@ -599,7 +599,7 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             log(logqueue,f"current_gpu_job:not ready")
             
             # dynamic adjustment of groupsize so we can get close to 8000 pairs per group as fast as possible
-            gradient = int((final_images-20000)/7000)
+            gradient = int((final_images-20000)/3000)
             oldgroupsize = groupsize
             groupsize = min( int(3 * first_groupsize) - 5 , groupsize - gradient )
             groupsize = max( groupsize - gradient, 3 )
@@ -628,7 +628,7 @@ if __name__ == "__main__":
 
     time.sleep(5)
     
-    groupsize = 17 # how many shards to group for CLIP
+    groupsize = 25 # how many shards to group for CLIP
 
     params = config()
     engine = create_engine(f'postgresql://{params["user"]}:{params["password"]}@{params["host"]}:5432/{params["database"]}',pool_size=50, max_overflow=100)
