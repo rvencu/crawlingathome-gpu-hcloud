@@ -22,10 +22,7 @@ import pandas as pd
 from glob import glob
 from PIL import Image
 from pathlib import Path
-from statistics import mode
 from random import randint
-from datetime import datetime
-import crawlingathome_client as cah
 from sqlalchemy import create_engine
 from configparser import ConfigParser
 sys.path.append('./crawlingathome-worker/')
