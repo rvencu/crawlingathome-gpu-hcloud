@@ -36,6 +36,6 @@ for file in files:
             if i%1000 == 0:
                 print ("+1000 files")
         except:
-            pass
+            continue
 
 print("successfully moved...")

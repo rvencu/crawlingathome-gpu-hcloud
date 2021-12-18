@@ -5,6 +5,7 @@ import psycopg2
 import argparse
 import fileinput
 from glob import glob
+import pandas as pd
 from sqlalchemy import create_engine
 from configparser import ConfigParser
 
@@ -30,8 +31,25 @@ def config(filename='database.ini', mode="test"):
 
     return db
 
-parser = argparse.ArgumentParser(prog=sys.argv[0], usage='%(prog)s -m/--mode')
+def get_count(engine, ds="intl"):
+    table="dataset_intl"
+    if ds == "en":
+        table = "dataset_en"
+    elif ds == "nolang":
+        table = "dataset_nolang"
+    select_stmt1 = f"select count(*) from {table} where status = 0"
+    conn = engine.raw_connection()
+    cur = conn.cursor()
+    cur.execute(select_stmt1)
+    count = cur.fetchone()
+    conn.commit()
+    cur.close()
+    conn.close()
+    return int(count[0])
+
+parser = argparse.ArgumentParser(prog=sys.argv[0], usage='%(prog)s -m/--mode -s/--set -p/--path')
 parser.add_argument("-m","--mode",action='append',help="Mode to run", required=True)
+parser.add_argument("-s","--set",action='append',help="Dataset to run", required=False)
 parser.add_argument("-p","--path",action='append',help="Choose source path", required=False)
 args = parser.parse_args()
 
@@ -42,6 +60,10 @@ if args.path is not None:
 mode = "txt"
 if args.mode is not None:
     mode = args.mode[0]
+
+ds = "intl"
+if args.set is not None:
+    ds = args.set[0]
 
 i = 0
 
@@ -66,16 +88,22 @@ for file in files:
         conn.commit()
         cur.close()
         os.system(f"mv {file} {file}.done")
-        print(f"{i} {file}")
-        i += 1
-        if i % 10000 == 0:
+        count = get_count(engine, ds)
+        if count > 500000000:
             break
+        else:
+            print(f"{i} {file} / count = {count}")
+            i+=1
     except Exception as e:
         print(f"error {file} because {e}")
         #os.system(f"mv {file} {file}.error")
         for line in fileinput.input(file, inplace = True):
             if not re.search(r'\x00', line):
                 print(line, end="")
+        df = pd.read_csv(file, sep="\t", on_bad_lines='skip', header=None)
+        df[2] = df[2].apply(lambda x: x.replace("\n",""))
+        df[5] = df[5].apply(lambda x: int(x))
+        df.to_csv(file, sep="\t", index=False, header=False)
         conn.close()
         conn = engine.raw_connection()
 conn.close()

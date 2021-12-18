@@ -252,34 +252,35 @@ def parse_wat(content, i, debug):
 
     print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] lenght of deduplicated pairs to return {len(final_kept_data)}")
 
-    # add parsed urls to parsed bloom server
-    with open('hash.txt', 'w') as f:
-        for url in final_kept_data:
-            f.write(url[0].strip()+"\n")
-    post = {
-        'file': ('hash.txt', open('hash.txt', 'rb')),
-        'key': (None, 'parsed'),
-    }
-    
-    tick = timeit(debug, tick, "add to parsed bloom prepared")
-    failure = True
-    for _ in range(10):
-        try:
-            response = requests.post(f'http://{bloom2ip}:8000/add/', files=post)
-            if response.status_code != 200:
-                print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] bloom server error, retrying... got {response.status_code}")
-                time.sleep(randint(5,30))
-            else:
-                failure = False
-                print(f"bloom add response: {response.text}")
-                break
-        except:
-            time.sleep(15)
-    if failure:
-        print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] crash, cannot contact the parsed bloom server, please fix")
-        return (None, 0, 0)
+    if len(final_kept_data) > 0:
+        # add parsed urls to parsed bloom server
+        with open('hash.txt', 'w') as f:
+            for url in final_kept_data:
+                f.write(url[0].strip()+"\n")
+        post = {
+            'file': ('hash.txt', open('hash.txt', 'rb')),
+            'key': (None, 'parsed'),
+        }
+        
+        tick = timeit(debug, tick, "add to parsed bloom prepared")
+        failure = True
+        for _ in range(10):
+            try:
+                response = requests.post(f'http://{bloom2ip}:8000/add/', files=post)
+                if response.status_code != 200:
+                    print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] bloom server error, retrying... got {response.status_code}")
+                    time.sleep(randint(5,30))
+                else:
+                    failure = False
+                    print(f"bloom add response: {response.text}")
+                    break
+            except:
+                time.sleep(15)
+        if failure:
+            print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] crash, cannot contact the parsed bloom server, please fix")
+            return (None, 0, 0)
 
-    tick = timeit(debug, tick, "add to parsed bloom done")
+        tick = timeit(debug, tick, "add to parsed bloom done")
 
     return (final_kept_data, clpd, prsd)  # use a dict in order to remove duplicate tuples from list
 
@@ -318,6 +319,9 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
             client.downloadWat(tmp_folder)
             tick = timeit(debug, tick, "downloaded wat")
 
+            #fix tracker db error
+            client.shards = client.shards[0:2]
+
             print (f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] downloaded wat in {round(time.time()-start,2)}")
             start = time.time()
 
@@ -335,29 +339,29 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
             start = time.time()
 
             # convert to dataframe and save to disk (for statistics and generating blocking lists)
-            parsed_df = pd.DataFrame(parsed_data, columns=["url","text","license","domain","language","hash"])
-            parsed_df = parsed_df.drop_duplicates(subset=["url"])
-            parsed_df.insert(0, 'sampleid', range(first_sample_id, first_sample_id + len(parsed_df)))
-            parsed_df["wat"] = int(client.shards[-1][0])
-            parsed_df = parsed_df[["sampleid","url","text","license","domain","wat","hash","language"]]
+            if len(parsed_data) > 0:
+                parsed_df = pd.DataFrame(parsed_data, columns=["url","text","license","domain","language","hash"])
+                parsed_df = parsed_df.drop_duplicates(subset=["url"])
+                parsed_df.insert(0, 'sampleid', range(first_sample_id, first_sample_id + len(parsed_df)))
+                parsed_df["wat"] = int(client.shards[-1][0])
+                parsed_df = parsed_df[["sampleid","url","text","license","domain","wat","hash","language"]]
 
-            # postgres should only ingest current working data not all
-            en_df = parsed_df[parsed_df["language"]=="en"]
-            nolang_df = parsed_df[parsed_df["language"]==""]
-            multilang_df = parsed_df[(parsed_df["language"]!="en") & (parsed_df["language"]!="")]
+                # postgres should only ingest current working data not all
+                en_df = parsed_df[parsed_df["language"]=="en"]
+                nolang_df = parsed_df[parsed_df["language"]==""]
+                multilang_df = parsed_df[(parsed_df["language"]!="en") & (parsed_df["language"]!="")]
 
-            not_nolang = parsed_df[(parsed_df["language"]!="")]
+                not_nolang = parsed_df[(parsed_df["language"]!="")]
 
-            tick = timeit(debug, tick, "dataframe preparation done")
-            current = en_df
-            if current_set == "":
-                current = nolang_df
-                print(f"currently working on nolang dataset")
-            if current_set == "multilang":
-                current = multilang_df
-                print(f"currently working on multilang dataset")
+                tick = timeit(debug, tick, "dataframe preparation done")
+                current = en_df
+                if current_set == "":
+                    current = nolang_df
+                    print(f"currently working on nolang dataset")
+                if current_set == "multilang":
+                    current = multilang_df
+                    print(f"currently working on multilang dataset")
 
-            if len(parsed_df.index) > 0:
                 tick = timeit(debug, tick, "before sql copy")
                 not_nolang.to_csv(f"{i}/export_sql.txt", sep='\t', index=False, header=False)
                 
@@ -369,32 +373,34 @@ def proc_worker(i: int, YOUR_NICKNAME_FOR_THE_LEADERBOARD,  CRAWLINGATHOME_SERVE
                 
                 tick = timeit(debug, tick, "finished sql copy")
 
-            uid = uuid.uuid4().hex
+                uid = uuid.uuid4().hex
 
-            nolang_df.to_csv(f"{i}/nolang-{uid}.txt", sep='\t', index=False, header=False)
-            os.system(f"rsync -amv --include='*{uid}.txt' --include='*/' --exclude='*' ./{i}/ postgres@185.154.158.196::aidb")
-            
-            '''
-            if not current.equals(en_df):
-                en_df.to_csv(f"{i}/en-{uid}.txt", sep='\t', index=False, header=False)
-            if not current.equals(nolang_df):
                 nolang_df.to_csv(f"{i}/nolang-{uid}.txt", sep='\t', index=False, header=False)
-            if not current.equals(multilang_df):
-                multilang_df.to_csv(f"{i}/intl-{uid}.txt", sep='\t', index=False, header=False)
-            
-            os.system(f"rsync -amv --include='*{uid}.txt' --include='*/' --exclude='*' ./{i}/ postgres@185.154.158.196::aidb")
-            '''
+                os.system(f"rsync -amv --include='*{uid}.txt' --include='*/' --exclude='*' ./{i}/ postgres@185.154.158.196::aidb")
+                
+                '''
+                if not current.equals(en_df):
+                    en_df.to_csv(f"{i}/en-{uid}.txt", sep='\t', index=False, header=False)
+                if not current.equals(nolang_df):
+                    nolang_df.to_csv(f"{i}/nolang-{uid}.txt", sep='\t', index=False, header=False)
+                if not current.equals(multilang_df):
+                    multilang_df.to_csv(f"{i}/intl-{uid}.txt", sep='\t', index=False, header=False)
+                
+                os.system(f"rsync -amv --include='*{uid}.txt' --include='*/' --exclude='*' ./{i}/ postgres@185.154.158.196::aidb")
+                '''
 
-            print (f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] saved links in {round(time.time()-start,2)}")
+                print (f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] saved links in {round(time.time()-start,2)}")
 
-            lastlinks = len(parsed_data)
-            en_pairs = len(en_df.index)
-            nolang_pairs = len(nolang_df.index)
-            intl_pairs = len(multilang_df.index)
-            print (f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] this job has {lastlinks} links left after removing {clpd} already clipped and {prsd} already parsed")
-            print (f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] links are split into {en_pairs} english, {intl_pairs} multilanguage and {nolang_pairs} without language")
-            with open("datapoints.txt", "a") as f:
-                f.write(f"{time.time()}\t{en_pairs}\t{intl_pairs}\t{nolang_pairs}\n")
+                lastlinks = len(parsed_data)
+                en_pairs = len(en_df.index)
+                nolang_pairs = len(nolang_df.index)
+                intl_pairs = len(multilang_df.index)
+                print (f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] this job has {lastlinks} links left after removing {clpd} already clipped and {prsd} already parsed")
+                print (f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] links are split into {en_pairs} english, {intl_pairs} multilanguage and {nolang_pairs} without language")
+                with open("datapoints.txt", "a") as f:
+                    f.write(f"{time.time()}\t{en_pairs}\t{intl_pairs}\t{nolang_pairs}\n")
+            else:
+                print(f"This WAT file does not contain any useful candidate")
 
             prefixes = {}
             prefixes[str(client.shards[0][0])] = f"postgres {host}"
