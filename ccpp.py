@@ -209,39 +209,41 @@ def parse_wat(content, i, debug):
             kept_data.append(item)
             clpd -= 1
     '''
-    s = time.time()
-    # remove from valid_data elements rejected by parsed bloom server
-    with open(f'{i}/hash.txt', 'w') as f:
-        for item in valid_data:
-            f.write(item[0].strip()+"\n")
-    post = {
-        'file': ('hash.txt', open(f'{i}/hash.txt', 'rb')),
-        'key': (None, 'parsed'),
-    }
+    if len(valid_data) > 0:
+        s = time.time()
+        # remove from valid_data elements rejected by parsed bloom server
+        with open(f'{i}/hash.txt', 'w') as f:
+            for item in valid_data:
+                f.write(item[0].strip()+"\n")
+        post = {
+            'file': ('hash.txt', open(f'{i}/hash.txt', 'rb')),
+            'key': (None, 'parsed'),
+        }
+        
+        tick = timeit(debug, tick, "parsed bloom prepared")
+        failure = True
+        for _ in range(10):
+            try:
+                response = requests.post(f'http://{bloom2ip}:8000/deduplicate/', files=post)
+                if response.status_code != 200:
+                    print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] bloom server error, retrying... got {response.status_code}")
+                    time.sleep(randint(5,30))
+                else:
+                    failure = False
+                    break
+            except:
+                time.sleep(30)
+        if failure:
+            print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] crash, cannot contact the parsed bloom server, please fix")
+            return (None, 0, 0)
+
+        valid_urls = set(response.content.decode("utf-8").split("\n"))
+
+        print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] parsed bloom server returned {len(valid_urls)} in {round(time.time()-s,3)} sec")
+        tick = timeit(debug, tick, "parsed bloom done")
+
+        valid_data = [t for t in {tuple(i) for i in valid_data}]
     
-    tick = timeit(debug, tick, "parsed bloom prepared")
-    failure = True
-    for _ in range(10):
-        try:
-            response = requests.post(f'http://{bloom2ip}:8000/deduplicate/', files=post)
-            if response.status_code != 200:
-                print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] bloom server error, retrying... got {response.status_code}")
-                time.sleep(randint(5,30))
-            else:
-                failure = False
-                break
-        except:
-            time.sleep(30)
-    if failure:
-        print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] crash, cannot contact the parsed bloom server, please fix")
-        return (None, 0, 0)
-
-    valid_urls = set(response.content.decode("utf-8").split("\n"))
-
-    print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] parsed bloom server returned {len(valid_urls)} in {round(time.time()-s,3)} sec")
-    tick = timeit(debug, tick, "parsed bloom done")
-
-    valid_data = [t for t in {tuple(i) for i in valid_data}]
     final_kept_data = []
     prsd = len(valid_data)
 
