@@ -19,6 +19,7 @@ import uuid
 import ujson
 import shutil
 import tarfile
+import argparse
 import pandas as pd
 from glob import glob
 from uuid import uuid1
@@ -258,11 +259,11 @@ def upload(source: str, clientType: str, target: str):
         shutil.rmtree(f"{source}", ignore_errors=True)
     return result
 
-def newJob(engine):
+def newJob(engine, sampleratio):
     # strict selection of distinct domains
     #select_stmt1 = "UPDATE dataset SET status = 1 WHERE sampleid IN (SELECT DISTINCT ON (domain) sampleid FROM (SELECT domain, sampleid FROM dataset TABLESAMPLE SYSTEM (0.05) WHERE status = 0 LIMIT 1000000 FOR UPDATE SKIP LOCKED) as \"U\" LIMIT 10000) AND status = 0 RETURNING sampleid"
     # selection on domains based on distribution of URLs per domain
-    select_stmt1 = "UPDATE dataset_en SET status = 1 WHERE sampleid IN (SELECT sampleid FROM dataset_en TABLESAMPLE SYSTEM (0.05) WHERE status = 0 and language = 'en' LIMIT 10000 FOR UPDATE SKIP LOCKED) AND status = 0 RETURNING sampleid"
+    select_stmt1 = "UPDATE dataset_en SET status = 1 WHERE sampleid IN (SELECT sampleid FROM dataset_en TABLESAMPLE SYSTEM ({sampleratio}) WHERE status = 0 and language = 'en' LIMIT 10000 FOR UPDATE SKIP LOCKED) AND status = 0 RETURNING sampleid"
     conn = engine.raw_connection()
     cur = conn.cursor()
     cur.execute(select_stmt1)
@@ -307,7 +308,7 @@ def completeJob2(engine, prefix, parsed_df, dlparse_df):
     conn.close()
     return
 
-def worker(engine, params, i):
+def worker(engine, params, sampleratio, i):
 
     # initialize working folders
     tmp_folder = f"./{i}/.tmp/"
@@ -319,7 +320,7 @@ def worker(engine, params, i):
             start = time.time()
             start0 = start
 
-            parsed_df = newJob(engine)
+            parsed_df = newJob(engine, sampleratio)
             prefix = uuid.uuid4().hex
             result = 0
 
@@ -368,8 +369,19 @@ def worker(engine, params, i):
 if __name__ == "__main__":
 
     print (f"starting session")
+    parser = argparse.ArgumentParser(prog=sys.argv[0], usage='%(prog)s -r/--ratio')
+    parser.add_argument("-r","--ratio",action='append',help="Tablesample ratio (0.05-1.0)", required=False)
+    parser.add_argument("-c","--cpus",action='append',help="How many cpus to use", required=False)
+    args = parser.parse_args()
+
+    sampleratio = 0.05
+    if args.ratio is not None:
+        sampleratio = float(args.ratio[0])
     
     procs = cpu_count()
+    if args.procs is not None:
+        procs = min(procs, int(args.procs[0]))
+
     params = config()
     engine = create_engine(f'postgresql://{params["user"]}:{params["password"]}@{params["host"]}:5432/{params["database"]}', pool_size=procs, max_overflow=int(procs*1.5), pool_pre_ping=True )
 
@@ -377,7 +389,7 @@ if __name__ == "__main__":
     os.system("rm errors.txt")
 
     for i in range(procs):
-        Process(target=worker, args=[engine, params, i], daemon=True).start()
+        Process(target=worker, args=[engine, params, sampleratio, i], daemon=True).start()
 
     try:
         while True:

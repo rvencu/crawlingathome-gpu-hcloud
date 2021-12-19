@@ -167,48 +167,6 @@ def parse_wat(content, i, debug):
     print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] lenght of pairs to filter {len(valid_data)}")
     s = time.time()
 
-    '''
-    # remove from valid_data elements rejected by clipped bloom server
-    with open(f'{i}/hash.txt', 'w') as f:
-        for item in valid_data:
-            f.write(item[-1].strip()+"\n")
-    post = {
-        'file': ('hash.txt', open(f'{i}/hash.txt', 'rb')),
-        'key': (None, 'clipped'),
-    }
-    
-    
-    tick = timeit(debug, tick, "clip bloom prepared")
-    failure = True
-    for _ in range(10):
-        try:
-            response = requests.post(f'http://{bloomip}:8000/deduplicate/', files=post)
-            if response.status_code != 200:
-                print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] bloom server error, retrying... got {response.status_code}")
-                time.sleep(randint(5,30))
-            else:
-                failure = False
-                break
-        except:
-            time.sleep(30)
-    if failure:
-        print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] crash, cannot contact the clipped bloom server, please fix")
-        return  (None, 0, 0)
-
-    valid_hashes = set(response.content.decode("utf-8").split("\n"))
-
-    print(f"[{datetime.now().strftime('%H:%M:%S')} {i} parser] clipped bloom server returned {len(valid_hashes)} in {round(time.time()-s,3)} sec")
-    tick = timeit(debug, tick, "clip bloom done")
-
-    valid_data = [t for t in {tuple(i) for i in valid_data}]
-    kept_data = []
-    clpd = len(valid_data)
-
-    for item in valid_data:
-        if item[-1].strip() in valid_hashes:
-            kept_data.append(item)
-            clpd -= 1
-    '''
     if len(valid_data) > 0:
         s = time.time()
         # remove from valid_data elements rejected by parsed bloom server
