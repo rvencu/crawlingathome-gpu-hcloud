@@ -185,8 +185,11 @@ def config(filename='database.ini', section='cah_production'):
 
     return db
 
-def log(logqueue:Queue, msg):
-    logqueue.put(msg)
+def log(logqueue:Queue, msg, mode):
+    if mode == "terminal":
+        logqueue.put(msg)
+    else:
+        print(msg)
 
 def monitor_curses(logqueue: Queue, screen):
     tick = 0
@@ -317,7 +320,7 @@ def get_dbjobscount(engine, jobset="en"):
     return jobcount[0]
 
 # spawn this interface to double or more than shard groups so they can download jobs and communicate with the tracker in parallel with GPU processing. this will keep GPU busy almost continuously
-def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: JoinableQueue, logqueue: queue.Queue, engine, jobset="en"):
+def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: JoinableQueue, logqueue: queue.Queue, engine, jobset="en", mode="terminal"):
     jobstable = "jobs"
     if jobset != "en":
         jobstable = f"jobs_{jobset}"
@@ -329,7 +332,7 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
 
     while True:
         try:
-            log(logqueue,f"log:[io {i}] started DATABASE job")
+            log(logqueue,f"log:[io {i}] started DATABASE job", mode)
             jobtype = 1
             select_stmt1 = f"UPDATE {jobstable} SET status = 1 WHERE jobid in (SELECT jobid from {jobstable} where status = 0 LIMIT 1 FOR UPDATE SKIP LOCKED) RETURNING jobid"
             conn = engine.raw_connection()
@@ -357,7 +360,7 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                 output = p.communicate()[0]
                 resp = p.returncode
                 if resp == 5888:
-                    log(logqueue,'error:[io {i}] rsync job not found')
+                    log(logqueue,'error:[io {i}] rsync job not found', mode)
                     invalidURL (job, engine, jobset)
                 if resp == 0:
                     with tarfile.open(f"{job}.tar.gz", "r:gz") as tar:
@@ -367,7 +370,7 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
             # test for csv and for images folder
             if len(glob(f"{job}/*.csv")) == 0 or not os.path.exists(f"./{job}/images"):
                 invalidURL (job, engine, jobset)
-                log(logqueue,f"error:[io {i}] invalid job detected {job}")
+                log(logqueue,f"error:[io {i}] invalid job detected {job}", mode)
                 continue
             for file in glob(f"{job}/*_parsed.csv"):
                 os.system(f"mv {file} stats/")
@@ -394,12 +397,12 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                         im.close()
                     except Exception as e:
                         if index < 10:
-                            log(logqueue,f"error:[io {i}] invalid image {row['PATH']} because {e}")
+                            log(logqueue,f"error:[io {i}] invalid image {row['PATH']} because {e}", mode)
                         df = df.drop(index)
                 df.to_csv(file, sep="|", index=False)
                 del df
             
-            log(logqueue,f"log:[io {i}] job sent to GPU {job}")
+            log(logqueue,f"log:[io {i}] job sent to GPU {job}", mode)
             incomingqueue.put((i, job))
             
             # wait until job gets processes
@@ -414,10 +417,10 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                         try:
                             completeJob (job, engine, jobset)
                         except:
-                            log(logqueue,f"log:[io {i}] invalid trying to complete with {pairs} pairs")
+                            log(logqueue,f"log:[io {i}] invalid trying to complete with {pairs} pairs", mode)
                             invalidURL (job, engine, jobset)
                     else:
-                        log(logqueue,f"log:[io {i}] invalid with negative {pairs} pairs?")
+                        log(logqueue,f"log:[io {i}] invalid with negative {pairs} pairs?", mode)
                         invalidURL (job, engine, jobset)
                     if os.path.exists("./"+ job):
                         shutil.rmtree("./"+ job)
@@ -428,36 +431,38 @@ def gpu_cah_interface(i:int, incomingqueue: JoinableQueue, outgoingqueue: Joinab
                 else:
                     time.sleep(1)
         except Exception as e:
-            log(logqueue,f"error:[io {i}] client crashed, respawning...")
-            log(logqueue,f"error:{e}") #see why clients crashes
+            log(logqueue,f"error:[io {i}] client crashed, respawning...", mode)
+            log(logqueue,f"error:{e}", mode) #see why clients crashes
             time.sleep(30)
 
 # process to spawn many interfaces with the tracker
-def io_worker(incomingqueue: JoinableQueue, outgoingqueue: list, groupsize: int, logqueue: Queue, engine, jobset="en"):
+def io_worker(incomingqueue: JoinableQueue, outgoingqueue: list, groupsize: int, logqueue: Queue, engine, jobset="en", mode="terminal"):
     # separate process to initialize threaded workers
-    log(logqueue,f"log:[io] inbound workers")
+    log(logqueue,f"log:[io] inbound workers", mode)
     thqueue = queue.Queue()
     try:
         # just launch how many threads we need to group jobs into single output
         for i in range(int(2.7 * groupsize)):
-            threading.Thread(target=gpu_cah_interface, args=(i, incomingqueue, outgoingqueue[i], thqueue, engine, jobset)).start()
+            threading.Thread(target=gpu_cah_interface, args=(i, incomingqueue, outgoingqueue[i], thqueue, engine, jobset, mode)).start()
     except Exception as e:
-        log(logqueue,f"error:[io] some inbound problem occured {e}")
+        log(logqueue,f"error:[io] some inbound problem occured {e}", mode)
     while True:
         if not thqueue.empty():
             logqueue.put(thqueue.get())
             thqueue.task_done()
-        else:
+        elif mode == "terminal":
             dbcount = get_dbjobscount(engine, jobset)
             logqueue.put(f"database_count:{dbcount}")
             qsize = incomingqueue.qsize()
-            log(logqueue,f"qsize:{qsize}")
+            log(logqueue,f"qsize:{qsize}", mode)
             time.sleep(0.1)
+        else:
+            pass
 
 
 # process to upload the results
-def upload_worker(uploadqueue: JoinableQueue, counter: JoinableQueue, outgoingqueue: list, logqueue: Queue, jobset="en"):
-    log(logqueue,f"log:upload worker started")
+def upload_worker(uploadqueue: JoinableQueue, counter: JoinableQueue, outgoingqueue: list, logqueue: Queue, jobset="en", mode="terminal"):
+    log(logqueue,f"log:upload worker started", mode)
     target = "CAH"
     if jobset == 'intl':
         target = "CAHINTL"
@@ -489,7 +494,7 @@ def upload_worker(uploadqueue: JoinableQueue, counter: JoinableQueue, outgoingqu
             time.sleep(5)
 
 # main gpu workers. perhaps this worker needs to be run in as many processes as GPUs are present in the system. (todo)
-def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag: JoinableQueue, groupsize: int, logqueue: Queue, gpuid: int, jobset="en"):
+def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag: JoinableQueue, groupsize: int, logqueue: Queue, gpuid: int, jobset="en", mode="terminal"):
     use_mclip = False
     if jobset != "en":
         use_mclip = True
@@ -502,21 +507,21 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
     if jobset == "nolang":
         bloomkey = "nolanguage"
 
-    log(logqueue,f"log:[gpu] worker started")
-    log(logqueue,f"current_gpu_job:preparing...")
+    log(logqueue,f"log:[gpu] worker started", mode)
+    log(logqueue,f"current_gpu_job:preparing...", mode)
     first_groupsize = groupsize
     tick = time.time()
     # watch for the incoming queue, when it is big enough we can trigger processing    
     while True:
         qsize = incomingqueue.qsize()
         #log(logqueue,f"qsize:{qsize}")
-        log(logqueue,f"group_size:{groupsize}")
-        log(logqueue,f"tick:{round(time.time() - tick, 2)}")
+        log(logqueue,f"group_size:{groupsize}", mode)
+        log(logqueue,f"tick:{round(time.time() - tick, 2)}", mode)
         if qsize >= groupsize:
             start = time.time()
             shards = []
             group_id = uuid.uuid4().hex            
-            log(logqueue,f"current_gpu_job:{group_id}")
+            log(logqueue,f"current_gpu_job:{group_id}", mode)
             group_parse = None
             for _ in range(groupsize):
                 i, job = incomingqueue.get()
@@ -562,17 +567,17 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             for _ in range(10):
                 response = requests.post(f'http://{bloomip}:8000/deduplicate/', files=post)
                 if response.status_code != 200:
-                    log(logqueue,f"error:[gpu] bloom server error, retrying... got {response.status_code}")
+                    log(logqueue,f"error:[gpu] bloom server error, retrying... got {response.status_code}", mode)
                     time.sleep(randint(5,30))
                 else:
                     failure = False
                     break
             if failure:
-                log(logqueue,f"error:[gpu] crash, cannot contact the bloom server, please fix")
+                log(logqueue,f"error:[gpu] crash, cannot contact the bloom server, please fix", mode)
                 continue
 
             valid_hashes = response.content.decode("utf-8").split("\n")
-            log(logqueue,f"log:bloom server has validated {len(valid_hashes)} pairs")
+            log(logqueue,f"log:bloom server has validated {len(valid_hashes)} pairs", mode)
 
             group_parse = group_parse[group_parse.hash.isin(valid_hashes)]
             group_parse.reset_index(inplace=True, drop=True)
@@ -583,20 +588,20 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             #int_parse = group_parse[~group_parse.LANGUAGE.isin(['en', 'bn', 'co', 'eo', 'fil', 'fy', 'gd', 'ha', 'haw', 'hmn', 'ig', 'km', 'ku', 'ky', 'lo', 'mi', 'mn', 'mt', 'ny', 'sd', 'si', 'sm', 'sn', 'so', 'st', 'su', 'sw', 'xh', 'yi', 'zu', "", None])]
             print (f"after en selection {len(group_parse.index)}")
 
-            log(logqueue,f"log:[gpu] preparation done in {round(time.time()-start, 2)} sec.")
+            log(logqueue,f"log:[gpu] preparation done in {round(time.time()-start, 2)} sec.", mode)
 
             start = time.time()
             
-            log(logqueue,f"dfsize:{len(group_parse)}")
+            log(logqueue,f"dfsize:{len(group_parse)}", mode)
             final_images, results = filter(group_parse, group_id, "./save/", clip_filter_obj)
             #TODO: add here processing command for int_parse, perhaps secondary location and different group_id
             
-            log(logqueue,f"pairs:{final_images}")
-            log(logqueue,f"duration:{round((time.time()-start)/groupsize,2)}")
+            log(logqueue,f"pairs:{final_images}", mode)
+            log(logqueue,f"duration:{round((time.time()-start)/groupsize,2)}", mode)
 
             uploadqueue.put((group_id, shards, results))
             tick = time.time()
-            log(logqueue,f"current_gpu_job:not ready")
+            log(logqueue,f"current_gpu_job:not ready", mode)
             
             # dynamic adjustment of groupsize so we can get close to 8000 pairs per group as fast as possible
             gradient = int((final_images-20000)/3000)
@@ -604,7 +609,7 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             groupsize = min( int(3 * first_groupsize) - 5 , groupsize - gradient )
             groupsize = max( groupsize - gradient, 3 )
             if groupsize != oldgroupsize:
-                log(logqueue,f"log:[gpu] groupsize changed to {groupsize}")
+                log(logqueue,f"log:[gpu] groupsize changed to {groupsize}", mode)
             
         else:
             time.sleep(1)
@@ -614,6 +619,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog=sys.argv[0], usage='%(prog)s -g/--gpuid -s/--set')
     parser.add_argument("-g","--gpuid",action='append',help="Choose gpu id",required=False)
     parser.add_argument("-s","--set",action='append',help="Choose current set (en, nolang, intl)",required=False)
+    parser.add_argument("-m","--mode",action='append',help="Choose current mode (terminal, service)",required=False)
     args = parser.parse_args()
     
     gpuid = 0
@@ -623,6 +629,10 @@ if __name__ == "__main__":
     jobset = "en"
     if args.set and args.set != "en":
         jobset = args.set[0]
+
+    mode = "terminal"
+    if args.mode and args.mode != "terminal":
+        mode = args.mode[0]
 
     print (f"starting session for {jobset}")
 
@@ -671,15 +681,16 @@ if __name__ == "__main__":
     gpuflag = JoinableQueue() # use this to flag that gpu is processing
     logqueue = Queue() # use this to send log lines to monitor
     
-    sys.stderr = open('gpuerr.txt', 'a')
-    sys.stdout = open('gpuout.txt', 'a')
+    if mode == "terminal": 
+        sys.stderr = open('gpuerr.txt', 'a')
+        sys.stdout = open('gpuout.txt', 'a')
 
-    screen = curses.initscr()
-    #mon = Process(target=monitor, args=[logqueue], daemon=True).start()
-    mon = Process(target=monitor_curses, args=[logqueue, screen], daemon=True).start()
+        screen = curses.initscr()
+        #mon = Process(target=monitor, args=[logqueue], daemon=True).start()
+        mon = Process(target=monitor_curses, args=[logqueue, screen], daemon=True).start()
 
     # launch separate processes with specialized workers
-    io = Process(target=io_worker, args=[inbound, outbound, groupsize, logqueue, engine, jobset], daemon=True).start()
-    upd = Process(target=upload_worker, args=[uploadqueue, counter, outbound, logqueue, jobset], daemon=True).start()
+    io = Process(target=io_worker, args=[inbound, outbound, groupsize, logqueue, engine, jobset, mode], daemon=True).start()
+    upd = Process(target=upload_worker, args=[uploadqueue, counter, outbound, logqueue, jobset, mode], daemon=True).start()
     
-    gpu_worker(inbound, uploadqueue, gpuflag, groupsize, logqueue, gpuid, jobset)
+    gpu_worker(inbound, uploadqueue, gpuflag, groupsize, logqueue, gpuid, jobset, mode)
