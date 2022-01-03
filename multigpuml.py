@@ -204,8 +204,10 @@ def monitor_curses(logqueue: Queue, screen):
     pairs = 0
     qsize = 0
     dfsize = 0
+    counter = 0
     while True:
         try:
+            counter += 1
             raw = logqueue.get()
             type, msg = raw.split(":")
             if type == "tick":
@@ -228,14 +230,18 @@ def monitor_curses(logqueue: Queue, screen):
                 duration = float(msg)
             else:
                 log = msg
-            print_curses(screen, tick=tick, classic_count=classic_count, database_count=database_count, current_gpu_job=current_gpu_job, log=log, group_size=group_size, pairs=pairs, duration=duration, qsize=qsize, lastsize=lastsize, lastgroupsize=lastgroupsize)
+            clear = counter % 1000 == 0
+            print_curses(screen, tick=tick, classic_count=classic_count, database_count=database_count, current_gpu_job=current_gpu_job, log=log, group_size=group_size, pairs=pairs, duration=duration, qsize=qsize, lastsize=lastsize, lastgroupsize=lastgroupsize, clear=clear)
             lastsize = dfsize
             lastgroupsize = group_size
         except:
             time.sleep(10)
 
-def print_curses(screen, tick, classic_count, database_count, current_gpu_job, log, group_size, pairs, duration, qsize, lastsize, lastgroupsize):
-    screen.erase()
+def print_curses(screen, tick, classic_count, database_count, current_gpu_job, log, group_size, pairs, duration, qsize, lastsize, lastgroupsize, clear=False):
+    if clear:
+        screen.clear()
+    else:
+        screen.erase()
     screen.addstr(0, 0, "GPU off gap:           %s sec.\n" % (tick))
     screen.addstr(1, 0, "classic jobs count:    %s jobs\n" % (classic_count))
     screen.addstr(2, 0, "database jobs count:   %s jobs\n" % (database_count))
@@ -638,7 +644,7 @@ if __name__ == "__main__":
 
     time.sleep(5)
     
-    groupsize = 25 # how many shards to group for CLIP
+    groupsize = 70 # how many shards to group for CLIP
 
     params = config()
     engine = create_engine(f'postgresql://{params["user"]}:{params["password"]}@{params["host"]}:5432/{params["database"]}',pool_size=50, max_overflow=100)
