@@ -347,7 +347,7 @@ def worker(engine, params, i):
             # at this point we finishes the CPU node job, need to make the data available for GPU worker
             os.mkdir(prefix)
             os.system(f"mv ./{i}/save/* {prefix}/")
-            result += upload(prefix, "CPU", "archiveteam@176.9.4.150::gpujobsml") #todo find the IP and endpoint
+            result += upload(prefix, "CPU", "archiveteam@176.9.4.150::gpujobsnolang") #todo find the IP and endpoint
             if result == 0:
                 completeJob2(engine, prefix, parsed_df, dlparse_df)
 
