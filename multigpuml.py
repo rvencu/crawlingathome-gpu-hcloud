@@ -511,7 +511,7 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
     if jobset == "intl":
         bloomkey = "multilanguage"
     if jobset == "nolang":
-        bloomkey = "nolanguage"
+        bloomkey = "nolang"
 
     log(logqueue,f"log:[gpu] worker started", mode)
     log(logqueue,f"current_gpu_job:preparing...", mode)
