@@ -644,7 +644,7 @@ if __name__ == "__main__":
 
     time.sleep(5)
     
-    groupsize = 70 # how many shards to group for CLIP
+    groupsize = 25 # how many shards to group for CLIP
 
     params = config()
     engine = create_engine(f'postgresql://{params["user"]}:{params["password"]}@{params["host"]}:5432/{params["database"]}',pool_size=50, max_overflow=100)

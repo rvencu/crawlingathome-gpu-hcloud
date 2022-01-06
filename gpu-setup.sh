@@ -13,7 +13,7 @@ pip3 install torch==1.10.0+cu113 torchvision==0.11.1+cu113 torchaudio===0.10.0+c
 #pip3 install git+https://github.com/rvencu/asks
 pip3 install -r crawlingathome_client/requirements.txt --no-cache-dir
 pip3 install -r gpu-requirements.txt --no-cache-dir
-pip install tensorflow==2.5 --no-cache-dir
+#pip install tensorflow==2.5 --no-cache-dir
 pip install clip-anytorch
 
 git clone "https://github.com/hetznercloud/hcloud-python" hcloud

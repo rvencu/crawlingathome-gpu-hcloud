@@ -1,12 +1,12 @@
 ftfy
-pandas
 regex
-tfr_image
 trio
 ujson
 colorama
 dashing
-psycopg2-binary
+psycopg2
+requests
+pandas
 sqlalchemy
 sentence_transformers
 sentry_sdk
