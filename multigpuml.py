@@ -150,13 +150,16 @@ def df_clipfilter(df, clip_filter):
     return tmp_embed, df
 
 
-def filter(df, out_fname, output_folder, clip_filter):
+def filter(df, out_fname, output_folder, clip_filter, jobset):
     with open(f"{output_folder}hashes-{out_fname}.clp", "wt") as f:
         for item in df["hash"]:
             f.write(item + "\n")
     results = []
     img_embeddings, dff = df_clipfilter(df, clip_filter)
-    dff.to_csv(f"{output_folder}{out_fname}.csv", index=False, sep="|")
+    if jobset == "nolang":
+        dff.to_parquet(f"{output_folder}{out_fname}.parquet", index=False)
+    else:
+        dff.to_csv(f"{output_folder}{out_fname}.csv", index=False, sep="|")
 
     dff.loc[:,"shard"] = dff.PATH.apply(lambda x: x.split("/")[1])
     results = dff["shard"].value_counts()
@@ -599,7 +602,7 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
             start = time.time()
             
             log(logqueue,f"dfsize:{len(group_parse)}", mode)
-            final_images, results = filter(group_parse, group_id, "./save/", clip_filter_obj)
+            final_images, results = filter(group_parse, group_id, "./save/", clip_filter_obj, jobset)
             #TODO: add here processing command for int_parse, perhaps secondary location and different group_id
             
             log(logqueue,f"pairs:{final_images}", mode)
