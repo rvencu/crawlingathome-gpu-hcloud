@@ -8,6 +8,7 @@ from glob import glob
 import pandas as pd
 from sqlalchemy import create_engine
 from configparser import ConfigParser
+from tqdm.auto import tqdm
 
 
 def config(filename='database.ini', mode="test"):
@@ -45,7 +46,7 @@ def get_count(engine, ds="intl"):
     conn.commit()
     cur.close()
     conn.close()
-    return int(count[0])
+    return str(count[0])
 
 parser = argparse.ArgumentParser(prog=sys.argv[0], usage='%(prog)s -m/--mode -s/--set -p/--path')
 parser.add_argument("-m","--mode",action='append',help="Mode to run", required=True)
@@ -77,45 +78,47 @@ conn = engine.raw_connection()
 j = 10
 if mode == "txt":
     j = 1000
-for file in files:
-    try:
-        cur = conn.cursor()
-        with open(file, "rt") as f:
-            if mode == "txt":
-                cur.copy_from(f, 'dataset_buffer', columns=("sampleid","url","text","license","domain","wat","hash","language"))
-            elif mode == "csv":
-                cur.copy_expert("COPY dataset_buffer from STDIN DELIMITER '|' CSV HEADER", f)
-            else:
-                print("bad mode, choose txt or csv only")
-                break
-        conn.commit()
-        cur.close()
-        os.system(f"mv {file} {file}.done")
-        i+=1
-        if i % j == 0:
-            count = get_count(engine, ds)
-            if count > 500000000:
-                break
-            else:
-                print(f"{i} {file} / count = {count}")
-        else:
-            print(f"{i} {file}")
-            
-    except Exception as e:
-        print(f"error {file} because {e}")
-        for line in fileinput.input(file, inplace = True):
-            if not re.search(r'\x00', line):
-                print(line, end="")
+
+with tqdm(total=len(files), file=sys.stdout) as pbar:
+    pbar.desc = get_count(engine, ds)
+    for file in files:
         try:
-            df = pd.read_csv(file, sep="\t", on_bad_lines='skip', header=None)
-            df[2] = df[2].apply(lambda x: x.replace("\n",""))
-            df[5] = df[5].apply(lambda x: int(x))
-            df.to_csv(file, sep="\t", index=False, header=False)
-        except:
-            #os.system(f"mv {file} {file}.error")
-            pass
-        conn.close()
-        conn = engine.raw_connection()
+            cur = conn.cursor()
+            with open(file, "rt") as f:
+                if mode == "txt":
+                    cur.copy_from(f, 'dataset_buffer', columns=("sampleid","url","text","license","domain","wat","hash","language"))
+                elif mode == "csv":
+                    cur.copy_expert("COPY dataset_buffer from STDIN DELIMITER '|' CSV HEADER", f)
+                else:
+                    print("bad mode, choose txt or csv only")
+                    break
+            conn.commit()
+            cur.close()
+            os.system(f"mv {file} {file}.done")
+            i+=1
+            if i % j == 0:
+                count = get_count(engine, ds)
+                if int(count) > 500000000:
+                    break
+                else:
+                    pbar.desc = count
+            pbar.update(1)
+                
+        except Exception as e:
+            print(f"error {file} because {e}")
+            for line in fileinput.input(file, inplace = True):
+                if not re.search(r'\x00', line):
+                    print(line, end="")
+            try:
+                df = pd.read_csv(file, sep="\t", on_bad_lines='skip', header=None)
+                df[2] = df[2].apply(lambda x: x.replace("\n",""))
+                df[5] = df[5].apply(lambda x: int(x))
+                df.to_csv(file, sep="\t", index=False, header=False)
+            except:
+                #os.system(f"mv {file} {file}.error")
+                pass
+            conn.close()
+            conn = engine.raw_connection()
 conn.close()
 
 print("if you had files with error of \x00 present in file, files were automatically corrected, please rerun the script")
