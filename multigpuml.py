@@ -625,10 +625,11 @@ def gpu_worker(incomingqueue: JoinableQueue, uploadqueue: JoinableQueue, gpuflag
 
 if __name__ == "__main__":
     # script initialization
-    parser = argparse.ArgumentParser(prog=sys.argv[0], usage='%(prog)s -g/--gpuid -s/--set')
+    parser = argparse.ArgumentParser(prog=sys.argv[0], usage='%(prog)s -g/--gpuid -s/--set -m/--mode -d/--depth')
     parser.add_argument("-g","--gpuid",action='append',help="Choose gpu id",required=False)
     parser.add_argument("-s","--set",action='append',help="Choose current set (en, nolang, intl)",required=False)
     parser.add_argument("-m","--mode",action='append',help="Choose current mode (terminal, service)",required=False)
+    parser.add_argument("-d","--depth",action='append',help="Choose current depth to start with (25)",required=False)
     args = parser.parse_args()
     
     gpuid = 0
@@ -648,6 +649,8 @@ if __name__ == "__main__":
     time.sleep(5)
     
     groupsize = 25 # how many shards to group for CLIP
+    if args.depth:
+        groupsize = int(args.depth[0])
 
     params = config()
     engine = create_engine(f'postgresql://{params["user"]}:{params["password"]}@{params["host"]}:5432/{params["database"]}',pool_size=50, max_overflow=100)

@@ -52,6 +52,7 @@ parser = argparse.ArgumentParser(prog=sys.argv[0], usage='%(prog)s -m/--mode -s/
 parser.add_argument("-m","--mode",action='append',help="Mode to run", required=True)
 parser.add_argument("-s","--set",action='append',help="Dataset to run", required=False)
 parser.add_argument("-p","--path",action='append',help="Choose source path", required=False)
+parser.add_argument("-l","--limit",action='append',help="Specify DB table limit", required=False)
 args = parser.parse_args()
 
 dir = "/mnt/md1/export/staging"
@@ -65,6 +66,10 @@ if args.mode is not None:
 ds = "intl"
 if args.set is not None:
     ds = args.set[0]
+
+limit = 500000000
+if args.limit is not None:
+    limit = int(args.limit[0])
 
 i = 0
 
@@ -98,7 +103,7 @@ with tqdm(total=len(files), file=sys.stdout) as pbar:
             i+=1
             if i % j == 0:
                 count = get_count(engine, ds)
-                if int(count) > 500000000:
+                if int(count) > limit:
                     break
                 else:
                     pbar.desc = count
