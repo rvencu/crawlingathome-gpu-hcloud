@@ -80,7 +80,7 @@ files = glob(f'{dir}/*.{mode}')
 
 conn = engine.raw_connection()
 
-j = 10
+j = 3
 if mode == "txt":
     j = 1000
 
