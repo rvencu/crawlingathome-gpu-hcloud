@@ -180,5 +180,7 @@ temp.gz
 gpuout.txt
 [0-9]/
 [1-9][0-9]/
-
+errors.txt
 *_full_wat.csv
+*.prod 
+alibaba_instances.csv

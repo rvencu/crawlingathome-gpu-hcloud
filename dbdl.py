@@ -24,6 +24,7 @@ import pandas as pd
 from glob import glob
 from uuid import uuid1
 from io import BytesIO
+from tqdm.auto import tqdm
 from datetime import datetime
 from sqlalchemy import create_engine
 from configparser import ConfigParser
@@ -61,16 +62,18 @@ def config(filename='database.ini', section='cah_production'):
 
 class Tracer(trio.abc.Instrument):
 
-    def __init__(self):
+    def __init__(self, pbar: tqdm):
         self.exceptions = 0
         self.requests = 0
         self.downloads = 0
         self.imgproc_duration = 0
         self.download_duration = 0
         self.error_duration = 0
+        self.pbar = pbar
 
     def task_exited(self, task):
         if task.custom_sleep_data is not None:
+            self.pbar.update(1)
             if task.custom_sleep_data[0] in [1, 3]: # this is exception
                 self.exceptions += 1
                 self.error_duration += task.custom_sleep_data[2]
@@ -227,7 +230,7 @@ async def request_image(parsed_df, i):
     return
 
 
-def dl_wat(parsed_df, i): # replace valid data and start sampleid with parsed_df
+def dl_wat(parsed_df, i, pbar): # replace valid data and start sampleid with parsed_df
     """
     This function initiates download attempt of validated parsed links
     It launches multithreaded tasks by using trio module
@@ -240,7 +243,7 @@ def dl_wat(parsed_df, i): # replace valid data and start sampleid with parsed_df
     # Download every image available
     processed_samples = []
     #trio.run(request_image, valid_data, first_sample_id, instruments=[TrioProgress(len(valid_data), False)] )
-    trio.run( request_image, parsed_df, i, instruments=[Tracer()] )
+    trio.run( request_image, parsed_df, i, instruments=[Tracer(pbar)] )
 
     for tmpf in glob(f"./{i}/.tmp/*.json"):
         processed_samples.extend(ujson.load(open(tmpf)))
@@ -259,11 +262,9 @@ def upload(source: str, clientType: str, target: str):
         shutil.rmtree(f"{source}", ignore_errors=True)
     return result
 
-def newJob(engine, sampleratio):
-    # strict selection of distinct domains
-    #select_stmt1 = "UPDATE dataset SET status = 1 WHERE sampleid IN (SELECT DISTINCT ON (domain) sampleid FROM (SELECT domain, sampleid FROM dataset TABLESAMPLE SYSTEM (0.05) WHERE status = 0 LIMIT 1000000 FOR UPDATE SKIP LOCKED) as \"U\" LIMIT 10000) AND status = 0 RETURNING sampleid"
+def newJob(engine, dataset, depth, tablesample):
     # selection on domains based on distribution of URLs per domain
-    select_stmt1 = "UPDATE dataset_en SET status = 1 WHERE sampleid IN (SELECT sampleid FROM dataset_en TABLESAMPLE SYSTEM ({sampleratio}) WHERE status = 0 and language = 'en' LIMIT 10000 FOR UPDATE SKIP LOCKED) AND status = 0 RETURNING sampleid"
+    select_stmt1 = f"UPDATE dataset_{dataset} SET status = 1 WHERE sampleid IN (SELECT sampleid FROM dataset_{dataset} TABLESAMPLE SYSTEM ({tablesample}) WHERE status = 0 LIMIT {depth} FOR UPDATE SKIP LOCKED) AND status = 0 RETURNING sampleid"
     conn = engine.raw_connection()
     cur = conn.cursor()
     cur.execute(select_stmt1)
@@ -272,21 +273,20 @@ def newJob(engine, sampleratio):
     cur.close()
 
     values = ",".join([str(tuple[0]) for tuple in result])
-    select_stmt2 = "SELECT sampleid, url, text, license, language FROM dataset_en WHERE sampleid in ({})".format(values)
-    #select_stmt2 = "UPDATE dataset_en SET status = 1 WHERE sampleid IN (SELECT sampleid FROM dataset_en TABLESAMPLE SYSTEM (0.1) WHERE status = 0 LIMIT 10000 FOR UPDATE SKIP LOCKED) AND status = 0 RETURNING sampleid, url, text, license, language"
+    select_stmt2 = f"SELECT sampleid, url, text, license, language FROM dataset_{dataset} WHERE sampleid in ({values})"
     df = pd.read_sql_query(select_stmt2, conn)
     conn.close()
     return df
 
-def completeJob2(engine, prefix, parsed_df, dlparse_df):
+def completeJob2(engine, prefix, parsed_df, dlparse_df, dataset):
     # prepare data for EN
     values2 = ",".join(parsed_df["sampleid"].astype(str))
     update_stmt1 = ""
     for i, row in dlparse_df.iterrows():
-        update_stmt1 += "UPDATE dataset_en SET status={}, width={}, height={} where sampleid = {};".format(row["STATUS"],row["HEIGHT"],row["WIDTH"],row["SAMPLE_ID"])
+        update_stmt1 += f'UPDATE dataset_nolang SET status={row["STATUS"]}, width={row["HEIGHT"]}, height={row["WIDTH"]} where sampleid = {row["SAMPLE_ID"]};'
         # this is intentional mix between width and heigth to account for the but in previous laion release
         # the csv will go scrambled but in database we want good values
-    insert_stmt = "INSERT INTO jobs (jobid) VALUES ('{}')".format(prefix)
+    insert_stmt = f"INSERT INTO jobs_{dataset} (jobid) VALUES ('{prefix}')"
 
     if len(dlparse_df.index > 0):
         conn = engine.raw_connection()
@@ -298,7 +298,7 @@ def completeJob2(engine, prefix, parsed_df, dlparse_df):
         conn.close()
 
     # in case there are samples unaccounted for, we try to mark them with general error status
-    update_stmt2 = "UPDATE dataset_en SET status = 9 where status = 1 AND sampleid in ({})".format(values2)
+    update_stmt2 = f"UPDATE dataset_{dataset} SET status = 9 where status = 1 AND sampleid in ({values2})"
 
     conn = engine.raw_connection()
     cur = conn.cursor()
@@ -308,7 +308,7 @@ def completeJob2(engine, prefix, parsed_df, dlparse_df):
     conn.close()
     return
 
-def worker(engine, params, sampleratio, i):
+def worker(engine, i, dataset, depth, tablesample, target):
 
     # initialize working folders
     tmp_folder = f"./{i}/.tmp/"
@@ -320,7 +320,8 @@ def worker(engine, params, sampleratio, i):
             start = time.time()
             start0 = start
 
-            parsed_df = newJob(engine, sampleratio)
+            parsed_df = newJob(engine, dataset, depth, tablesample)
+            pbar = tqdm(total=depth,position=i,desc=f"worker {i}")
             prefix = uuid.uuid4().hex
             result = 0
 
@@ -342,15 +343,15 @@ def worker(engine, params, sampleratio, i):
             print (f"[{datetime.now().strftime('%H:%M:%S')} stats {i}] This job has {len(parsed_df)} candidates")
         
             # attempt to download validated links and save to disk for stats and blocking lists
-            dlparse_df = dl_wat(parsed_df, i)
+            dlparse_df = dl_wat(parsed_df, i, pbar)
             dlparse_df_save = dlparse_df[dlparse_df["STATUS"]==2] # remove rejected items from gpu jobs
             dlparse_df_save.to_csv(output_folder + out_fname + ".csv", index=False, sep="|")
             # at this point we finishes the CPU node job, need to make the data available for GPU worker
             os.mkdir(prefix)
             os.system(f"mv ./{i}/save/* {prefix}/")
-            result += upload(prefix, "CPU", "archiveteam@176.9.4.150::gpujobs") #todo find the IP and endpoint
+            result += upload(prefix, "CPU", target) #todo find the IP and endpoint
             if result == 0:
-                completeJob2(engine, prefix, parsed_df, dlparse_df)
+                completeJob2(engine, prefix, parsed_df, dlparse_df, dataset)
 
             print (f"[{datetime.now().strftime('%H:%M:%S')} stats {i}] pairs retained {len(dlparse_df_save)} in {round(time.time() - start, 2)}")
             print (f"[{datetime.now().strftime('%H:%M:%S')} stats {i}] scraping efficiency {len(dlparse_df_save)/(time.time() - start)} img/sec")
@@ -369,27 +370,40 @@ def worker(engine, params, sampleratio, i):
 if __name__ == "__main__":
 
     print (f"starting session")
-    parser = argparse.ArgumentParser(prog=sys.argv[0], usage='%(prog)s -r/--ratio')
-    parser.add_argument("-r","--ratio",action='append',help="Tablesample ratio (0.05-1.0)", required=False)
-    parser.add_argument("-c","--cpus",action='append',help="How many cpus to use", required=False)
+
+    parser = argparse.ArgumentParser(prog=sys.argv[0], usage='%(prog)s -s/--set -d/--depth')
+    parser.add_argument("-s","--set",action='append',help="Which dataset to download (en, intl, nolang)", required=False)
+    parser.add_argument("-d","--depth",action='append',help="How many samples to download (10000)", required=False)
+    parser.add_argument("-t","--tablesample",action='append',help="Tablesample ratio (0.05)", required=False)
+    parser.add_argument("-r","--rsync",action='append',help="Rsync target where to store results", required=False)
+    parser.add_argument("-c","--cpus",action='append',help="How many cpus to use",required=False)
     args = parser.parse_args()
 
-    sampleratio = 0.05
-    if args.ratio is not None:
-        sampleratio = float(args.ratio[0])
+    dataset = "en"
+    if args.set is not None:
+        dataset = args.set[0]
+    
+    depth = 10000
+    if args.depth is not None:
+        depth = int(args.depth[0])
+
+    tablesample = 0.05
+    if args.tablesample is not None:
+        tablesample = float(args.tablesample[0])
+
+    target = "archiveteam@176.9.4.150::gpujobsnolang"
+    if args.rsync is not None:
+        target = args.rsync[0]
     
     procs = cpu_count()
-    if args.procs is not None:
-        procs = min(procs, int(args.procs[0]))
+    if args.cpus is not None and int(args.cpus[0]) > 0:
+        procs = int(args.cpus[0])
 
     params = config()
-    engine = create_engine(f'postgresql://{params["user"]}:{params["password"]}@{params["host"]}:5432/{params["database"]}', pool_size=procs, max_overflow=int(procs*1.5), pool_pre_ping=True )
-
-    #this log file can grow quite a lot
-    os.system("rm errors.txt")
+    engine = create_engine(f'postgresql://{params["user"]}:{params["password"]}@{params["host"]}:5432/{params["database"]}', pool_size=procs, max_overflow=int(procs*1.5), pool_recycle=60, pool_pre_ping=True )
 
     for i in range(procs):
-        Process(target=worker, args=[engine, params, sampleratio, i], daemon=True).start()
+        Process(target=worker, args=[engine, i, dataset, depth, tablesample, target], daemon=True).start()
 
     try:
         while True:

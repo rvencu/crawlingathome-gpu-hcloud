@@ -21,3 +21,10 @@ for root, dirnames, filenames in os.walk("."):
     for file in filenames:
         if re_gz.match(file):
             os.remove(file)
+
+for i in range(24):
+    os.system(f"rm -rf ./{i}")
+
+os.system(f"rm -rf ./save")
+os.system(f"rm -rf ./stats")
+os.system(f"rm  ./shard.wat")
