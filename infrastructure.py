@@ -268,7 +268,7 @@ if __name__ == "__main__":
             start = time.time()
             sshkey=""
             escape = ["\\","$",".","*","[","^","/"]
-            with open (f"{os.getenv('HOME')}/.ssh/id_cah.pub","rt") as f:
+            with open (f"{os.getenv('HOME')}/.ssh/richard.pub","rt") as f:
                 sshkey = f.read().split(" ")[1]
                 for char in escape:
                     sshkey = sshkey.replace(char,"\\"+char)

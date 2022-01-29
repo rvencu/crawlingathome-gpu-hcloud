@@ -9,7 +9,8 @@ Encoding image analyzing errors: Add the numbers below to 8 to encode all types 
 '''
 
 
-import gc 
+import gc
+from logging import raiseExceptions 
 import os
 import ssl
 import sys
@@ -136,19 +137,20 @@ def process_img_content(response, alt_text, license, sample_id, language, i):
             # reject if too large (might be a DOS decompression bomb)
             if width * height > 89478484:
                 error_code += 4
-            im_format = im.format
-            out_fname = f"{img_output_folder}{str(sample_id)}.{im_format.lower()}"
-            # reject if format is not in this list
-            if im_format not in ["JPEG", "JPG", "PNG", "WEBP"]:
-                error_code += 2
-            if min(width, height) > 224:
-                im = _resize(im)
-            
-            # convert all images to RGB (necessary for CLIP, also CLIP is doing it again so do we need it here?)
-            if im.mode != "RGB":
-                im = im.convert("RGB")
-            if error_code == 8:
-                im.save(out_fname) # do not retain images we do not need
+            else:
+                im_format = im.format
+                out_fname = f"{img_output_folder}{str(sample_id)}.{im_format.lower()}"
+                # reject if format is not in this list
+                if im_format not in ["JPEG", "JPG", "PNG", "WEBP"]:
+                    error_code += 2
+                if min(width, height) > 224:
+                    im = _resize(im)
+                
+                # convert all images to RGB (necessary for CLIP, also CLIP is doing it again so do we need it here?)
+                if im.mode != "RGB":
+                    im = im.convert("RGB")
+                if error_code == 8:
+                    im.save(out_fname) # do not retain images we do not need
     except (KeyError, UnidentifiedImageError):
         out_fname = ""
         width = 0
@@ -321,7 +323,7 @@ def worker(engine, i, dataset, depth, tablesample, target):
             start0 = start
 
             parsed_df = newJob(engine, dataset, depth, tablesample)
-            pbar = tqdm(total=depth,position=i,desc=f"worker {i}")
+            
             prefix = uuid.uuid4().hex
             result = 0
 
@@ -341,6 +343,7 @@ def worker(engine, i, dataset, depth, tablesample, target):
             start = time.time()
 
             print (f"[{datetime.now().strftime('%H:%M:%S')} stats {i}] This job has {len(parsed_df)} candidates")
+            pbar = tqdm(total=len(parsed_df),position=i,desc=f"worker {i}")
         
             # attempt to download validated links and save to disk for stats and blocking lists
             dlparse_df = dl_wat(parsed_df, i, pbar)
@@ -390,6 +393,9 @@ if __name__ == "__main__":
     tablesample = 0.05
     if args.tablesample is not None:
         tablesample = float(args.tablesample[0])
+    
+    print(tablesample)
+    time.sleep(30)
 
     target = "archiveteam@176.9.4.150::gpujobsnolang"
     if args.rsync is not None:
