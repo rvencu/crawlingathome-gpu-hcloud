@@ -1,0 +1,6 @@
+/dev/disk/by-uuid/9986-9974 /boot/efi vfat defaults 0 1
+/dev/md1        /mnt/md1        ext4    defaults 0 0
+/swap.img       none    swap    sw      0       0
+tmpfs   /mnt/ramdisk    tmpfs   rw,size=10G 0 0
+none /mnt/huge hugetlbfs pagesize=1G,size=210G 0 0
+//smb/share /mnt/smb cifs vers=3.11,uid=postgres,username=<<smb_username>>,password=<<smb_pwd>>,iocharset=utf8  0  0
