@@ -184,3 +184,5 @@ errors.txt
 *_full_wat.csv
 *.prod 
 alibaba_instances.csv
+_sample_data/
+chromedriver
